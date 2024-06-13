@@ -1,4 +1,4 @@
-blockdiag <- function(I, Jtot, J, KMI, ns, slack = FALSE) {
+blockdiag  <- function(I, Jtot, J, KMI, ns, slack = FALSE) {
   mat <- matrix(0, nrow = I, ncol = Jtot + KMI + ns)
   j.lb <- 1
   j.ub <- J[[1]]
@@ -262,7 +262,7 @@ w.constr.OBJ <- function(w.constr, A, Z, V, J, KM, M) {
   } else if (w.constr[["name"]] == "ridge") {
     
     if (!("Q" %in% names(w.constr))) {
-
+      
       feature.id <- unlist(purrr::map(stringr::str_split(rownames(Z), "\\."), 2))
 
       Qfeat <- c()
@@ -270,8 +270,7 @@ w.constr.OBJ <- function(w.constr, A, Z, V, J, KM, M) {
         Af <- A[feature.id == feat, , drop=FALSE]
         Zf <- Z[feature.id == feat, , drop=FALSE]
         Vf <- V[feature.id == feat, feature.id == feat, drop=FALSE]
-        
-        if (nrow(Af) >= 5) {
+        if (nrow(Af) >= 2){#5) {
           QQ <- tryCatch({
                             aux <- shrinkage.EST("ridge", Af, as.matrix(Zf), Vf, J, KM)
                             Q <- aux$Q
@@ -284,6 +283,7 @@ w.constr.OBJ <- function(w.constr, A, Z, V, J, KM, M) {
       if (is.null(Qfeat)) Qfeat <- shrinkage.EST("ridge", A, as.matrix(Z), V, J, KM)$Q
       w.constr[["Q"]]      <- max(min(Qfeat, na.rm = TRUE), .5)
       w.constr[["lambda"]] <- aux$lambda
+      
     }
 
     w.constr <- list(lb     = -Inf,
@@ -697,7 +697,6 @@ e.des.prep <- function(B, C, P, e.order, e.lags, res, sc.pred, Y.donors, out.fea
     
   } else if (out.feat == TRUE) {    # outcome variable is among features
     e.res <- res[1:T0[1], , drop = FALSE]
-
     ## Construct the polynomial terms in B (e.des.0) and P (e.des.1)
     if (e.order == 0) {
 
@@ -1336,12 +1335,16 @@ local.geom <- function(w.constr, rho, rho.max, res, B, C, coig.data, T0.tot, J, 
 
   Q   <- w.constr[["Q"]]
   Q2.star <- NULL
-
+  
   # if rho is not given by the user we use our own routine to compute it
   if (is.character(rho)) {
+    
     rho <- regularize.w(rho, rho.max, res, B, C, coig.data, T0.tot)
+    
+    
     # here we check that our rho is not too low to prevent overfitting later on
     rho <- regularize.check.lb(w, rho, rho.max, res, B, C, coig.data, T0.tot, verbose)
+    
   }
 
   if ((w.constr[["name"]] == "simplex") || ((w.constr[["p"]] == "L1") && (w.constr[["dir"]] == "=="))) {
@@ -1409,8 +1412,10 @@ regularize.w <- function(rho, rho.max, res, B, C, coig.data, T0.tot) {
   if (rho == "type-1") {
     sigma.u  <- sqrt(mean((res - mean(res))^2))
     sigma.bj <- min(apply(B, 2, sd))
+
     denomCheck(sigma.bj)
     CC       <- sigma.u / sigma.bj
+
 
   } else if (rho == "type-2") {
     sigma.u   <- sqrt(mean((res - mean(res))^2))
@@ -1459,12 +1464,14 @@ regularize.check <- function(w, index.w, rho, verbose, res) {
 }
 
 regularize.check.lb <- function(w, rho, rho.max, res, B, C, coig.data, T0.tot, verbose) {
+  
   if (rho < 0.001) {
     rho.old <- rho
     rho <- max(regularize.w("type-1", 0.2, res, B, C, coig.data, T0.tot),
                regularize.w("type-2", 0.2, res, B, C, coig.data, T0.tot),
                regularize.w("type-3", 0.2, res, B, C, coig.data, T0.tot))
-
+    
+    if(is.na(rho)) rho <- 0
     if (rho < 0.05) rho <- rho.max # strong evidence in favor of collinearity, thus heavy shrinkage
 
     if (verbose) {
@@ -1563,6 +1570,7 @@ local.geom.2step <- function(w, r, rho.vec, rho.max, w.constr, Q, I) {
 
 mat2list <- function(mat, cols = TRUE){
   # select rows
+
   names <- strsplit(rownames(mat), "\\.")
   rnames <- unlist(lapply(names, "[[", 1))
   tr.units <- unique(rnames)
@@ -1571,16 +1579,21 @@ mat2list <- function(mat, cols = TRUE){
   matlist <- list()
   if (cols == TRUE) {
     if (ncol(mat) > 1) {
+      
       names <- strsplit(colnames(mat), "\\.")
+      
       cnames <- unlist(lapply(names, "[[", 1))
+      
       for (tr in tr.units) {
         matlist[[tr]] <- mat[rnames == tr, cnames == tr, drop=FALSE]
       }
     } else if (ncol(mat) == 1) {
+      
       for (tr in tr.units) {
         matlist[[tr]] <- mat[rnames == tr, 1, drop=FALSE]
       }
     } else {
+      
       for (tr in tr.units) {
         matlist[[tr]] <- mat[rnames == tr, 0, drop=FALSE]
       }

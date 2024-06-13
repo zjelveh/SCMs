@@ -1,6 +1,6 @@
 ###############################################################################
 
-#' @title Prediction Intervals for Synthetic Control Methods
+#' @title Prediction Intervals for Synthetic Control Methods 
 #'
 #' @description The command implements estimation and inference procedures for Synthetic Control (SC) methods using least squares, lasso, ridge, or simplex-type constraints. Uncertainty is quantified using prediction
 #' intervals according to \href{https://nppackages.github.io/references/Cattaneo-Feng-Titiunik_2021_JASA.pdf}{Cattaneo, Feng, and Titiunik (2021)}. \code{\link{scpi}} returns the estimated 
@@ -308,6 +308,9 @@
 #' @export
 
 scpi  <- function(data,
+                  outcome_models = c('None', 'OLS', 'Ridge', 'Lasso', 'AugSynth'),
+                  feature_weights = c('uniform', 'optimized'),
+                  unit_weights = c('uniform', 'optimized'),    
                   w.constr     = NULL,
                   V            = "separate",
                   V.mat        = NULL,
@@ -350,12 +353,23 @@ scpi  <- function(data,
   #############################################################################
   #############################################################################
   ## Estimation of synthetic weights
-  if (verbose) {
-    cat("---------------------------------------------------------------\n")
-    cat("Estimating Weights...\n")
-  }
-  sc.pred <- scest(data = data, w.constr = w.constr, V = V, V.mat = V.mat, solver = solver)
+  # if (verbose) {
+  #   cat("---------------------------------------------------------------\n")
+  #   cat("Estimating Weights...\n")
+  # }
 
+  scm_model <- scest(data = data, w.constr = w.constr, V = V, V.mat = V.mat, solver = solver)
+  
+  sc.pred = run_outcome_models(
+    scm_model=scm_model, 
+    scm_data=data,
+    treated_unit=data$specs$treated.units,
+    outcome_models=outcome_models, 
+    period_post=data$specs$period.post, 
+    Y=data$Y.donors.post,
+    Z0=data$Y.donors, 
+    Z1=data$Y.pre
+  )
 
   #############################################################################
   #############################################################################
@@ -366,6 +380,7 @@ scpi  <- function(data,
   C           <- sc.pred$data$C                           # Covariates for adjustment
   Z           <- sc.pred$data$Z                           # B and C column-bind
   Y.donors    <- data$Y.donors                            # Outcome variable of control units
+  Y.donors.post <- data$Y.donors.post                            # Outcome variable of control units
   K           <- sc.pred$data$specs$K                     # Number of covs for adjustment per feature
   KM          <- sc.pred$data$specs$KM                    # Dimension of r (total number of covs for adj)
   J           <- sc.pred$data$specs$J                     # Number of donors
@@ -386,8 +401,9 @@ scpi  <- function(data,
   outcome.var <- sc.pred$data$specs$outcome.var           # name of outcome variable
   sc.effect   <- sc.pred$data$specs$effect                # Causal quantity of interest
   sparse.mat  <- sc.pred$data$specs$sparse.matrices       # Whether sparse matrices are involved or not
+  om.model.preds <- sc.pred$yhats
   
-  if (class.type == 'scpi_data') {
+  if ( class.type == 'scpi_data') {
     Jtot            <- J
     KMI             <- KM
     I               <- 1
@@ -408,6 +424,7 @@ scpi  <- function(data,
     T0.tot          <- sum(T0.M)                                   # Total number of observations used in estimation
     T1.tot          <- sum(unlist(T1))                             # Total number of observations post-treatment
   }
+
 
   if (sc.effect == "unit") {
     T1.tot <- I
@@ -475,6 +492,7 @@ scpi  <- function(data,
     }
   }
 
+
   if (sims < 10) {
     stop("The number of simulations needs to be larger or equal than 10!")
   }
@@ -526,11 +544,14 @@ scpi  <- function(data,
     }
 
     cat("Quantifying Uncertainty\n")
+    
     #executionTime(T0.tot, Jtot, I, T1.tot, sims, cores, constr.type)
   }
-
+  
+  
   # create lists of matrices
   A.list   <- mat2list(A)
+  
   B.list   <- mat2list(B)
   if (is.null(C) == FALSE) {
     if (ncol(C) > 0) {
@@ -554,16 +575,19 @@ scpi  <- function(data,
   } else {
     P.list <- mat2list(P)
   }
-
+  
   if (!is.null(sc.pred$data$P.diff)) {
     Pd.list <- mat2list(sc.pred$data$P.diff)
   } else {
     Pd.list <- rep(list(NULL), I)
   }
-  
+
   V.list   <- mat2list(V)
+  
   w.list   <- mat2list(as.matrix(w))
+  
   res.list <- mat2list(res)
+  
   Y.d.list <- mat2list(Y.donors)
 
   if (sparse.mat == TRUE) {
@@ -572,12 +596,13 @@ scpi  <- function(data,
     if (is.null(C) == FALSE) C.list <- lapply(C.list, as.matrix)
     P.list <- lapply(P.list, as.matrix)
   }
-  
+
   #############################################################################
   #############################################################################
   ### Estimate In-Sample Uncertainty
   #############################################################################
   #############################################################################
+
 
   if (class.type == 'scpi_data') {
     w.constr.list <- list(w.constr)
@@ -617,26 +642,34 @@ scpi  <- function(data,
        }
     }
 
+
     ## Prepare design matrix for in-sample uncertainty
     obj <- u.des.prep(B.list[[i]], C.list[[i]], u.order, u.lags, coig.data[[i]],
                       T0.M[i], constant[[i]], index.i, loc.geom$index.w,
                       features[[i]], feature.id, u.design, res.list[[i]])
 
+
     u.names <- c(u.names, colnames(obj$u.des.0))
+
     
     u.des.0 <- Matrix::bdiag(u.des.0, obj$u.des.0)
     f.id <- c(f.id, as.factor(feature.id))
+
     
     ## Prepare design matrices for out-of-sample uncertainty
+    
     e.des <- e.des.prep(B.list[[i]], C.list[[i]], P.list[[i]], e.order, e.lags,
                         res.list[[i]], sc.pred, Y.d.list[[i]], out.feat[[i]],
                         features[[i]], J[[i]], index.i, loc.geom$index.w,
                         coig.data[[i]], T0[[i]][outcome.var], T1[[i]], constant[[i]], 
                         e.design, Pd.list[[i]], sc.pred$data$specs$effect, I, class.type)
- 
+    
     e.res   <- c(e.res, e.des$e.res)
+    
     e.rownames <- c(e.rownames, rownames(e.des$e.res))
+    
     cnames <- rep(paste0(names(w.constr.list)[[i]], "."), ncol(e.des$e.des.0))
+
     e.colnames <- c(e.colnames, cnames)
 
     if (sc.pred$data$specs$effect == "time") {
@@ -651,7 +684,7 @@ scpi  <- function(data,
 
   # Create an index that selects all non-zero weights and additional covariates
   index <- c(index.w, rep(TRUE, KMI))
-
+  
   if (lgapp == "generalized") {
     beta <- b # we use rho only to impose sparsity on B when predicting moments
     Q <- c()
@@ -670,25 +703,30 @@ scpi  <- function(data,
       lb <- c(lb, rep(w.constr.inf[[i]]$lb, J[i]))
     }
   }
-
+  
   names(beta) <- names(sc.pred$est.results$b)
-
+  
   # Transform sparse matrices to matrices
-  e.des.0 <- as.matrix(e.des.0)
+
   e.des.1 <- as.matrix(e.des.1)
+
   u.des.0 <- as.matrix(u.des.0)
+  colnames(u.des.0) <- u.names  
+
   e.res   <- as.matrix(e.res)
-  colnames(u.des.0) <- u.names
   rownames(e.res) <- e.rownames
+
+  e.des.0 <- as.matrix(e.des.0)
   rownames(e.des.0) <- e.rownames
   colnames(e.des.0) <- e.colnames
+  
   if (sc.pred$data$specs$effect == "time")  {
     rownames(e.des.1) <- e1.rownames
   } else {
     rownames(e.des.1) <- rownames(P)
   }
-  colnames(e.des.1) <- e.colnames
 
+  colnames(e.des.1) <- e.colnames
   #############################################################################
   ###########################################################################
   # Remove NA - In Sample Uncertainty
@@ -702,12 +740,14 @@ scpi  <- function(data,
   j4 <- j2 + ncol(u.des.0)
   j5 <- j4 + 1
   j6 <- ncol(XX) - 1
-
   A.na       <- XX[, j1, drop = FALSE]
+
   res.na     <- XX[, j2, drop = FALSE]
-  u.des.0.na <- XX[, j3:j4, drop = FALSE]
+
+u.des.0.na <- XX[, j3:j4, drop = FALSE]
   Z.na       <- XX[, j5:j6, drop = FALSE]
-  f.id.na    <- XX[, ncol(XX), drop = FALSE]
+
+f.id.na    <- XX[, ncol(XX), drop = FALSE]
 
   active.features <- Matrix::rowSums(is.na(X)) == 0
   V.na <- V[active.features, active.features]
@@ -718,14 +758,15 @@ scpi  <- function(data,
   # Remove NA - Out of Sample Uncertainty
   X  <- cbind(e.res, e.des.0)
   rowKeep <- Matrix::rowSums(is.na(X)) == 0
-  XX <- X[rowKeep, ]
+  XX <- X[rowKeep, , drop=FALSE]
+
   e.res.na   <- XX[, 1, drop = FALSE]
   e.des.0.na <- XX[, -1, drop = FALSE]
 
   # Proceed cleaning missing data in the post-treatment period
   rowKeep <- Matrix::rowSums(is.na(P)) == 0
   P.na <- P[rowKeep, ]
-
+  
   #############################################################################
   ########################################################################
   ## Estimate E[u|H], V[u|H], and Sigma

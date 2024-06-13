@@ -1,6 +1,6 @@
 ###############################################################################
 
-#' @title Prediction of Synthetic Control
+#' @title Prediction of Synthetic Control 
 #'
 #' @description The command implements estimation procedures for Synthetic Control (SC) methods using least squares, lasso,
 #' ridge, or simplex-type constraints. For more information see
@@ -198,18 +198,18 @@ scest <- function(data,
                   plot.name = NULL,
                   plot.path = NULL,
                   save.data = NULL) {
-
+  
   ##########################
   if ((methods::is(data, "scdata") || methods::is(data, "scdataMulti")) == FALSE) {
     stop("data should be the object returned by running scdata or scdata_multi!")
   }
-
+  
   if (is.null(w.constr) == FALSE) { # The user has specified W
-
+    
     if (is.list(w.constr) == FALSE) {
       stop("w.constr should be a list!")
     }
-
+    
     if (!"name" %in% names(w.constr)) {
       w.constr[["name"]] <- "NULL"
     } else {
@@ -219,20 +219,23 @@ scest <- function(data,
       }
     }
   }
-
+  
   if (!(solver %in% CVXR::installed_solvers())) {
     stop(paste0("The specified solver - ", solver," - is not available on your machine! Run
                 CVXR::installed_solvers() to see the list of available options on your machine."))
   }
-
+  
   # Data matrices
   A <- data$A
   B <- data$B
   C <- data$C
   P <- data$P
   Z <- cbind(B, C)
+  X0sd <- data$X0_sds
   Y.donors <- data$Y.donors
   outcome.var <- data$specs$outcome.var
+  Z0 <- Y.donors
+  Z1 <- data$Y.pre
   
   if (class(data)[1] == 'scdata') {
     class.type <- 'scpi_data'
@@ -260,78 +263,121 @@ scest <- function(data,
     T0.M            <- lapply(data$specs$T0.features, sum) # observations per treated unit
     M               <- data$specs$M
   }
-
+  
   T0.features     <- data$specs$T0.features
   out.in.features <- data$specs$out.in.features
-
+  
   ##########################
   ## Set up the estimation problem
-
+  
   # Create weighting matrix
   if (is.character(V) == FALSE) {
     stop("The object V should be a string! If you want to input a matrix use the option V.mat!")
   }
   
-  if (is.null(V.mat) == FALSE) {
-    if (is.matrix(V.mat) == FALSE) {
+  if (!is.null(V.mat)) {
+    if (!is.matrix(V.mat)) {
       stop("The object V.mat should be a matrix!")
     }
-
+    
     if (nrow(V.mat) != nrow(B) || ncol(V.mat) != nrow(B)) {
       stop(paste0("V.mat should be a ", nrow(B), "x", nrow(B)," matrix, but currently it is
                 a ", nrow(V.mat), "x", ncol(V.mat), " matrix!"))
-    }
-    rownames(V.mat) <- rownames(Z)
-    colnames(V.mat) <- rownames(V.mat)
-    
-  } else {
-    V.mat <- V.prep(type = V.type, B, T0.features, I)
-  }
+    }    
+  } else if(V.type=='optimize'){
+      require(optimx)
+      SV1 = rep(1/nrow(B), nrow(B))
 
+      Margin.ipop = 0.05
+      Sigf.ipop = 5
+      Bound.ipop = 10
+      all.methods = FALSE
+      optimxmethod = c("Nelder-Mead","BFGS")
+      
+      
+      rgV.optim.1 <- optimx(par=SV1, fn=fn.V,
+                            gr=NULL, 
+                            hess=NULL, 
+                            method=optimxmethod, 
+                            itnmax=NULL, 
+                            hessian=FALSE,
+                            control=list(kkt=FALSE,
+                                         starttests=FALSE,
+                                         dowarn=FALSE,
+                                         all.methods=all.methods),
+                            X0.scaled = B,
+                            X1.scaled = A,
+                            Z0 = Z0,
+                            Z1 = Z1,
+                            margin.ipop = Margin.ipop,
+                            sigf.ipop = Sigf.ipop,
+                            bound.ipop = Bound.ipop
+      )
+      
+      # get minimum
+      # if(verbose==TRUE){print(rgV.optim.1)}
+      rgV.optim <- collect.optimx(rgV.optim.1, "min")
+      
+      solution.v   <- abs(rgV.optim$par)/sum(abs(rgV.optim$par))
+      V.mat = diag(solution.v)  
+  } else{
+    if(V.type=='uniform'){
+      V.type = 'separate'
+    }
+      V.mat <- V.prep(type = V.type, B, T0.features, I)
+  }
   V <- V.mat
 
+  if(mean(is.na(diag(V))>0)){
+    V <- diag(rep(1/length(nrow(B)), (nrow(B))))
+  }
+  rownames(V) <- rownames(Z)
+  colnames(V) <- rownames(V)
+  #############################
+  
   # Create lists of matrices
   # Estimate SC
   if (class.type == 'scpi_data') { # single treated unit
+    
     w.constr <- w.constr.OBJ(w.constr, A, Z, V, J, KM, M)
     if (w.constr[["name"]] == "lasso") solver <- "OSQP"
+    
     b <- b.est(A = A, Z = Z, J = J, KM = KM, w.constr = w.constr, V = V, CVXR.solver = solver)
-
+    
   } else if (class.type == 'scpi_data_multi') { # multiple treated units
     
     A.list <- mat2list(A)
     B.list <- mat2list(B)
     C.list <- mat2list(C)
     V.list <- mat2list(V)
-
     w.constr.list <- list()
-
+    
     w.store <- c()
     r.store <- c()
     j.lb <- 1
     j.ub <- J[[1]]
-
+    
     for (i in seq_len(I)) {
       if (i > 1){
         j.lb <- j.ub + 1
         j.ub <- j.lb + J[[i]] - 1
       }
-
+      
       A.i <- A.list[[i]]
       Z.i <- cbind(B.list[[i]], C.list[[i]])
       V.i <- V.list[[i]]
-
+      
       w.constr.list[[data$specs$treated.units[i]]] <- w.constr.OBJ(w.constr, A.i, Z.i, V.i, J[[i]], KM[[i]], M[[i]])
       if (w.constr.list[[i]]["name"] == "lasso") solver <- "OSQP"
-
+      
       if (V.type == "separate") {
         res <- b.est(A = A.i, Z = Z.i, J = J[[i]], KM = KM[[i]], w.constr = w.constr.list[[i]], V = V.i, CVXR.solver = solver)
         w.store <- c(w.store, res[1:J[[i]]])
         if (KM[[i]] > 0) r.store <- c(r.store, res[(J[[i]]+1):length(res)])
       }
     }
-
-    if (V.type != "separate") {
+    
+    if (V.type != "separate" ) {
       if (w.constr.list[[i]]["name"] == "lasso") solver <- "OSQP"
       b <- b.est.multi(A = A, Z = Z, J = J, KMI = KMI, I = I, 
                        w.constr = w.constr.list, V = V, CVXR.solver = solver)
@@ -342,7 +388,7 @@ scest <- function(data,
     }
     w.constr <- w.constr.list
   }
-
+  
   ##########################
   ## Create useful objects
   # Store point estimates
@@ -353,17 +399,22 @@ scest <- function(data,
     w <- b[1:Jtot]
     r <- b[(Jtot + 1):length(b)]
   }
-
+  
   # Fitted values and residuals
   A.hat    <- Z %*% b                            # Pre-treatment fit of synthetic unit
   res      <- A  -  A.hat                        # Estimation residual u
+  
+  # Reflate A.hat
 
+  Z_scaled = Z * X0sd
+  A.hat    <- Z_scaled %*% b                            # Pre-treatment fit of synthetic unit
+  
   # Pre-treatment fit of outcome of interest
   if (class.type == 'scpi_data'){
     if (out.in.features == TRUE) {
       fit.pre  <- A.hat[1:T0.features[outcome.var], , drop = FALSE]
       names    <- strsplit(rownames(fit.pre), "\\.")
-      rownames(fit.pre) <- unlist(lapply(names, function(x) paste(x[1],x[3],sep=".")))
+      rownames(fit.pre) <- unlist(lapply(names, function(x) paste(x[1], x[3],sep=".")))
     } else {
       fit.pre  <- Y.donors %*% w
     }
@@ -392,6 +443,10 @@ scest <- function(data,
   # Post-treatment prediction of outcome of interest 
   fit.post <- P %*% b
   
+  # Name V
+  rownames(V) = rownames(B)
+  colnames(V) = rownames(V)
+  
   est.results <- list(b = b,
                       w = w,
                       r = r,
@@ -401,7 +456,7 @@ scest <- function(data,
                       res = res,
                       V = V,
                       w.constr = w.constr)
-
+  
   if (class.type == 'scpi_data') {
     df   <- list(A = data$A,
                  B = data$B,
@@ -413,7 +468,7 @@ scest <- function(data,
                  Y.post = data$Y.post,
                  Y.pre.agg = data$Y.pre,
                  Y.post.agg = data$Y.post.agg)
-
+    
   } else if (class.type == 'scpi_data_multi') {
     
     # shortcut to avoid "no visible binding for global variable 'X' when checking the package
@@ -437,7 +492,7 @@ scest <- function(data,
                              units.est=units.est, treated.units=treated.units, plot.type=effect,
                              anticipation=anticipation, period.post=period.post,
                              sparse.matrices=sparse.matrices)
-
+    
     Ydf.pre <- subset(Yprocessed$toplot, Treatment == 0)
     Ydf.post <- subset(Yprocessed$toplot, Treatment == 1)
     Y.pre.agg  <- as.matrix(Ydf.pre[["Actual"]])
@@ -462,7 +517,7 @@ scest <- function(data,
                  Z = Z,
                  specs  = data$specs)
   }
-
+  
   ##########################
   ## Return to the user
   to.return <- list(data = df, est.results = est.results)
@@ -472,7 +527,7 @@ scest <- function(data,
   } else if (class.type == 'scpi_data_multi') {
     to.return$data$specs$class.type <- 'scpi_scest_multi'
   }
-
+  
   ##################################################
   ## Plot
   if (plot == TRUE) {
@@ -481,27 +536,26 @@ scest <- function(data,
     } else {
       fig.name <- "scest_default_plot"
     }
-
+    
     if (is.null(plot.path) == FALSE) {
       fig.path <- plot.path
     } else {
       fig.path <- getwd()
     }
-
+    
     if (class.type == 'scpi_data'){
-
+      
       scplot(result = to.return, fig.path = fig.path,
              fig.name = fig.name, fig.format = "png", save.data = save.data)
-
-      } else if (class.type == "scpi_data_multi"){
-
+      
+    } else if (class.type == "scpi_data_multi"){
+      
       scplotMulti(result = to.return)
-
+      
     }
-
+    
   }
-
+  
   return(to.return)
 }
 
-###############################################################################
