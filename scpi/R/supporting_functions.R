@@ -88,10 +88,12 @@ ECOS_get_dims <- function(Jtot, J, KMI, w.constr, I, red) {
   return(dims)
 }
 
+
 ECOS_get_c <- function(xt, ns) {
   C <- c(xt, rep(0, ns))
   return(C)
 }
+
 
 ECOS_get_A <- function(J, Jtot, KMI, I, w.constr, ns) {
 
@@ -182,7 +184,7 @@ ECOS_get_h <- function(d, lb, J, Jtot, KMI, I, w.constr, Q1, Q2, red) {
 
   } else if (w.constr[["p"]] == "L1" && w.constr[["dir"]] == "<=") { # lasso
 
-    h <- c(-d,                         # linear part of QF 
+    h <- c(-d,                         # linear part of QF
            rep(0, 2*Jtot),             # abs(w) <= z
            Q1,                         # norm-inequality constraints
            1, 1, rep(0,Jtot+KMI-red))  # SOC definition
@@ -260,9 +262,9 @@ w.constr.OBJ <- function(w.constr, A, Z, V, J, KM, M) {
                      name = 'lasso')
 
   } else if (w.constr[["name"]] == "ridge") {
-    
+
     if (!("Q" %in% names(w.constr))) {
-      
+
       feature.id <- unlist(purrr::map(stringr::str_split(rownames(Z), "\\."), 2))
 
       Qfeat <- c()
@@ -272,18 +274,18 @@ w.constr.OBJ <- function(w.constr, A, Z, V, J, KM, M) {
         Vf <- V[feature.id == feat, feature.id == feat, drop=FALSE]
         if (nrow(Af) >= 2){#5) {
           QQ <- tryCatch({
-                            aux <- shrinkage.EST("ridge", Af, as.matrix(Zf), Vf, J, KM)
-                            Q <- aux$Q
-                          }, warning=function(warn) {},
-                             error=function(err) {}, finally={})
+            aux <- shrinkage.EST("ridge", Af, as.matrix(Zf), Vf, J, KM)
+            Q <- aux$Q
+          }, warning=function(warn) {},
+          error=function(err) {}, finally={})
           Qfeat <- c(Qfeat, QQ)
         }
       }
-      
+
       if (is.null(Qfeat)) Qfeat <- shrinkage.EST("ridge", A, as.matrix(Z), V, J, KM)$Q
       w.constr[["Q"]]      <- max(min(Qfeat, na.rm = TRUE), .5)
       w.constr[["lambda"]] <- aux$lambda
-      
+
     }
 
     w.constr <- list(lb     = -Inf,
@@ -331,7 +333,7 @@ w.constr.OBJ <- function(w.constr, A, Z, V, J, KM, M) {
 
     # if constraint is entirely user specified just check everything is fine
     if (!(all(c('p', 'dir', 'Q', 'lb') %in% names(w.constr)))) {
-      stop("If 'name' is not specified, w.constr should be a list whose elements 
+      stop("If 'name' is not specified, w.constr should be a list whose elements
             must be named 'p','dir','Q','lb'.")
     }
 
@@ -439,11 +441,11 @@ b.est <- function(A, Z, J, KM, w.constr, V, CVXR.solver = "ECOS") {
 
   if (alert == TRUE) {
     stop(paste0("Estimation algorithm not converged! The algorithm returned the value:",
-                sol$status, ". To check to what errors it corresponds go to 
+                sol$status, ". To check to what errors it corresponds go to
                'https://cvxr.rbind.io/cvxr_examples/cvxr_gentle-intro/'. Typically, this occurs
                 because the problem is badly-scaled. If so, scaling the data fixes the issue. Another
                 fix could be changing the algorithm via the option 'solver'. Check your available options
-                using CVXR::installed_solvers() and consult 
+                using CVXR::installed_solvers() and consult
                 'https://cvxr.rbind.io/cvxr_examples/cvxr_using-other-solvers/'"),
          call. = FALSE)
   }
@@ -492,11 +494,11 @@ b.est.multi <- function(A, Z, J, KMI, I, w.constr, V, CVXR.solver="ECOS") {
       }
 
     } else if (p == "L2") { # ridge
-        constraints <- append(constraints, list(CVXR::sum_squares(x[j.lb:j.ub]) <= QQ[i]^2))
+      constraints <- append(constraints, list(CVXR::sum_squares(x[j.lb:j.ub]) <= QQ[i]^2))
 
     } else if (p == "L1-L2") {
       constraints <- append(constraints, list(CVXR::sum_entries(x[j.lb:j.ub]) == QQ[i],
-                          CVXR::power(CVXR::cvxr_norm(x[j.lb:j.ub], 2), 2) <= CVXR::power(Q2[i], 2)))
+                                              CVXR::power(CVXR::cvxr_norm(x[j.lb:j.ub], 2), 2) <= CVXR::power(Q2[i], 2)))
     }
 
     j.lb <- j.ub + 1
@@ -507,14 +509,14 @@ b.est.multi <- function(A, Z, J, KMI, I, w.constr, V, CVXR.solver="ECOS") {
 
   b <- sol$getValue(x)
   alert <- !(sol$status %in% c("optimal", "optimal_inaccurate"))
-  
+
   if (alert == TRUE) {
     stop(paste0("Estimation algorithm not converged! The algorithm returned the value:",
-                sol$status, ". To check to what errors it corresponds go to 
+                sol$status, ". To check to what errors it corresponds go to
                'https://cvxr.rbind.io/cvxr_examples/cvxr_gentle-intro/'. Typically, this occurs
                 because the problem is badly-scaled. If so, scaling the data fixes the issue. Another
                 fix could be changing the algorithm via the option 'solver'. Check your available options
-                using CVXR::installed_solvers() and consult 
+                using CVXR::installed_solvers() and consult
                 'https://cvxr.rbind.io/cvxr_examples/cvxr_using-other-solvers/'"),
          call. = FALSE)
   }
@@ -559,7 +561,7 @@ V.prep <- function(type, B, T0.features, I) {
 
 
 
-u.des.prep <- function(B, C, u.order, u.lags, coig.data, T0.tot, constant,
+u.des.prep <- function(B, u.order, u.lags, coig.data, T0.tot, constant,
                        index, index.w, features, feature.id, u.design, res, verbose) {
 
   ## Construct the polynomial terms in B
@@ -578,11 +580,11 @@ u.des.prep <- function(B, C, u.order, u.lags, coig.data, T0.tot, constant,
         BB       <- B[feature.id == feature, ]
         B.diff   <- rbind(B.diff, BB - dplyr::lag(BB))
       }
-      u.des.0 <- cbind(B.diff, C)[, index, drop = FALSE]    # combine with C
+      u.des.0 <- cbind(B.diff)[, index, drop = FALSE]
 
     } else if (coig.data == FALSE) {
 
-      u.des.0 <- cbind(B, C)[, index, drop = FALSE]  # take active covariates
+      u.des.0 <- cbind(B)[, index, drop = FALSE]  # take active covariates
 
     }
 
@@ -656,12 +658,11 @@ u.des.prep <- function(B, C, u.order, u.lags, coig.data, T0.tot, constant,
 }
 
 
-e.des.prep <- function(B, C, P, e.order, e.lags, res, sc.pred, Y.donors, out.feat, features,
+e.des.prep <- function(B, P, e.order, e.lags, res, sc.pred, Y.donors, out.feat, features,
                        J, index, index.w, coig.data, T0, T1, constant, e.design, P.diff.pre,
                        effect, I, class.type) {
 
   aux <- trendRemove(P)
-  C <- trendRemove(C)$mat
   index <- index[aux$sel]
   P <- aux$mat
 
@@ -694,7 +695,7 @@ e.des.prep <- function(B, C, P, e.order, e.lags, res, sc.pred, Y.donors, out.fea
       e.des.0  <- Y.donors[, index.w, drop=FALSE]
       e.des.1  <- P[, index, drop = FALSE]
     }
-    
+
   } else if (out.feat == TRUE) {    # outcome variable is among features
     e.res <- res[1:T0[1], , drop = FALSE]
     ## Construct the polynomial terms in B (e.des.0) and P (e.des.1)
@@ -719,7 +720,7 @@ e.des.prep <- function(B, C, P, e.order, e.lags, res, sc.pred, Y.donors, out.fea
         BB       <- B[feature.id == features[1], ]
         B.diff   <- rbind(B.diff, BB - dplyr::lag(BB))
 
-        e.des.0 <- cbind(B.diff, C[feature.id == features[1], ])[, index, drop = FALSE]
+        e.des.0 <- cbind(B.diff)[, index, drop = FALSE]
 
 
         ## Take first differences of P
@@ -746,7 +747,7 @@ e.des.prep <- function(B, C, P, e.order, e.lags, res, sc.pred, Y.donors, out.fea
         e.des.1  <- P.diff
 
       } else {
-        e.des.0 <- cbind(B, C)[feature.id == features[1], index, drop = FALSE]
+        e.des.0 <- cbind(B)[feature.id == features[1], index, drop = FALSE]
         e.des.1 <- P[, index, drop = FALSE]
       }
 
@@ -838,10 +839,9 @@ e.des.prep <- function(B, C, P, e.order, e.lags, res, sc.pred, Y.donors, out.fea
   return(list(e.res = e.res, e.des.0 = e.des.0, e.des.1 = e.des.1))
 }
 
-DUflexGet <- function(u.des.0.na, C, f.id.na, M) {
+DUflexGet <- function(u.des.0.na, f.id.na, M) {
   sel <- colnames(u.des.0.na) %in% colnames(C)
   D.b <- u.des.0.na[, !sel, drop = FALSE]
-  D.c <- u.des.0.na[, sel, drop = FALSE]
   f.df <- data.frame(f.id.na)
   f.D <- fastDummies::dummy_cols(f.df, select_columns = "f.id", remove_selected_columns = TRUE)
   D.b.int <- matrix(NA, nrow = nrow(D.b), ncol = 0)
@@ -849,14 +849,14 @@ DUflexGet <- function(u.des.0.na, C, f.id.na, M) {
     D.b.int <- cbind(D.b.int, D.b*f.D[,m])
   }
 
-  D <- cbind(D.b.int, D.c)
+  D <- cbind(D.b.int)
 
   return(D)
 }
 
 
 insampleUncertaintyGet <- function(Z.na, V.na, P.na, beta, Sigma.root, J, KMI, I,
-                                   w.constr.inf, Q.star, Q2.star, lb, TT, sims, cores, verbose, 
+                                   w.constr.inf, Q.star, Q2.star, lb, TT, sims, cores, verbose,
                                    w.lb.est, w.ub.est) {
 
   Q <- t(Z.na) %*% V.na %*% Z.na / TT
@@ -901,7 +901,7 @@ insampleUncertaintyGet <- function(Z.na, V.na, P.na, beta, Sigma.root, J, KMI, I
       a <- -2 * G - 2 * Q %*% beta
       d <- 2 * sum(G * beta) + sum(beta * (Q %*% beta))
       if (methods::is(Q, "dgeMatrix") == TRUE) a <- as.matrix(a)
- 
+
       data[["G"]] <- ECOS_get_G(Jtot, KMI, J, I, a, Qreg, w.constr.inf, ns, dimred, scale)
       data[["h"]] <- ECOS_get_h(d, lb, J, Jtot, KMI, I, w.constr.inf, Q.star, Q2.star, dimred)
 
@@ -944,7 +944,7 @@ insampleUncertaintyGet <- function(Z.na, V.na, P.na, beta, Sigma.root, J, KMI, I
           } else {
             xx <- solver_output$x[1:(Jtot+KMI)]
             ub.f <- -sum(xt*(xx - beta))
-          }     
+          }
         } else {
           ub.f <- NA
         }
@@ -983,7 +983,7 @@ insampleUncertaintyGet <- function(Z.na, V.na, P.na, beta, Sigma.root, J, KMI, I
                                a <- -2 * G - 2 * Q %*% beta
                                d <- 2 * sum(G * beta) + sum(beta * (Q %*% beta))
                                if (methods::is(Q, "dgeMatrix") == TRUE) a <- as.matrix(a)
-                               
+
                                data[["G"]] <- ECOS_get_G(Jtot, KMI, J, I, a, Qreg, w.constr.inf, ns, dimred, scale)
                                data[["h"]] <- ECOS_get_h(d, lb, J, Jtot, KMI, I, w.constr.inf, Q.star, Q2.star, dimred)
 
@@ -1155,7 +1155,7 @@ scpi.out <- function(res, x, eval, e.method, alpha, e.lb.est, e.ub.est, verbose,
     if (any(lb > 0)) lb <- rep(min(lb), length(lb))
     if (any(ub < 0)) ub <- rep(max(ub), length(ub))
   }
-  
+
   return(list(lb = lb, ub = ub, e.1 = e.1, e.2 = e.2))
 }
 
@@ -1165,15 +1165,15 @@ simultaneousPredGet <- function(vsig, T1, T1.tot, I, u.alpha, e.alpha, e.res.na,
 
   vsigUB <- vsig[, (T1.tot + 1):(2 * T1.tot), drop = FALSE]
   vsigLB <- vsig[, 1:T1.tot, drop = FALSE]
-  
-  pi.e   <- scpi.out(res = e.res.na, x = e.des.0.na, eval = e.des.1, 
+
+  pi.e   <- scpi.out(res = e.res.na, x = e.des.0.na, eval = e.des.1,
                      e.method = "gaussian", alpha = e.alpha/2, e.lb.est = TRUE,
                      e.ub.est =  TRUE, effect = effect, out.feat = out.feat)
 
   w.lb.joint <- w.ub.joint <- c()
-  
+
   j.min <- 1
-  
+
   for (i in seq_len(I)) {
     j.max <- T1[[i]] + j.min - 1
 
@@ -1183,7 +1183,7 @@ simultaneousPredGet <- function(vsig, T1, T1.tot, I, u.alpha, e.alpha, e.res.na,
     w.lb.joint <- c(w.lb.joint, rep(lb.joint, T1[[i]]))
     w.ub.joint <- c(w.ub.joint, rep(ub.joint, T1[[i]]))
     j.min <- j.max + 1
-    
+
   }
 
   eps <- 1
@@ -1196,19 +1196,19 @@ simultaneousPredGet <- function(vsig, T1, T1.tot, I, u.alpha, e.alpha, e.res.na,
 
   e.lb.joint <- pi.e$lb * eps
   e.ub.joint <- pi.e$ub * eps
-  
+
   if (w.lb.est == FALSE) w.lb.joint <- w.bounds[, 1]
   if (w.ub.est == FALSE) w.ub.joint <- w.bounds[, 2]
-  
-  MU <- e.ub.joint + w.ub.joint 
+
+  MU <- e.ub.joint + w.ub.joint
   ML <- e.lb.joint + w.lb.joint
-  
+
   return(list(MU=MU, ML=ML))
 }
 
 epskappaGet <- function(P, rho.vec, beta, I, effect, joint = FALSE) {
   beta.list <- mat2list(beta)
-  
+
   if (effect == "time") {
     rho.vec <- mean(rho.vec)
     I <- 1
@@ -1217,16 +1217,16 @@ epskappaGet <- function(P, rho.vec, beta, I, effect, joint = FALSE) {
   } else {
     P.list <- mat2list(P)
   }
-  
+
   epskappa <- c()
   for (i in seq_len(I)) {
-    epskappai <- apply(P.list[[i]], 1, 
-                       function(x) rho.vec[[i]]^2*sum(abs(x))/(2*sqrt(sum(beta.list[[i]]^2))))  
+    epskappai <- apply(P.list[[i]], 1,
+                       function(x) rho.vec[[i]]^2*sum(abs(x))/(2*sqrt(sum(beta.list[[i]]^2))))
     epskappa <- c(epskappa, epskappai)
   }
-  
+
   if (joint == TRUE) epskappa <- max(epskappa)
-  
+
   return(epskappa)
 }
 
@@ -1240,30 +1240,30 @@ sqrtm <- function(A) {
 
 # conditional prediction
 predict <- function(y, x, eval, type="lm", tau=NULL, verbose = FALSE) {
-  
+
   if (type == "lm") {
     betahat <- .lm.fit(x, y)$coeff
     pred <- eval %*% betahat
-    
+
   } else if (type == "qreg") {
 
     tryCatch(
       {
         betahat <- Qtools::rrq(y~x-1, tau=tau)$coefficients
       },
-      
+
       warning = function(war) {
         message("Warning produced when estimating moments of the out-of-sample residuals with quantile regressions.")
         war$call <- NULL
         if (verbose) warning(war)
       }
     )
-    
+
     betahat <- suppressWarnings(Qtools::rrq(y~x-1, tau=tau)$coefficients)
     pred <- eval %*% betahat
   }
-  
-  
+
+
   return(pred)
 }
 
@@ -1272,20 +1272,20 @@ predict <- function(y, x, eval, type="lm", tau=NULL, verbose = FALSE) {
 
 df.EST <- function(w.constr, w, B, J, KM){
   if ((w.constr[["name"]] == "ols") || (w.constr[["p"]] == "no norm")) {
-    df <- J 
-    
+    df <- J
+
   } else if ((w.constr[["name"]] == "lasso") || ((w.constr[["p"]] == "L1") && (w.constr[["dir"]] == "<="))) {
-    df <- sum(abs(w) >= 1e-6) 
-    
+    df <- sum(abs(w) >= 1e-6)
+
   } else if ((w.constr[["name"]] == "simplex") || ((w.constr[["p"]] == "L1") && (w.constr[["dir"]] == "=="))) {
     df <- sum(abs(w) >= 1e-6) - 1
-    
+
   } else if ((w.constr[["name"]] == "ridge") || (w.constr[["name"]] == "L1-L2") || (w.constr[["p"]] == "L2")) {
     d <- svd(B)$d
     d[d < 0] <- 0
     df <- sum(d^2/(d^2+w.constr[["lambda"]]))
-    
-  } 
+
+  }
 
   # add degrees of freedom coming from C block
   df <- df + KM
@@ -1331,20 +1331,20 @@ u.sigma.est <- function(u.mean, u.sigma, res, Z, V, index, TT, df) {
 }
 
 
-local.geom <- function(w.constr, rho, rho.max, res, B, C, coig.data, T0.tot, J, w, verbose) {
+local.geom <- function(w.constr, rho, rho.max, res, B, coig.data, T0.tot, J, w, verbose) {
 
   Q   <- w.constr[["Q"]]
   Q2.star <- NULL
-  
+
   # if rho is not given by the user we use our own routine to compute it
   if (is.character(rho)) {
-    
-    rho <- regularize.w(rho, rho.max, res, B, C, coig.data, T0.tot)
-    
-    
+
+    rho <- regularize.w(rho, rho.max, res, B, coig.data, T0.tot)
+
+
     # here we check that our rho is not too low to prevent overfitting later on
-    rho <- regularize.check.lb(w, rho, rho.max, res, B, C, coig.data, T0.tot, verbose)
-    
+    rho <- regularize.check.lb(w, rho, rho.max, res, B, coig.data, T0.tot, verbose)
+
   }
 
   if ((w.constr[["name"]] == "simplex") || ((w.constr[["p"]] == "L1") && (w.constr[["dir"]] == "=="))) {
@@ -1403,11 +1403,11 @@ local.geom <- function(w.constr, rho, rho.max, res, B, C, coig.data, T0.tot, J, 
 
   w.constr[["Q"]] <- Q.star
 
-  return(list(w.constr = w.constr, w.star = w.star, index.w = index.w, rho = rho, Q.star = Q.star, Q2.star = Q2.star)) 
+  return(list(w.constr = w.constr, w.star = w.star, index.w = index.w, rho = rho, Q.star = Q.star, Q2.star = Q2.star))
 }
 
 
-regularize.w <- function(rho, rho.max, res, B, C, coig.data, T0.tot) {
+regularize.w <- function(rho, rho.max, res, B, coig.data, T0.tot) {
 
   if (rho == "type-1") {
     sigma.u  <- sqrt(mean((res - mean(res))^2))
@@ -1463,14 +1463,14 @@ regularize.check <- function(w, index.w, rho, verbose, res) {
   return(index.w)
 }
 
-regularize.check.lb <- function(w, rho, rho.max, res, B, C, coig.data, T0.tot, verbose) {
-  
+regularize.check.lb <- function(w, rho, rho.max, res, B, coig.data, T0.tot, verbose) {
+
   if (rho < 0.001) {
     rho.old <- rho
-    rho <- max(regularize.w("type-1", 0.2, res, B, C, coig.data, T0.tot),
-               regularize.w("type-2", 0.2, res, B, C, coig.data, T0.tot),
-               regularize.w("type-3", 0.2, res, B, C, coig.data, T0.tot))
-    
+    rho <- max(regularize.w("type-1", 0.2, res, B, coig.data, T0.tot),
+               regularize.w("type-2", 0.2, res, B, coig.data, T0.tot),
+               regularize.w("type-3", 0.2, res, B, coig.data, T0.tot))
+
     if(is.na(rho)) rho <- 0
     if (rho < 0.05) rho <- rho.max # strong evidence in favor of collinearity, thus heavy shrinkage
 
@@ -1562,7 +1562,7 @@ local.geom.2step <- function(w, r, rho.vec, rho.max, w.constr, Q, I) {
 #       toprint <- paste0("Maximum expected execution time: more than ",hours," hours.\n")
 #     }
 #   }
-#   
+#
 #   cat(toprint)
 #   cat("\n")
 # }
@@ -1579,21 +1579,21 @@ mat2list <- function(mat, cols = TRUE){
   matlist <- list()
   if (cols == TRUE) {
     if (ncol(mat) > 1) {
-      
+
       names <- strsplit(colnames(mat), "\\.")
-      
+
       cnames <- unlist(lapply(names, "[[", 1))
-      
+
       for (tr in tr.units) {
         matlist[[tr]] <- mat[rnames == tr, cnames == tr, drop=FALSE]
       }
     } else if (ncol(mat) == 1) {
-      
+
       for (tr in tr.units) {
         matlist[[tr]] <- mat[rnames == tr, 1, drop=FALSE]
       }
     } else {
-      
+
       for (tr in tr.units) {
         matlist[[tr]] <- mat[rnames == tr, 0, drop=FALSE]
       }
@@ -1603,7 +1603,7 @@ mat2list <- function(mat, cols = TRUE){
       matlist[[tr]] <- mat[rnames == tr, , drop=FALSE]
     }
   }
-  
+
   return(matlist)
 }
 
@@ -1612,9 +1612,9 @@ ci2df <- function(CI, type) {
   df <- data.frame(ID = unlist(lapply(names, "[[", 1)),
                    Time = unlist(lapply(names, "[[", 2)),
                    lb = CI[,1], ub = CI[,2])
-  
+
   names(df) <- c("ID","Time", paste0("lb.",type), paste0("ub.",type))
-  
+
   return(df)
 }
 
@@ -1657,42 +1657,42 @@ matRegularize <- function(P, cond = NA) {
   eig <- eigen(P, only.values = FALSE)
   w <- eig$values
   V <- eig$vectors
-  
+
   if(is.na(cond))
     cond <- 1e6 * .Machine$double.eps   # All real numbers are stored as double precision in R
-  
+
   scale <- max(abs(w))
-  
+
   if(scale < cond) {
     return(list(scale = 0, M1 = V[,FALSE], M2 = V[,FALSE]))
   }
-  
+
   w_scaled <- w / scale
   maskp <- w_scaled > cond
   maskn <- w_scaled < -cond
-    
+
   if(any(maskp) && any(maskn)) {
     warning("Forming a non-convex expression QuadForm(x, indefinite)")
   }
-  
+
   if(sum(maskp) <= 1) {
     M1 <- as.matrix(V[,maskp] * sqrt(w_scaled[maskp]))
   } else {
     M1 <- V[,maskp] %*% diag(sqrt(w_scaled[maskp]))
   }
-  
+
   if(sum(maskn) <= 1){
     M2 <- as.matrix(V[,maskn]) * sqrt(-w_scaled[maskn])
   } else {
     M2 <- V[,maskn] %*% diag(sqrt(-w_scaled[maskn]))
   }
-  
+
   if(!is.null(dim(M1)) && prod(dim(M1)) > 0) {
     Qreg <- t(M1)
   } else if (!is.null(dim(M2)) && prod(dim(M2)) > 0) {
     scale <- -scale
     Qreg <- t(M2)
-  }    
+  }
   return(list(scale = scale, Qreg = Qreg))
 }
 
@@ -1706,17 +1706,17 @@ outcomeGet <- function(Y.pre.fit, Y.post.fit, Y.df, units.est, treated.units,
   if (sparse.matrices == TRUE) {
     Y.pre.fit <- as.matrix(Y.pre.fit)
     Y.post.fit <- as.matrix(Y.post.fit)
-  }  
-  
-  # avoids problems when units have numeric ID
-  if (plot.type == "time") { 
-    rownames(Y.post.fit) <- paste0("agg.", rownames(Y.post.fit)) 
   }
-  
+
+  # avoids problems when units have numeric ID
+  if (plot.type == "time") {
+    rownames(Y.post.fit) <- paste0("agg.", rownames(Y.post.fit))
+  }
+
   synth.mat <- rbind(Y.pre.fit, Y.post.fit)
   names(Y.df) <- c(names(Y.df)[1:3], "Actual")
   res.df <- subset(Y.df, ID %in% units.est)
-  
+
   if (plot.type == "unit") {
     Y.actual.pre <- subset(res.df, Treatment == 0)
     Y.actual.post <- subset(res.df, Treatment == 1)
@@ -1725,17 +1725,17 @@ outcomeGet <- function(Y.pre.fit, Y.post.fit, Y.df, units.est, treated.units,
     names <- strsplit(rownames(Y.post.fit), "\\.")
     Y.actual.post.agg$Time <- as.numeric(unlist(lapply(names, "[[", 2)))
     Y.actual <- rbind(Y.actual.pre, Y.actual.post.agg)
-    
+
   } else {
     Y.actual <- res.df # dataframe
   }
-  
+
   treated.periods <- subset(Y.actual, Treatment == 1, select = c(Time, ID)) # post treatment period for each treated unit
   treated.reception <- aggregate(Time ~ ID, data = treated.periods, min)
   names(treated.reception) <- c("ID", "Tdate")
   treated.reception$Tdate <- as.numeric(treated.reception$Tdate) - anticipation - 1 / 2
   treated.reception <- subset(treated.reception, ID %in% units.est)
-  
+
   if (plot.type == "time") {
 
     if (methods::is(res.df[["Time"]], "Date")) { # flag that will be used later to handle synth labels
@@ -1769,50 +1769,50 @@ outcomeGet <- function(Y.pre.fit, Y.post.fit, Y.df, units.est, treated.units,
     Y.pre <- merge(Y.actual.pre, synth.pre, by=c("ID", "Time"))
     max.pre <- max(aggregate(tstd ~ ID, data = Y.pre, min)$tstd)
     min.post <- min(unlist(lapply(period.post, length))) - 1
-    
+
     Y.pre.agg <- aggregate(x = Y.pre[c("Actual", "Synthetic")],
                            by = Y.pre[c("tstd")],
                            FUN = mean, na.rm = TRUE)
     names(Y.pre.agg) <- c("Time", "Actual", "Synthetic")
     Y.pre.agg <- subset(Y.pre.agg, Time >= max.pre)
-    
+
     Y.post.agg <- aggregate(x = Y.actual.post[c("Actual")],
                             by = Y.actual.post[c("tstd")],
                             FUN = mean, na.rm = TRUE)
-    
+
     Y.post.agg <- subset(Y.post.agg, tstd <= min.post)
-    
+
     Y.post.agg <- data.frame(ID = unit[no.agg == FALSE],
                              Actual = Y.post.agg$Actual,
                              Synthetic = synth.mat[no.agg == FALSE, 1],
-                             Time = c(0:(sum(no.agg==FALSE)-1))) 
-    
+                             Time = c(0:(sum(no.agg==FALSE)-1)))
+
     Y.pre.agg$Treatment <- 0
     Y.post.agg$Treatment <- 1
-    
+
     Y.pre.agg$ID <- "aggregate"
     Y.post.agg$ID <- "aggregate"
 
     Y.actual <- rbind(Y.pre.agg, Y.post.agg)
     Y.actual$Tdate <- 0
-    
+
     plot.type <- "unit-time"
     I <- 1
     treated.reception <- data.frame(ID="aggregate", Tdate = 1/2)
     toplot <- Y.actual
     toplot$Time <- toplot$Time + 1
-    
+
   } else {
     # Merge synthetic
     names <- strsplit(rownames(synth.mat), "\\.")
     unit <- unlist(lapply(names, "[[", 1))
     period <- unlist(lapply(names, "[[", 2))
-    
+
     synth <- data.frame(ID = unit, Time = period, Synthetic = synth.mat)
     toplot <- merge(Y.actual, synth, by = c("ID", "Time"), all = FALSE) # keep only treated units
   }
- 
-  return(list(toplot=toplot, treated.reception=treated.reception, plot.type=plot.type)) 
+
+  return(list(toplot=toplot, treated.reception=treated.reception, plot.type=plot.type))
 }
 
 

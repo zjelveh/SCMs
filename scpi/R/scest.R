@@ -1,6 +1,6 @@
 ###############################################################################
 
-#' @title Prediction of Synthetic Control 
+#' @title Prediction of Synthetic Control
 #'
 #' @description The command implements estimation procedures for Synthetic Control (SC) methods using least squares, lasso,
 #' ridge, or simplex-type constraints. For more information see
@@ -28,13 +28,13 @@
 #' - `\code{name}', a character selecting one of the default proposals.
 #' See the \strong{Details} section for more.
 #' @param V specifies the type of weighting matrix to be used when minimizing the sum of squared residuals
-#' \deqn{(\mathbf{A}-\mathbf{B}\mathbf{w}-\mathbf{C}\mathbf{r})'\mathbf{V}(\mathbf{A}-\mathbf{B}\mathbf{w}-\mathbf{C}\mathbf{r})}
+#' \deqn{(\mathbf{A}-\mathbf{B}\mathbf{w}'\mathbf{V}(\mathbf{A}-\mathbf{B}\mathbf{w}}
 #' The default is the identity matrix, so equal weight is given to all observations. In the case of multiple treated observations
 #' (you used \code{\link{scdataMulti}} to prepare the data), the user can specify \code{V} as a string equal to either "separate" or "pooled".
-#' If \code{scdata()} was used to prepare the data, \code{V} is automatically set to "separate" as the two options are 
+#' If \code{scdata()} was used to prepare the data, \code{V} is automatically set to "separate" as the two options are
 #' equivalent. See the \strong{Details} section for more.
 #' @param V.mat A conformable weighting matrix \eqn{\mathbf{V}} to be used in the minimization of the sum of squared residuals
-#' \deqn{(\mathbf{A}-\mathbf{B}\mathbf{w}-\mathbf{C}\mathbf{r})'\mathbf{V}(\mathbf{A}-\mathbf{B}\mathbf{w}-\mathbf{C}\mathbf{r}).}
+#' \deqn{(\mathbf{A}-\mathbf{B}\mathbf{w}'\mathbf{V}(\mathbf{A}-\mathbf{B}\mathbf{w}.}
 #' See the \strong{Details} section for more information on how to prepare this matrix.
 #' @param solver a string containing the name of the solver used by \code{CVXR} when computing the weights. You can check which solvers are available
 #' on your machine by running \code{CVXR::installed_solvers()}. More information on what different solvers do can be found
@@ -44,21 +44,20 @@
 #' directory. For more options see \code{\link{scplot}}.
 #' @param plot.name a string containing the name of the plot (the format is by default .png). For more options see \code{\link{scplot}}.
 #' @param plot.path a string containing the path at which the plot should be saved (default is output of \code{getwd()}.)
-#' @param save.data a character specifying the name and the path of the saved dataframe containing the processed data used to produce the plot. 
+#' @param save.data a character specifying the name and the path of the saved dataframe containing the processed data used to produce the plot.
 #'
 #' @return
 #' The function returns an object of class 'scest' containing two lists. The first list is labeled 'data' and
 #' contains used data as returned by \code{\link{scdata}} and some other values.
 #' \item{A}{a matrix containing pre-treatment features of the treated unit(s).}
 #' \item{B}{a matrix containing pre-treatment features of the control units.}
-#' \item{C}{a matrix containing covariates for adjustment.}
 #' \item{P}{a matrix whose rows are the vectors used to predict the out-of-sample series for the synthetic unit(s).}
 #' \item{P.diff}{for internal use only.}
 #' \item{Y.pre}{a matrix containing the (raw) pre-treatment outcome of the treated unit(s).}
 #' \item{Y.post}{a matrix containing the (raw) post-treatment outcome of the treated unit(s).}
-#' \item{Y.pre.agg}{a matrix containing the aggregate pre-treatment outcome of the treated unit(s). This differs from 
+#' \item{Y.pre.agg}{a matrix containing the aggregate pre-treatment outcome of the treated unit(s). This differs from
 #' Y.pre only in the case 'effect' in \code{scdataMulti()} is set to either 'unit' or 'time'.}
-#' \item{Y.post.agg}{a matrix containing the aggregate post-treatment outcome of the treated unit(s). This differs from 
+#' \item{Y.post.agg}{a matrix containing the aggregate post-treatment outcome of the treated unit(s). This differs from
 #' Y.post only in the case 'effect' in \code{scdataMulti()} is set to either 'unit' or 'time'.}
 #' \item{Y.donors}{a matrix containing the pre-treatment outcome of the control units.}
 #' \item{specs}{a list containing some specifics of the data:
@@ -143,10 +142,10 @@
 #' \item{if \code{V <- "pooled"}, then \eqn{\mathbf{V} = \frac{1}{I}\mathbf{1}\mathbf{1}'\otimes \mathbf{I}} and the minimized objective function is
 #' \deqn{\sum_{l=1}^{M} \sum_{t=1}^{T_{0}}\left(\frac{1}{N_1^2} \sum_{i=1}^{N_1}\left(a_{t, l}^{i}-\mathbf{b}_{t, l}^{i \prime} \mathbf{w}^{i}-\mathbf{c}_{t, l}^{i\prime} \mathbf{r}_{l}^{i}\right)\right)^{2},}
 #' which optimizes the pooled fit for the average of the treated units.}
-#' \item{if the user wants to provide their own weighting matrix, then it must use the option \code{V.mat} to input a \eqn{v\times v} positive-definite matrix, where \eqn{v} is the 
-#' number of rows of \eqn{\mathbf{B}} (or \eqn{\mathbf{C}}) after potential missing values have been removed. In case the user
+#' \item{if the user wants to provide their own weighting matrix, then it must use the option \code{V.mat} to input a \eqn{v\times v} positive-definite matrix, where \eqn{v} is the
+#' number of rows of \eqn{\mathbf{B}}  after potential missing values have been removed. In case the user
 #' wants to provide their own \code{V}, we suggest to check the appropriate dimension \eqn{v} by inspecting the output
-#' of either \code{scdata} or \code{scdataMulti} and check the dimensions of \eqn{\mathbf{B}} (and \eqn{\mathbf{C}}). Note that 
+#' of either \code{scdata} or \code{scdataMulti} and check the dimensions of \eqn{\mathbf{B}}. Note that
 #' the weighting matrix could cause problems to the optimizer if not properly scaled. For example, if \eqn{\mathbf{V}} is diagonal
 #' we suggest to divide each of its entries by \eqn{\|\mathrm{diag}(\mathbf{V})\|_1}.}
 #' }}
@@ -198,18 +197,18 @@ scest <- function(data,
                   plot.name = NULL,
                   plot.path = NULL,
                   save.data = NULL) {
-  
+
   ##########################
   if ((methods::is(data, "scdata") || methods::is(data, "scdataMulti")) == FALSE) {
     stop("data should be the object returned by running scdata or scdata_multi!")
   }
-  
+
   if (is.null(w.constr) == FALSE) { # The user has specified W
-    
+
     if (is.list(w.constr) == FALSE) {
       stop("w.constr should be a list!")
     }
-    
+
     if (!"name" %in% names(w.constr)) {
       w.constr[["name"]] <- "NULL"
     } else {
@@ -219,32 +218,31 @@ scest <- function(data,
       }
     }
   }
-  
+
   if (!(solver %in% CVXR::installed_solvers())) {
     stop(paste0("The specified solver - ", solver," - is not available on your machine! Run
                 CVXR::installed_solvers() to see the list of available options on your machine."))
   }
-  
+
   # Data matrices
   A <- data$A
   B <- data$B
-  C <- data$C
   P <- data$P
-  Z <- cbind(B, C)
+  Z <- cbind(B)
   X0sd <- data$X0_sds
   Y.donors <- data$Y.donors
   outcome.var <- data$specs$outcome.var
   Z0 <- Y.donors
   Z1 <- data$Y.pre
-  
+
   if (class(data)[1] == 'scdata') {
     class.type <- 'scpi_data'
   } else if (class(data)[1] == 'scdataMulti') {
     class.type <- 'scpi_data_multi'
   }
-  
+
   V.type <- V
-  
+
   # Data specs
   if (class.type == 'scpi_data') {
     J               <- data$specs$J
@@ -253,7 +251,7 @@ scest <- function(data,
     KMI             <- KM
     Jtot            <- J
     M               <- data$specs$M
-    
+
   } else if (class.type == 'scpi_data_multi') {
     J               <- data$specs$J # total number of donors
     Jtot            <- sum(unlist(J))
@@ -263,68 +261,68 @@ scest <- function(data,
     T0.M            <- lapply(data$specs$T0.features, sum) # observations per treated unit
     M               <- data$specs$M
   }
-  
+
   T0.features     <- data$specs$T0.features
   out.in.features <- data$specs$out.in.features
-  
+
   ##########################
   ## Set up the estimation problem
-  
+
   # Create weighting matrix
   if (is.character(V) == FALSE) {
     stop("The object V should be a string! If you want to input a matrix use the option V.mat!")
   }
-  
+
   if (!is.null(V.mat)) {
     if (!is.matrix(V.mat)) {
       stop("The object V.mat should be a matrix!")
     }
-    
+
     if (nrow(V.mat) != nrow(B) || ncol(V.mat) != nrow(B)) {
       stop(paste0("V.mat should be a ", nrow(B), "x", nrow(B)," matrix, but currently it is
                 a ", nrow(V.mat), "x", ncol(V.mat), " matrix!"))
-    }    
+    }
   } else if(V.type=='optimize'){
-      require(optimx)
-      SV1 = rep(1/nrow(B), nrow(B))
+    require(optimx)
+    SV1 = rep(1/nrow(B), nrow(B))
 
-      Margin.ipop = 0.05
-      Sigf.ipop = 5
-      Bound.ipop = 10
-      all.methods = FALSE
-      optimxmethod = c("Nelder-Mead","BFGS")
-      
-      
-      rgV.optim.1 <- optimx(par=SV1, fn=fn.V,
-                            gr=NULL, 
-                            hess=NULL, 
-                            method=optimxmethod, 
-                            itnmax=NULL, 
-                            hessian=FALSE,
-                            control=list(kkt=FALSE,
-                                         starttests=FALSE,
-                                         dowarn=FALSE,
-                                         all.methods=all.methods),
-                            X0.scaled = B,
-                            X1.scaled = A,
-                            Z0 = Z0,
-                            Z1 = Z1,
-                            margin.ipop = Margin.ipop,
-                            sigf.ipop = Sigf.ipop,
-                            bound.ipop = Bound.ipop
-      )
-      
-      # get minimum
-      # if(verbose==TRUE){print(rgV.optim.1)}
-      rgV.optim <- collect.optimx(rgV.optim.1, "min")
-      
-      solution.v   <- abs(rgV.optim$par)/sum(abs(rgV.optim$par))
-      V.mat = diag(solution.v)  
+    Margin.ipop = 0.05
+    Sigf.ipop = 5
+    Bound.ipop = 10
+    all.methods = FALSE
+    optimxmethod = c("Nelder-Mead","BFGS")
+
+
+    rgV.optim.1 <- optimx(par=SV1, fn=fn.V,
+                          gr=NULL,
+                          hess=NULL,
+                          method=optimxmethod,
+                          itnmax=NULL,
+                          hessian=FALSE,
+                          control=list(kkt=FALSE,
+                                       starttests=FALSE,
+                                       dowarn=FALSE,
+                                       all.methods=all.methods),
+                          X0.scaled = B,
+                          X1.scaled = A,
+                          Z0 = Z0,
+                          Z1 = Z1,
+                          margin.ipop = Margin.ipop,
+                          sigf.ipop = Sigf.ipop,
+                          bound.ipop = Bound.ipop
+    )
+
+    # get minimum
+    # if(verbose==TRUE){print(rgV.optim.1)}
+    rgV.optim <- collect.optimx(rgV.optim.1, "min")
+
+    solution.v   <- abs(rgV.optim$par)/sum(abs(rgV.optim$par))
+    V.mat = diag(solution.v)
   } else{
     if(V.type=='uniform'){
       V.type = 'separate'
     }
-      V.mat <- V.prep(type = V.type, B, T0.features, I)
+    V.mat <- V.prep(type = V.type, B, T0.features, I)
   }
   V <- V.mat
 
@@ -334,61 +332,60 @@ scest <- function(data,
   rownames(V) <- rownames(Z)
   colnames(V) <- rownames(V)
   #############################
-  
+
   # Create lists of matrices
   # Estimate SC
   if (class.type == 'scpi_data') { # single treated unit
-    
+
     w.constr <- w.constr.OBJ(w.constr, A, Z, V, J, KM, M)
     if (w.constr[["name"]] == "lasso") solver <- "OSQP"
-    
+
     b <- b.est(A = A, Z = Z, J = J, KM = KM, w.constr = w.constr, V = V, CVXR.solver = solver)
-    
+
   } else if (class.type == 'scpi_data_multi') { # multiple treated units
-    
+
     A.list <- mat2list(A)
     B.list <- mat2list(B)
-    C.list <- mat2list(C)
     V.list <- mat2list(V)
     w.constr.list <- list()
-    
+
     w.store <- c()
     r.store <- c()
     j.lb <- 1
     j.ub <- J[[1]]
-    
+
     for (i in seq_len(I)) {
       if (i > 1){
         j.lb <- j.ub + 1
         j.ub <- j.lb + J[[i]] - 1
       }
-      
+
       A.i <- A.list[[i]]
-      Z.i <- cbind(B.list[[i]], C.list[[i]])
+      Z.i <- cbind(B.list[[i]])
       V.i <- V.list[[i]]
-      
+
       w.constr.list[[data$specs$treated.units[i]]] <- w.constr.OBJ(w.constr, A.i, Z.i, V.i, J[[i]], KM[[i]], M[[i]])
       if (w.constr.list[[i]]["name"] == "lasso") solver <- "OSQP"
-      
+
       if (V.type == "separate") {
         res <- b.est(A = A.i, Z = Z.i, J = J[[i]], KM = KM[[i]], w.constr = w.constr.list[[i]], V = V.i, CVXR.solver = solver)
         w.store <- c(w.store, res[1:J[[i]]])
         if (KM[[i]] > 0) r.store <- c(r.store, res[(J[[i]]+1):length(res)])
       }
     }
-    
+
     if (V.type != "separate" ) {
       if (w.constr.list[[i]]["name"] == "lasso") solver <- "OSQP"
-      b <- b.est.multi(A = A, Z = Z, J = J, KMI = KMI, I = I, 
+      b <- b.est.multi(A = A, Z = Z, J = J, KMI = KMI, I = I,
                        w.constr = w.constr.list, V = V, CVXR.solver = solver)
       b <- b[,1,drop=TRUE]
-      
+
     } else if (V.type == "separate") {
       b <- c(w.store, r.store)
     }
     w.constr <- w.constr.list
   }
-  
+
   ##########################
   ## Create useful objects
   # Store point estimates
@@ -399,16 +396,16 @@ scest <- function(data,
     w <- b[1:Jtot]
     r <- b[(Jtot + 1):length(b)]
   }
-  
+
   # Fitted values and residuals
   A.hat    <- Z %*% b                            # Pre-treatment fit of synthetic unit
   res      <- A  -  A.hat                        # Estimation residual u
-  
+
   # Reflate A.hat
 
   Z_scaled = Z * X0sd
   A.hat    <- Z_scaled %*% b                            # Pre-treatment fit of synthetic unit
-  
+
   # Pre-treatment fit of outcome of interest
   if (class.type == 'scpi_data'){
     if (out.in.features == TRUE) {
@@ -419,18 +416,18 @@ scest <- function(data,
       fit.pre  <- Y.donors %*% w
     }
   } else if(class.type == 'scpi_data_multi') {
-    
+
     i.lb <- 1
     fit.pre <- c()
     Yd.list <- mat2list(data$Y.donors)
     w.list <- mat2list(as.matrix(w), cols=FALSE)
-    
+
     for (i in seq_len(I)) {
       i.ub <- i.lb + T0.features[[i]][outcome.var] - 1
       if (out.in.features[[i]] == TRUE) {
         fit.pre.i  <- A.hat[i.lb:i.ub, , drop = FALSE]
         names    <- strsplit(rownames(fit.pre.i), "\\.")
-        rownames(fit.pre.i) <- unlist(lapply(names, function(x) paste(x[1],x[3],sep=".")))   
+        rownames(fit.pre.i) <- unlist(lapply(names, function(x) paste(x[1],x[3],sep=".")))
       } else {
         fit.pre.i <- Yd.list[[i]] %*% w.list[[i]]
       }
@@ -438,15 +435,15 @@ scest <- function(data,
       fit.pre <- rbind(fit.pre, fit.pre.i)
     }
   }
-  
-  
-  # Post-treatment prediction of outcome of interest 
+
+
+  # Post-treatment prediction of outcome of interest
   fit.post <- P %*% b
-  
+
   # Name V
   rownames(V) = rownames(B)
   colnames(V) = rownames(V)
-  
+
   est.results <- list(b = b,
                       w = w,
                       r = r,
@@ -456,11 +453,10 @@ scest <- function(data,
                       res = res,
                       V = V,
                       w.constr = w.constr)
-  
+
   if (class.type == 'scpi_data') {
     df   <- list(A = data$A,
                  B = data$B,
-                 C = data$C,
                  P = data$P,
                  Z = Z,
                  specs  = data$specs,
@@ -468,12 +464,12 @@ scest <- function(data,
                  Y.post = data$Y.post,
                  Y.pre.agg = data$Y.pre,
                  Y.post.agg = data$Y.post.agg)
-    
+
   } else if (class.type == 'scpi_data_multi') {
-    
+
     # shortcut to avoid "no visible binding for global variable 'X' when checking the package
     Treatment <- NULL
-    
+
     # Y.pre and Y.post might require some extra work
     # if the predictand of interest is aggregate (either over units or over time)
     # The next function process the data in the same way it's done in scplotMulti
@@ -486,13 +482,13 @@ scest <- function(data,
     Y.df            <- data$Y.df
     Y.pre.fit       <- fit.pre
     Y.post.fit      <- fit.post
-    
+
     # create to plot object
     Yprocessed <- outcomeGet(Y.pre.fit=Y.pre.fit, Y.post.fit=Y.post.fit, Y.df=Y.df,
                              units.est=units.est, treated.units=treated.units, plot.type=effect,
                              anticipation=anticipation, period.post=period.post,
                              sparse.matrices=sparse.matrices)
-    
+
     Ydf.pre <- subset(Yprocessed$toplot, Treatment == 0)
     Ydf.post <- subset(Yprocessed$toplot, Treatment == 1)
     Y.pre.agg  <- as.matrix(Ydf.pre[["Actual"]])
@@ -503,10 +499,9 @@ scest <- function(data,
     rownames(Y.post.agg) <- names.post
     colnames(Y.pre.agg) <- data$specs$outcome.var
     colnames(Y.post.agg) <- data$specs$outcome.var
-    
+
     df   <- list(A = data$A,
                  B = data$B,
-                 C = data$C,
                  P = data$P,
                  P.diff = data$P.diff,
                  Y.df = data$Y.df,
@@ -517,7 +512,7 @@ scest <- function(data,
                  Z = Z,
                  specs  = data$specs)
   }
-  
+
   ##########################
   ## Return to the user
   to.return <- list(data = df, est.results = est.results)
@@ -527,7 +522,7 @@ scest <- function(data,
   } else if (class.type == 'scpi_data_multi') {
     to.return$data$specs$class.type <- 'scpi_scest_multi'
   }
-  
+
   ##################################################
   ## Plot
   if (plot == TRUE) {
@@ -536,26 +531,26 @@ scest <- function(data,
     } else {
       fig.name <- "scest_default_plot"
     }
-    
+
     if (is.null(plot.path) == FALSE) {
       fig.path <- plot.path
     } else {
       fig.path <- getwd()
     }
-    
+
     if (class.type == 'scpi_data'){
-      
+
       scplot(result = to.return, fig.path = fig.path,
              fig.name = fig.name, fig.format = "png", save.data = save.data)
-      
+
     } else if (class.type == "scpi_data_multi"){
-      
+
       scplotMulti(result = to.return)
-      
+
     }
-    
+
   }
-  
+
   return(to.return)
 }
 

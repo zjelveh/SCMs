@@ -1,9 +1,9 @@
 ###############################################################################
 
-#' @title Prediction Intervals for Synthetic Control Methods 
+#' @title Prediction Intervals for Synthetic Control Methods
 #'
 #' @description The command implements estimation and inference procedures for Synthetic Control (SC) methods using least squares, lasso, ridge, or simplex-type constraints. Uncertainty is quantified using prediction
-#' intervals according to \href{https://nppackages.github.io/references/Cattaneo-Feng-Titiunik_2021_JASA.pdf}{Cattaneo, Feng, and Titiunik (2021)}. \code{\link{scpi}} returns the estimated 
+#' intervals according to \href{https://nppackages.github.io/references/Cattaneo-Feng-Titiunik_2021_JASA.pdf}{Cattaneo, Feng, and Titiunik (2021)}. \code{\link{scpi}} returns the estimated
 #' post-treatment series for the synthetic unit through the command \code{\link{scest}} and quantifies in-sample and out-of-sample uncertainty to provide confidence intervals
 #' for each point estimate.
 #'
@@ -31,10 +31,10 @@
 #' post-intervention outcome of the synthetic control unit. \eqn{T_1} is the number of post-treatment periods,
 #' \eqn{J} is the size of the donor pool, and \eqn{K_1} is the number of covariates used for adjustment in the outcome equation.
 #' @param V specifies the type of weighting matrix to be used when minimizing the sum of squared residuals
-#' \deqn{(\mathbf{A}-\mathbf{B}\mathbf{w}-\mathbf{C}\mathbf{r})'\mathbf{V}(\mathbf{A}-\mathbf{B}\mathbf{w}-\mathbf{C}\mathbf{r})}
+#' \deqn{(\mathbf{A}-\mathbf{B}\mathbf{w})'\mathbf{V}(\mathbf{A}-\mathbf{B}\mathbf{w})}
 #' The default is the identity matrix, so equal weight is given to all observations. In the case of multiple treated observations
 #' (you used \code{\link{scdataMulti}} to prepare the data), the user can specify \code{V} as a string equal to either "separate" or "pooled".
-#' If \code{scdata()} was used to prepare the data, \code{V} is automatically set to "separate" as the two options are 
+#' If \code{scdata()} was used to prepare the data, \code{V} is automatically set to "separate" as the two options are
 #' equivalent. See the \strong{Details} section for more.
 #' @param V.mat A conformable weighting matrix \eqn{\mathbf{V}} to be used in the minimization of the sum of squared residuals
 #' \deqn{(\mathbf{A}-\mathbf{B}\mathbf{w}-\mathbf{C}\mathbf{r})'\mathbf{V}(\mathbf{A}-\mathbf{B}\mathbf{w}-\mathbf{C}\mathbf{r}).}
@@ -44,7 +44,7 @@
 #' at the following link https://cvxr.rbind.io/cvxr_examples/cvxr_using-other-solvers/. "OSQP" is the default solver when 'lasso'
 #' is the constraint type, whilst "ECOS" is the default in all other cases.
 #' @param rho a string specifying the regularizing parameter that imposes sparsity on the estimated vector of weights. If
-#' \code{rho = 'type-1'} (the default), then the tuning parameter is computed based on optimization inequalities. Users can provide a scalar 
+#' \code{rho = 'type-1'} (the default), then the tuning parameter is computed based on optimization inequalities. Users can provide a scalar
 #' with their own value for \code{rho}. Other options are described in the \strong{Details} section.
 #' @param rho.max a scalar indicating the maximum value attainable by the tuning parameter \code{rho}.
 #' @param lgapp selects the way local geometry is approximated in simulation. The options are "generalized"
@@ -66,7 +66,7 @@
 #'  "gaussian" which uses conditional subgaussian bounds; "ls" which specifies a location-scale model for \eqn{\mathbf{u}}; "qreg" which employs a
 #'  quantile regressions to get the conditional bounds; "all" uses each one of the previous methods.
 #' @param e.order a scalar that sets the order of the polynomial in \eqn{\mathbf{B}} when predicting moments of \eqn{\mathbf{e}}.
-#' The default is \code{e.order = 1}, however if there is risk of over-fitting, the command automatically sets it 
+#' The default is \code{e.order = 1}, however if there is risk of over-fitting, the command automatically sets it
 #' to \code{e.order = 0}. See the \strong{Details} section for more information.
 #' @param e.lags a scalar that sets the number of lags of \eqn{\mathbf{B}} when predicting moments of \eqn{\mathbf{e}}.
 #' The default is \code{e.order = 1}, however if there is risk of over-fitting, the command automatically sets it
@@ -87,7 +87,7 @@
 #' the quantification of out-of-sample uncertainty is skipped. It is possible to provide only the lower bound or the upper bound
 #' by filling the other column with \code{NA}s.
 #'
-#' @param save.data a character specifying the name and the path of the saved dataframe containing the processed data used to produce the plot. 
+#' @param save.data a character specifying the name and the path of the saved dataframe containing the processed data used to produce the plot.
 #'
 #' @param verbose if \code{TRUE} prints additional information in the console.
 #'
@@ -100,9 +100,9 @@
 #' \item{P}{a matrix whose rows are the vectors used to predict the out-of-sample series for the synthetic unit(s).}
 #' \item{Y.pre}{a matrix containing the pre-treatment outcome of the treated unit(s).}
 #' \item{Y.post}{a matrix containing the post-treatment outcome of the treated unit(s).}
-#' \item{Y.pre.agg}{a matrix containing the aggregate pre-treatment outcome of the treated unit(s). This differs from 
+#' \item{Y.pre.agg}{a matrix containing the aggregate pre-treatment outcome of the treated unit(s). This differs from
 #' Y.pre only in the case 'effect' in \code{scdataMulti()} is set to either 'unit' or 'time'.}
-#' \item{Y.post.agg}{a matrix containing the aggregate post-treatment outcome of the treated unit(s). This differs from 
+#' \item{Y.post.agg}{a matrix containing the aggregate post-treatment outcome of the treated unit(s). This differs from
 #' Y.post only in the case 'effect' in \code{scdataMulti()} is set to either 'unit' or 'time'.}
 #' \item{Y.donors}{a matrix containing the pre-treatment outcome of the control units.}
 #' \item{specs}{a list containing some specifics of the data:
@@ -207,7 +207,7 @@
 #'
 #' \item{If \code{name == "ols"}, then the problem is unconstrained and the vector of weights
 #' is estimated via ordinary least squares.}
-#' 
+#'
 #' \item{If \code{name == "L1-L2"}, then
 #' \deqn{||\mathbf{w}||_1 = 1,\:\:\: ||\mathbf{w}||_2 \leq Q,}
 #' where \eqn{Q} is a tuning parameter computed as in the "ridge" case.}
@@ -221,10 +221,10 @@
 #' \item{if \code{V <- "pooled"}, then \eqn{\mathbf{V} = \mathbf{1}\mathbf{1}'\otimes \mathbf{I}} and the minimized objective function is
 #' \deqn{\sum_{l=1}^{M} \sum_{t=1}^{T_{0}}\left(\frac{1}{N_1^2} \sum_{i=1}^{N_1}\left(a_{t, l}^{i}-\mathbf{b}_{t, l}^{i \prime} \mathbf{w}^{i}-\mathbf{c}_{t, l}^{i\prime} \mathbf{r}_{l}^{i}\right)\right)^{2},}
 #' which optimizes the pooled fit for the average of the treated units.}
-#' \item{if the user wants to provide their own weighting matrix, then it must use the option \code{V.mat} to input a \eqn{v\times v} positive-definite matrix, where \eqn{v} is the 
+#' \item{if the user wants to provide their own weighting matrix, then it must use the option \code{V.mat} to input a \eqn{v\times v} positive-definite matrix, where \eqn{v} is the
 #' number of rows of \eqn{\mathbf{B}} (or \eqn{\mathbf{C}}) after potential missing values have been removed. In case the user
 #' wants to provide their own \code{V}, we suggest to check the appropriate dimension \eqn{v} by inspecting the output
-#' of either \code{scdata} or \code{scdataMulti} and check the dimensions of \eqn{\mathbf{B}} (and \eqn{\mathbf{C}}). Note that 
+#' of either \code{scdata} or \code{scdataMulti} and check the dimensions of \eqn{\mathbf{B}} (and \eqn{\mathbf{C}}). Note that
 #' the weighting matrix could cause problems to the optimizer if not properly scaled. For example, if \eqn{\mathbf{V}} is diagonal
 #' we suggest to divide each of its entries by \eqn{\|\mathrm{diag}(\mathbf{V})\|_1}.}
 #' }}
@@ -232,7 +232,7 @@
 #'
 #' \item{\strong{Regularization.} \code{rho} is estimated through the formula
 #' \deqn{\varrho = \mathcal{C}\frac{\log (T_0)^c}{T_0^{1/2}}}
-#' where \eqn{\mathcal{C} = \widehat{\sigma}_u / \min_j \widehat{\sigma}_{b_j}} if \code{rho = 'type-1'}, 
+#' where \eqn{\mathcal{C} = \widehat{\sigma}_u / \min_j \widehat{\sigma}_{b_j}} if \code{rho = 'type-1'},
 #' \eqn{\mathcal{C} = \max_{j}\widehat{\sigma}_{b_j}\widehat{\sigma}_{u} / \min_j \widehat{\sigma}_{b_j}^2} if \code{rho = 'type-2'}, and
 #' \eqn{\mathcal{C} = \max_{j}\widehat{\sigma}_{b_ju} / \min_j \widehat{\sigma}_{b_j}^2} if \code{rho = 'type-3'},
 #'
@@ -244,14 +244,14 @@
 #' First of all, estimation of the first moment of \eqn{\mathbf{u}} can be controlled through
 #' the option \code{u.missp}. When \code{u.missp = FALSE}, then \eqn{\mathbf{E}[u\: |\: \mathbf{D}_u]=0}. If instead \code{u.missp = TRUE},
 #' then \eqn{\mathbf{E}[\mathbf{u}\: |\: \mathbf{D}_u]} is estimated using a linear regression of
-#' \eqn{\widehat{\mathbf{u}}} on \eqn{\mathbf{D}_u}. The default set of variables in \eqn{\mathbf{D}_u} is composed of \eqn{\mathbf{B}}, 
-#' \eqn{\mathbf{C}} and, if required, it is augmented with lags (\code{u.lags}) and polynomials (\code{u.order}) of \eqn{\mathbf{B}}. 
-#' The option \code{u.design} allows the user to provide an ad-hoc set of variables to form \eqn{\mathbf{D}_u}. 
+#' \eqn{\widehat{\mathbf{u}}} on \eqn{\mathbf{D}_u}. The default set of variables in \eqn{\mathbf{D}_u} is composed of \eqn{\mathbf{B}},
+#' \eqn{\mathbf{C}} and, if required, it is augmented with lags (\code{u.lags}) and polynomials (\code{u.order}) of \eqn{\mathbf{B}}.
+#' The option \code{u.design} allows the user to provide an ad-hoc set of variables to form \eqn{\mathbf{D}_u}.
 #' Regarding the second moment of \eqn{\mathbf{u}}, different estimators can be chosen:
 #' HC0, HC1, HC2, HC3, and HC4 using the option \code{u.sigma}.}
 #'
 #' \item{\strong{Out-of-sample uncertainty.} To quantify out-of-sample uncertainty it is necessary to model the out-of-sample residuals
-#' \eqn{\mathbf{e}} and estimate relevant moments. By default, the design matrix used during estimation \eqn{\mathbf{D}_e} is composed of the blocks in 
+#' \eqn{\mathbf{e}} and estimate relevant moments. By default, the design matrix used during estimation \eqn{\mathbf{D}_e} is composed of the blocks in
 #' \eqn{\mathbf{B}} and \eqn{\mathbf{C}} corresponding to the outcome variable. Moreover, if required by the user, \eqn{\mathbf{D}_e}
 #' is augmented with lags (\code{e.lags}) and polynomials (\code{e.order}) of \eqn{\mathbf{B}}. The option \code{e.design} allows the user to provide an
 #' ad-hoc set of variables to form \eqn{\mathbf{D}_e}. Finally, the option \code{e.method} allows the user to select one of three
@@ -259,10 +259,10 @@
 #' model; "qreg" uses conditional quantile regression of the residuals \eqn{\mathbf{e}} on \eqn{\mathbf{D}_e}.}
 #'
 #' \item{\strong{Residual Estimation Over-fitting.} To estimate conditional moments of \eqn{\mathbf{u}} and \eqn{e_t}
-#' we rely on two design matrices, \eqn{\mathbf{D}_u} and \eqn{\mathbf{D}_e} (see above). Let \eqn{d_u} and \eqn{d_e} be the number of 
+#' we rely on two design matrices, \eqn{\mathbf{D}_u} and \eqn{\mathbf{D}_e} (see above). Let \eqn{d_u} and \eqn{d_e} be the number of
 #' columns in \eqn{\mathbf{D}_u} and \eqn{\mathbf{D}_e}, respectively. Assuming no missing values and balanced features, the
 #' number of observation used to estimate moments of \eqn{\mathbf{u}} is \eqn{N_1\cdot T_0\cdot M}, whilst for moments of \eqn{e_t} is \eqn{T_0}.
-#' Our rule of thumb to avoid over-fitting is to check if \eqn{N_1\cdot T_0\cdot M \geq d_u + 10} or \eqn{T_0 \geq d_e + 10}. If the 
+#' Our rule of thumb to avoid over-fitting is to check if \eqn{N_1\cdot T_0\cdot M \geq d_u + 10} or \eqn{T_0 \geq d_e + 10}. If the
 #' former condition is not satisfied we automatically set \code{u.order = u.lags = 0}, if instead the latter is not met
 #' we automatically set \code{e.order = e.lags = 0}.}
 #'
@@ -281,7 +281,7 @@
 #' \itemize{
 #' \item{\href{https://www.aeaweb.org/articles?id=10.1257/jel.20191450}{Abadie, A. (2021)}. Using synthetic controls: Feasibility, data requirements, and methodological aspects.
 #' \emph{Journal of Economic Literature}, 59(2), 391-425.}
-#' \item{\href{https://nppackages.github.io/references/Cattaneo-Feng-Titiunik_2021_JASA.pdf}{Cattaneo, M. D., Feng, Y., and Titiunik, R. 
+#' \item{\href{https://nppackages.github.io/references/Cattaneo-Feng-Titiunik_2021_JASA.pdf}{Cattaneo, M. D., Feng, Y., and Titiunik, R.
 #' (2021)}. Prediction intervals for synthetic control methods. \emph{Journal of the American Statistical Association}, 116(536), 1865-1880.}
 #' \item{\href{https://arxiv.org/abs/2202.05984}{Cattaneo, M. D., Feng, Y., Palomba F., and Titiunik, R. (2022).}
 #' scpi: Uncertainty Quantification for Synthetic Control Methods, \emph{arXiv}:2202.05984.}
@@ -304,13 +304,13 @@
 #' result <- scpi(df, w.constr = list(name = "simplex", Q = 1), cores = 1, sims = 10)
 #' result <- scpi(df, w.constr = list(lb = 0, dir = "==", p = "L1", Q = 1),
 #'                cores = 1, sims = 10)
-#'                            
+#'
 #' @export
 
 scpi  <- function(data,
                   outcome_models = c('None', 'OLS', 'Ridge', 'Lasso', 'AugSynth'),
                   feature_weights = c('uniform', 'optimized'),
-                  unit_weights = c('uniform', 'optimized'),    
+                  unit_weights = c('uniform', 'optimized'),
                   w.constr     = NULL,
                   V            = "separate",
                   V.mat        = NULL,
@@ -359,15 +359,15 @@ scpi  <- function(data,
   # }
 
   scm_model <- scest(data = data, w.constr = w.constr, V = V, V.mat = V.mat, solver = solver)
-  
+
   sc.pred = run_outcome_models(
-    scm_model=scm_model, 
+    scm_model=scm_model,
     scm_data=data,
     treated_unit=data$specs$treated.units,
-    outcome_models=outcome_models, 
-    period_post=data$specs$period.post, 
+    outcome_models=outcome_models,
+    period_post=data$specs$period.post,
     Y=data$Y.donors.post,
-    Z0=data$Y.donors, 
+    Z0=data$Y.donors,
     Z1=data$Y.pre
   )
 
@@ -377,7 +377,6 @@ scpi  <- function(data,
 
   A           <- sc.pred$data$A                           # Features of treated unit
   B           <- sc.pred$data$B                           # Features of control units
-  C           <- sc.pred$data$C                           # Covariates for adjustment
   Z           <- sc.pred$data$Z                           # B and C column-bind
   Y.donors    <- data$Y.donors                            # Outcome variable of control units
   Y.donors.post <- data$Y.donors.post                            # Outcome variable of control units
@@ -402,7 +401,7 @@ scpi  <- function(data,
   sc.effect   <- sc.pred$data$specs$effect                # Causal quantity of interest
   sparse.mat  <- sc.pred$data$specs$sparse.matrices       # Whether sparse matrices are involved or not
   om.model.preds <- sc.pred$yhats
-  
+
   if ( class.type == 'scpi_data') {
     Jtot            <- J
     KMI             <- KM
@@ -481,14 +480,14 @@ scpi  <- function(data,
     }
 
     if (ncol(w.bounds) != 2) {
-      stop("w.bounds should be a matrix with two columns: the first column for the 
+      stop("w.bounds should be a matrix with two columns: the first column for the
            lower bound, the second for the upper. In case you don't want to specify
            the lower or the upper bound just fill the specific column with NAs.")
     }
 
     if (nrow(w.bounds) != length(Y.post.fit)) {
       stop(paste0("w.bounds should be a matrix with ", length(Y.post.fit),
-                 " rows (i.e. the number of post-intervention periods)."))
+                  " rows (i.e. the number of post-intervention periods)."))
     }
   }
 
@@ -496,23 +495,23 @@ scpi  <- function(data,
   if (sims < 10) {
     stop("The number of simulations needs to be larger or equal than 10!")
   }
-  
+
   if (is.null(e.bounds) == FALSE) {
     if (is.matrix(e.bounds) == FALSE) {
       stop("The object e.bounds should be a matrix!")
     }
 
     if (ncol(e.bounds) != 2) {
-      stop("e.bounds should be a matrix with two columns: the first column for the 
+      stop("e.bounds should be a matrix with two columns: the first column for the
            lower bound, the second for the upper. In case you don't want to specify
            the lower or the upper bound just fill the specific column with NAs.")
     }
-    
+
     if (nrow(e.bounds) != length(Y.post.fit)) {
-      stop(paste("e.bounds should be a matrix with ", length(Y.post.fit), 
+      stop(paste("e.bounds should be a matrix with ", length(Y.post.fit),
                  " rows (i.e. the number of post-intervention periods)."))
     }
-  }  
+  }
 
   # Check rho
   if (is.null(rho) == FALSE) {
@@ -544,26 +543,15 @@ scpi  <- function(data,
     }
 
     cat("Quantifying Uncertainty\n")
-    
+
     #executionTime(T0.tot, Jtot, I, T1.tot, sims, cores, constr.type)
   }
-  
-  
+
+
   # create lists of matrices
   A.list   <- mat2list(A)
-  
+
   B.list   <- mat2list(B)
-  if (is.null(C) == FALSE) {
-    if (ncol(C) > 0) {
-      C.list   <- mat2list(C)
-    } else {
-      C.list <- rep(list(NULL), I)
-      names(C.list) <- sc.pred$data$specs$treated.units
-    }
-  } else {
-    C.list <- rep(list(NULL), I)
-    names(C.list) <- sc.pred$data$specs$treated.units
-  }
 
   if (sc.pred$data$specs$effect == "time") {
     P.list <- list()
@@ -575,7 +563,7 @@ scpi  <- function(data,
   } else {
     P.list <- mat2list(P)
   }
-  
+
   if (!is.null(sc.pred$data$P.diff)) {
     Pd.list <- mat2list(sc.pred$data$P.diff)
   } else {
@@ -583,17 +571,16 @@ scpi  <- function(data,
   }
 
   V.list   <- mat2list(V)
-  
+
   w.list   <- mat2list(as.matrix(w))
-  
+
   res.list <- mat2list(res)
-  
+
   Y.d.list <- mat2list(Y.donors)
 
   if (sparse.mat == TRUE) {
     res.list <- lapply(res.list, as.matrix)
     B.list <- lapply(B.list, as.matrix)
-    if (is.null(C) == FALSE) C.list <- lapply(C.list, as.matrix)
     P.list <- lapply(P.list, as.matrix)
   }
 
@@ -617,8 +604,8 @@ scpi  <- function(data,
 
   for (i in seq_len(I)) {
     ## Regularize W and local geometry (treated unit by treated unit)
-    loc.geom <- local.geom(w.constr.list[[i]], rho, rho.max, res.list[[i]], B.list[[i]], 
-                           C.list[[i]], coig.data[[i]], T0.M[[i]], J[[i]], w.list[[i]],
+    loc.geom <- local.geom(w.constr.list[[i]], rho, rho.max, res.list[[i]], B.list[[i]],
+                           coig.data[[i]], T0.M[[i]], J[[i]], w.list[[i]],
                            verbose)
 
     w.star       <- c(w.star, loc.geom$w.star)
@@ -639,35 +626,36 @@ scpi  <- function(data,
           warning("At least one of your features is observed for less periods than the number of lags, u.lags reverted to 0.", immediate. = TRUE, call. = FALSE)
         }
         u.lags <- 0
-       }
+      }
     }
 
 
     ## Prepare design matrix for in-sample uncertainty
-    obj <- u.des.prep(B.list[[i]], C.list[[i]], u.order, u.lags, coig.data[[i]],
+    print(u.order)
+    obj <- u.des.prep(B.list[[i]], u.order, u.lags, coig.data[[i]],
                       T0.M[i], constant[[i]], index.i, loc.geom$index.w,
                       features[[i]], feature.id, u.design, res.list[[i]])
 
 
     u.names <- c(u.names, colnames(obj$u.des.0))
 
-    
+
     u.des.0 <- Matrix::bdiag(u.des.0, obj$u.des.0)
     f.id <- c(f.id, as.factor(feature.id))
 
-    
+
     ## Prepare design matrices for out-of-sample uncertainty
-    
-    e.des <- e.des.prep(B.list[[i]], C.list[[i]], P.list[[i]], e.order, e.lags,
+
+    e.des <- e.des.prep(B.list[[i]], P.list[[i]], e.order, e.lags,
                         res.list[[i]], sc.pred, Y.d.list[[i]], out.feat[[i]],
                         features[[i]], J[[i]], index.i, loc.geom$index.w,
-                        coig.data[[i]], T0[[i]][outcome.var], T1[[i]], constant[[i]], 
+                        coig.data[[i]], T0[[i]][outcome.var], T1[[i]], constant[[i]],
                         e.design, Pd.list[[i]], sc.pred$data$specs$effect, I, class.type)
-    
+
     e.res   <- c(e.res, e.des$e.res)
-    
+
     e.rownames <- c(e.rownames, rownames(e.des$e.res))
-    
+
     cnames <- rep(paste0(names(w.constr.list)[[i]], "."), ncol(e.des$e.des.0))
 
     e.colnames <- c(e.colnames, cnames)
@@ -684,7 +672,7 @@ scpi  <- function(data,
 
   # Create an index that selects all non-zero weights and additional covariates
   index <- c(index.w, rep(TRUE, KMI))
-  
+
   if (lgapp == "generalized") {
     beta <- b # we use rho only to impose sparsity on B when predicting moments
     Q <- c()
@@ -703,15 +691,15 @@ scpi  <- function(data,
       lb <- c(lb, rep(w.constr.inf[[i]]$lb, J[i]))
     }
   }
-  
+
   names(beta) <- names(sc.pred$est.results$b)
-  
+
   # Transform sparse matrices to matrices
 
   e.des.1 <- as.matrix(e.des.1)
 
   u.des.0 <- as.matrix(u.des.0)
-  colnames(u.des.0) <- u.names  
+  colnames(u.des.0) <- u.names
 
   e.res   <- as.matrix(e.res)
   rownames(e.res) <- e.rownames
@@ -719,7 +707,7 @@ scpi  <- function(data,
   e.des.0 <- as.matrix(e.des.0)
   rownames(e.des.0) <- e.rownames
   colnames(e.des.0) <- e.colnames
-  
+
   if (sc.pred$data$specs$effect == "time")  {
     rownames(e.des.1) <- e1.rownames
   } else {
@@ -744,10 +732,10 @@ scpi  <- function(data,
 
   res.na     <- XX[, j2, drop = FALSE]
 
-u.des.0.na <- XX[, j3:j4, drop = FALSE]
+  u.des.0.na <- XX[, j3:j4, drop = FALSE]
   Z.na       <- XX[, j5:j6, drop = FALSE]
 
-f.id.na    <- XX[, ncol(XX), drop = FALSE]
+  f.id.na    <- XX[, ncol(XX), drop = FALSE]
 
   active.features <- Matrix::rowSums(is.na(X)) == 0
   V.na <- V[active.features, active.features]
@@ -766,12 +754,12 @@ f.id.na    <- XX[, ncol(XX), drop = FALSE]
   # Proceed cleaning missing data in the post-treatment period
   rowKeep <- Matrix::rowSums(is.na(P)) == 0
   P.na <- P[rowKeep, ]
-  
+
   #############################################################################
   ########################################################################
   ## Estimate E[u|H], V[u|H], and Sigma
   # If the model is thought to be misspecified then E[u|H] is estimated
-  
+
   if (u.missp == TRUE) {
     T.u <- nrow(u.des.0.na)
     u.des.list <- mat2list(as.matrix(u.des.0.na)) # as.matrix takes care of the sparse case
@@ -779,8 +767,8 @@ f.id.na    <- XX[, ncol(XX), drop = FALSE]
     u.des.0.flex <- matrix(NA, 0, 0)
     u.des.0.noflex <- matrix(NA, 0, 0)
     for (i in seq_len(I)) {
-      u.des.0.flex <- Matrix::bdiag(u.des.0.flex, 
-                                    DUflexGet(as.matrix(u.des.list[[i]]), C.list[[i]], f.id.list[[i]], M[[i]]))
+      u.des.0.flex <- Matrix::bdiag(u.des.0.flex,
+                                    DUflexGet(as.matrix(u.des.list[[i]]), f.id.list[[i]], M[[i]]))
       u.des.0.noflex <- Matrix::bdiag(u.des.0.noflex, as.matrix(u.des.list[[i]]))
     }
 
@@ -793,9 +781,9 @@ f.id.na    <- XX[, ncol(XX), drop = FALSE]
     if (u.simple) {
       if (verbose && (u.order > 0 || u.lags > 0)) {
         warning(paste0("One of u.order > 0 and u.lags > 0 was specified, however the current number of observations (",
-                      T.u, ") used to estimate conditional moments of the pseudo-residuals ",
-                      "is not larger than the number of parameters used in estimation (",ncol(u.des.0.flex),") plus 10. ",
-                      "To avoid over-fitting issues u.order and u.lags were set to 0."), immediate. = TRUE, call. = FALSE)
+                       T.u, ") used to estimate conditional moments of the pseudo-residuals ",
+                       "is not larger than the number of parameters used in estimation (",ncol(u.des.0.flex),") plus 10. ",
+                       "To avoid over-fitting issues u.order and u.lags were set to 0."), immediate. = TRUE, call. = FALSE)
       }
       u.des.0.na <- matrix(1, nrow = T.u, 1)
       u.order <- 0
@@ -852,7 +840,7 @@ f.id.na    <- XX[, ncol(XX), drop = FALSE]
   if (w.lb.est == TRUE || w.ub.est == TRUE) {
 
     vsigg <- insampleUncertaintyGet(Z.na, V.na, P.na, beta, Sigma.root, J, KMI, I,
-                                    w.constr.inf[[1]], Q.star, Q2.star, lb, TT, sims, cores, verbose, 
+                                    w.constr.inf[[1]], Q.star, Q2.star, lb, TT, sims, cores, verbose,
                                     w.lb.est, w.ub.est)
 
     vsig <- vsigg[rowSums(is.na(vsigg)) < ncol(vsigg), ] # remove simulations were SOCP was not solved at any horizon
@@ -887,7 +875,7 @@ f.id.na    <- XX[, ncol(XX), drop = FALSE]
   cat("\n")
 
   if ((sum(failed.sims) > 0.1 * sims * ncol(vsig)) && verbose) {
-    warning("For some of the simulations used to quantify in-sample uncertainty the solution of the optimization problem 
+    warning("For some of the simulations used to quantify in-sample uncertainty the solution of the optimization problem
           was not found! We suggest inspecting the magnitude of this issue by consulting the percentage of simulations
           that failed contained in YOUR_SCPI_OBJECT_NAME$inference.results$failed.sims.",
             immediate. = TRUE, call. = FALSE)
@@ -977,15 +965,15 @@ f.id.na    <- XX[, ncol(XX), drop = FALSE]
 
     if (verbose && (e.order > 0 || e.lags > 0)) {
       warning(paste0("One of e.order > 0 and e.lags > 0 was specified, however the current number of observations (",
-                    T.e, ") used to estimate conditional moments of the out-of-sample error",
-                    " is not larger than the number of parameters used in estimation (", params.e, ") plus 10.",
-                    " To avoid over-fitting issues e.order and e.lags were set to 0."),
-                    immediate. = TRUE, call. = FALSE)
+                     T.e, ") used to estimate conditional moments of the out-of-sample error",
+                     " is not larger than the number of parameters used in estimation (", params.e, ") plus 10.",
+                     " To avoid over-fitting issues e.order and e.lags were set to 0."),
+              immediate. = TRUE, call. = FALSE)
     }
     e.order <- 0
     e.lags <- 0
   }
-  
+
   params.e <- ncol(e.des.0.na)
 
   e.lb.gau <- e.ub.gau <- e.lb.ls <- e.ub.ls <- e.lb.qreg <- e.ub.qreg <- e.mean <- e.var <- c()
