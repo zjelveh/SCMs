@@ -78,7 +78,7 @@ scdata <- function(df,
   features = unique(features)
 
 
-
+  
   if (is.null(features) ==  TRUE) {
     features <- outcome.var
   }
@@ -547,9 +547,9 @@ scdata <- function(df,
     unit.co.eff <- unit.co
   }
 
-  A_outcome = A[grepl(outcome, rownames(A)), , drop=F]
+  A_outcome = A[grepl(outcome.var, rownames(A)), , drop=F]
 
-  A_nonoutcome = A[!(grepl(outcome, rownames(A))), ,drop=F]
+  A_nonoutcome = A[!(grepl(outcome.var, rownames(A))), ,drop=F]
 
   A_outcome = A_outcome[order(rownames(A_outcome)), , drop=F]
   if(nrow(A_nonoutcome)> 0){
@@ -560,8 +560,8 @@ scdata <- function(df,
   }
 
 
-  B_outcome = B[grepl(outcome, rownames(B)), , drop=F]
-  B_nonoutcome = B[!(grepl(outcome, rownames(B))), ,drop=F]
+  B_outcome = B[grepl(outcome.var, rownames(B)), , drop=F]
+  B_nonoutcome = B[!(grepl(outcome.var, rownames(B))), ,drop=F]
   B_outcome = B_outcome[order(rownames(B_outcome)), , drop=F]
   if(nrow(B_nonoutcome)>0){
     B_nonoutcome = B_nonoutcome[order(rownames(B_nonoutcome)),, drop=F ]

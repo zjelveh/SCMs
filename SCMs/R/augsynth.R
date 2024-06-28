@@ -91,6 +91,7 @@ get_ridgeAugSCM_weights <- function(scm_model,
 #'          \item{"lambda_errors"}{"The MSE associated with each lambda term in lambdas."}
 #'          \item{"lambda_errors_se"}{"The SE of the MSE associated with each lambda term}
 #' }
+
 cv_lambda <- function(X_c,
                       X_1,
                       scm_weights,
@@ -119,7 +120,6 @@ cv_lambda <- function(X_c,
   return(list(lambda = lambda, lambda_errors = lambda_errors,
               lambda_errors_se = lambda_errors_se, lambdas = lambdas))
 }
-
 
 
 #' Choose max lambda as largest eigenvalue of control X
