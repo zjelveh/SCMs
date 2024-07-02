@@ -3,13 +3,13 @@ The `SCMs` (Synthetic Control Methods) package provides an R implementation for 
 
 
 ## Features
-Implementation of the original Synthetic Control Method
-Augmented Synthetic Control Methods (from `AugSynth`)
-Additional outcome models (ols, ridge, lasso)
-Various weight constraint options (ols, ridge, lasso)
-Optimized feature weighting (from `Synth`)
-Placebo inference
-Specification curve visualiztion for SCM results
+- Implementation of the original Synthetic Control Method
+- Augmented Synthetic Control Methods (from `AugSynth`)
+- Additional outcome models (ols, ridge, lasso)
+- Various weight constraint options (ols, ridge, lasso)
+- Optimized feature weighting (from `Synth`)
+- Placebo inference
+- Specification curve visualiztion for SCM results
 
 ## Installation
 To install/update in R from GitHub:
