@@ -75,7 +75,7 @@ spec_curve <- function(
 
                             for(ny in num_pre_period_years){
                                 if(is.na(ny)){
-                                    l_name = paste0('n_pp_years_', treat_period-min_period)
+                                    l_name = paste0('n_pp_years_', treated_period-min_period)
                                     results[[outc]][[const$name]][[fw]][[feature_names]][[ds]][[l_name]] = list()
                                 } else{
                                     l_name = paste0('n_pp_years_', ny)
@@ -91,7 +91,7 @@ spec_curve <- function(
                             fw,
                             feature_names,
                             ds,
-                            ny,
+                            l_name,
                             '\n'
                         )
                         

@@ -1,6 +1,9 @@
 plot_spec_curve <- function(
     spec_curve_results,
+    outcomes,
     name_treated_unit,
+    normalize_outcomes=FALSE,
+    rmse_threshold= Inf,
     file_path_save=NA,
     width=6,
     height=10
@@ -9,28 +12,48 @@ plot_spec_curve <- function(
   
   sc_results_list = list()
   for(outcome in names(sc)){
-    for(const in names(sc[[outcome]])){
-      for(fw in names(sc[[outcome]][[const]])){
-        for(feat in names(sc[[outcome]][[const]][[fw]])){
-          for(ds in names(sc[[outcome]][[const]][[fw]][[feat]])){
-            for(ny in names(sc[[outcome]][[const]][[fw]][[feat]][[ds]])){
-              combined = rbindlist(sc[[outcome]][[const]][[fw]][[feat]][[ds]][[ny]]$infer)
-              combined$outcome = outcome
-              combined$const = const
-              combined$fw = fw
-              combined$data_sample = ds
-              combined$feat = feat
-              combined$num_pre_period_years = ny
-              sc_results_list[[length(sc_results_list) + 1]] = combined     
-            }       
+    if(outcome %in% outcomes){
+      for(const in names(sc[[outcome]])){
+        for(fw in names(sc[[outcome]][[const]])){
+          for(feat in names(sc[[outcome]][[const]][[fw]])){
+            for(ds in names(sc[[outcome]][[const]][[fw]][[feat]])){
+              for(ny in names(sc[[outcome]][[const]][[fw]][[feat]][[ds]])){
+                model_specification = sc[[outcome]][[const]][[fw]][[feat]][[ds]][[ny]]
+                combined = rbindlist(model_specification$infer)
+
+                estee = model_specification$estimate
+                combined$outcome = outcome
+                combined$const = const
+                combined$fw = fw
+                combined$data_sample = ds
+                combined$feat = feat
+                combined$num_pre_period_years = ny
+                combined$rmse = sqrt(mean((estee$data$Y.pre-estee$est.results$Y.pre.fit)^2))
+
+                if(normalize_outcomes){
+                  treat_period = estee$treated_period
+                  min_period = estee$min_period
+                  col_name_period = estee$col_name_period
+                  # print(estee$data$Y.donors)
+                  sd_outcome = sd(estee$data$Y.donors)
+                  # print(sd_outcome)
+                  combined[, tau:=tau/sd_outcome] 
+                }
+                sc_results_list[[length(sc_results_list) + 1]] = combined     
+              } 
+            } 
           }
         }
       }
     }  
   }
   sc_results_df = rbindlist(sc_results_list)
-  
-  
+  sc_results_df = sc_results_df[rmse<rmse_threshold]
+
+  if(nrow(sc_results_df)==0){
+    stop("Not enough specifications to plot")
+  }
+
   average_effect_df = sc_results_df[
     post_period==TRUE,
     .(tau=mean(tau)),
@@ -63,24 +86,23 @@ plot_spec_curve <- function(
                              'Specification'
   ))
 
-    average_effect_df_all[, Type:='Average']
-  
+  average_effect_df_all[, Type:='Average']
   
   estimates = copy(average_effect_df_all)
+
   spec_cols = c('Outcome', 'Outcome\nModel',
                 'Weight\nMethod', 'V Weights', 'Matching\nVars', 
                 'Donor\nPool', 'Pre Length')
   
-  
   df = copy(estimates[!is.na(Estimate)])
   var = df$Estimate
+
   group = NULL
   choices = c(spec_cols)
   desc = FALSE
   null = 0
   
   value <- key <- NULL
-  
   var <- enquo(var)
   group <- enquo(group)
   
@@ -89,11 +111,10 @@ plot_spec_curve <- function(
   df$`Matching\nVars` = gsub('every_period__', '', df$`Matching\nVars`)
   df$`Matching\nVars` = gsub('c\\(|\\)', '', df$`Matching\nVars`)
   
-  df2 = df[!duplicated(Specification)]
-  
+  df2 = df[!duplicated(Specification)]  
   var = df2$Estimate
   
-  
+
   # Create basic plot
   p2 = df2 %>%
     format_results(var = var, group = group, null = null, desc = desc) %>%
@@ -102,7 +123,7 @@ plot_spec_curve <- function(
     ggplot(aes(x = .data$Specification,
                y = .data$value,
                color = .data$color)) +
-    geom_point(aes(x = .data$specifications,
+    geom_point(aes(x = .data$Specification,
                    y = .data$value),
                shape = 124,
                size = 3.35) +
