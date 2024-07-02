@@ -483,78 +483,6 @@ b.est <- function(A, Z, J, KM, w.constr, V, CVXR.solver = "ECOS") {
   return(b)
 }
 
-# Auxiliary function that solves the (un)constrained problem to estimate b
-# depending on the desired method - Multiple treated units case
-b.est.multi <- function(A, Z, J, KMI, I, w.constr, V, CVXR.solver = "ECOS") {
-  
-  # The constraint is symmetric in the shape across treated units (J, KM, Q might change)
-  dire <- w.constr[[1]]$dir
-  lb <- w.constr[[1]]$lb
-  p <- w.constr[[1]]$p
-  QQ <- unlist(lapply(w.constr, function(x) x$Q))
-  
-  if (p == "L1-L2") {
-    Q2 <- unlist(lapply(w.constr, function(x) x$Q2))
-  }
-  
-  Jtot <- sum(unlist(J))
-  
-  x <- CVXR::Variable(Jtot + KMI)
-  
-  objective <- CVXR::Minimize(CVXR::quad_form(A - Z %*% x, V))
-  
-  if (lb != -Inf) {
-    constraints <- list(x[1:Jtot] >= lb)
-  } else {
-    constraints <- list()
-  }
-  
-  j.lb <- 1
-  for (i in seq_len(I)) {
-    j.ub <- j.lb + J[[i]] - 1
-    
-    if (p == "L1") {
-      if (dire == "==") {
-        # simplex
-        constraints <- append(constraints, list(CVXR::sum_entries(x[j.lb:j.ub]) == QQ[i]))
-      } else if (dire == "<=") {
-        # lasso
-        constraints <- append(constraints, list(CVXR::norm1(x[j.lb:j.ub]) <= QQ[i]))
-      }
-      
-    } else if (p == "L2") {
-      # ridge
-      constraints <- append(constraints, list(CVXR::sum_squares(x[j.lb:j.ub]) <= QQ[i] ^ 2))
-      
-    } else if (p == "L1-L2") {
-      constraints <- append(constraints, list(CVXR::sum_entries(x[j.lb:j.ub]) == QQ[i],
-                                              CVXR::power(CVXR::cvxr_norm(x[j.lb:j.ub], 2), 2) <= CVXR::power(Q2[i], 2)))
-    }
-    
-    j.lb <- j.ub + 1
-  }
-  
-  prob <- CVXR::Problem(objective, constraints)
-  sol <- CVXR::solve(prob, solver = CVXR.solver, num_iter = 100000L, verbose = FALSE)
-  
-  b <- sol$getValue(x)
-  alert <- !(sol$status %in% c("optimal", "optimal_inaccurate"))
-  
-  if (alert == TRUE) {
-    stop(paste0("Estimation algorithm not converged! The algorithm returned the value:",
-                sol$status, ". To check to what errors it corresponds go to
-               'https://cvxr.rbind.io/cvxr_examples/cvxr_gentle-intro/'. Typically, this occurs
-                because the problem is badly-scaled. If so, scaling the data fixes the issue. Another
-                fix could be changing the algorithm via the option 'solver'. Check your available options
-                using CVXR::installed_solvers() and consult
-                'https://cvxr.rbind.io/cvxr_examples/cvxr_using-other-solvers/'"),
-         call. = FALSE)
-  }
-  
-  rownames(b) <- colnames(Z)
-  
-  return(b)
-}
 
 
 V.prep <- function(type, B, T0.features, I) {
@@ -1918,4 +1846,29 @@ format_results <- function(df, var, group, null = 0, desc = FALSE) {
     dplyr::mutate(specifications = 1:nrow(df),
                   color = case_when(TRUE ~ "blue"))
   return(df)
+}
+
+
+most_similar <- function(
+    dataset,
+    outcome,
+    col_name_unit_name,
+    name_treated_unit,
+    treated_period,
+    min_period, 
+    col_name_period){
+  
+  dataset = as.data.table(dataset)
+  
+  dataset_pre_treatment = dataset[between(get(col_name_period), min_period, (treated_period-1))]
+  dataset_pre_treatment_control = dataset_pre_treatment[get(col_name_unit_name)!=name_treated_unit]
+  dataset_pre_treatment_treated = dataset_pre_treatment[get(col_name_unit_name)==name_treated_unit] 
+  
+  ybar_treated = mean(dataset_pre_treatment_treated[[outcome]])
+  ybar_controls = dataset_pre_treatment_control[, .(ybar_control=mean(get(outcome))), by=col_name_unit_name]
+  ybar_controls[, diff_with_treated := abs(ybar_treated - ybar_control)]
+  ybar_controls = ybar_controls[order(diff_with_treated)]
+  control_units = ybar_controls[ 1 : round(nrow(ybar_controls) / 2) ][[col_name_unit_name]]
+  dataset = dataset[get(col_name_unit_name)%in%c(name_treated_unit, control_units)]
+  return(dataset)
 }

@@ -1,3 +1,32 @@
+#' @title Estimate Synthetic Control Model
+#' @description This function processes and estimates a Synthetic Control Model (SCM) based on the provided dataset and parameters.
+#'
+#' @param dataset A data frame containing the panel data.
+#' @param outcome Character. Name of the outcome variable (column in dataset).
+#' @param covagg List of covariates used for matching (columns in dataset).
+#' @param col_name_unit_name Character. Column name in dataset containing unit names (e.g., state names).
+#' @param name_treated_unit Character. Name of the treated unit (e.g., the state that received treatment).
+#' @param col_name_period Character. Column name in dataset containing time periods.
+#' @param treated_period Numeric. Time period when treatment starts for the treated unit.
+#' @param min_period Numeric. Earliest time period in the dataset.
+#' @param end_period Numeric. Latest time period in the dataset.
+#' @param outcome_models Character vector. Outcome models to fit. Default is c("None", "OLS", "Ridge", "Lasso", "AugSynth").
+#' @param feature_weights Character vector. Method for assigning weights to predictors. Default is c("uniform", "optimized").
+#' @param w.constr Optional. Constraints on the weights.
+#' @param V Character. Covariance matrix estimation method. Default is "separate".
+#' @param V.mat Optional. Pre-computed covariance matrix.
+#' @param solver Character. Solver to use for the optimization problem. Default is "ECOS".
+#' @param P Optional. Number of factors to use (for AugSynth).
+#'
+#' @return A list of class "scpi" containing the estimated SCM results and input parameters.
+#'
+#' @export
+#'
+#' @examples
+#' # Example usage (replace with actual example when available)
+#' # result <- estimate_sc(dataset = my_data, outcome = "gdp", covagg = c("population", "unemployment"),
+#' #                       col_name_unit_name = "state", name_treated_unit = "California",
+#' #                       col_name_period = "year", treated_period = 2000, min_period = 1990, end_period = 2010)
 estimate_sc <- function(dataset,             # Input dataset (panel data format)
                         outcome,            # Name of the outcome variable (column in dataset)
                         covagg,            # List of covariates used for matching (columns in dataset)
@@ -54,6 +83,7 @@ estimate_sc <- function(dataset,             # Input dataset (panel data format)
     Z1 = data$Y.pre
   )
 
+  # 4. Prepare and return results
   result <- list(
     data = data,
     est.results = sc.pred$est.results,
@@ -73,6 +103,7 @@ estimate_sc <- function(dataset,             # Input dataset (panel data format)
     end_period = end_period
   )
 
+  # Set the appropriate class type
   if (methods::is(data, "scdata") == TRUE) {
     class.type <- "scpi_data"
   } else if (methods::is(data, "scdataMulti") == TRUE) {

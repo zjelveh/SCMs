@@ -1,3 +1,36 @@
+#' @title Create Synthetic Control Data Structure
+#' @description This function prepares a data structure for use with Synthetic Control Methods (SCM) by formatting and organizing the input data.
+#'
+#' @param df Data frame containing the panel data.
+#' @param id.var Character. Name of the column containing unit identifiers.
+#' @param time.var Character. Name of the column containing time periods.
+#' @param outcome.var Character. Name of the column containing the outcome variable.
+#' @param period.pre Numeric vector. Pre-treatment time periods.
+#' @param period.post Numeric vector. Post-treatment time periods.
+#' @param unit.tr Character. Name of the treated unit.
+#' @param unit.co Character vector. Names of the control units.
+#' @param anticipation Numeric. Number of periods to account for anticipation effects. Default is 0.
+#' @param constant Logical. Whether to include a constant term. Default is FALSE.
+#' @param verbose Logical. Whether to print warnings. Default is TRUE.
+#' @param covagg List. Specifies how covariates should be aggregated.
+#' @param cointegrated.data Logical. Whether the data is cointegrated. Default is FALSE.
+#'
+#' @return A list of class 'scdata' containing the prepared data for SCM analysis.
+#'
+#' @import data.table
+#' @import tidyr
+#' @import dplyr
+#' @import stringr
+#'
+#' @export
+#'
+#' @examples
+#' # Example usage (replace with actual example when available)
+#' # scm_data <- scdata(df = my_data, id.var = "state", time.var = "year", 
+#' #                    outcome.var = "gdp", period.pre = 1980:1999, period.post = 2000:2010,
+#' #                    unit.tr = "California", unit.co = c("New York", "Texas"))
+
+
 scdata <- function(df,
                    id.var,
                    time.var,
@@ -104,7 +137,6 @@ scdata <- function(df,
   if(is.character(data[, id.var])){
     data[, id.var] = gsub(' +|\\.+', '_', data[, id.var] )
   }
-
 
   # Create ID and time variables
   if (is.numeric(data[, id.var])) {
@@ -277,13 +309,9 @@ scdata <- function(df,
 
   ### Estimation Data
   # Actual Pre-treatment Series
-  Y.pre <- as.matrix(data.bal[rows.tr.pre, outcome.var])
-  rownames(Y.pre) <- paste(unit.tr,as.character(data.bal[rows.tr.pre, "Time"]),sep=".")
-  colnames(Y.pre) <- outcome.var
 
   # Create B
   sel <- data.bal[rows.co.pre, ] # Select rows and columns
-
   B_list = list()
 
   data.bal.co = data.bal[rows.co.pre, ]
@@ -407,8 +435,12 @@ scdata <- function(df,
     }
   }
 
+  feature.vec = feature.vec[feature.vec!='Time']
+  # feature.vec = feature.vec[!duplicated(feature.vec)]
 
   A = dplyr::bind_rows(A_list)
+  B = dplyr::bind_rows(B_list)
+
   rnA = gsub('\\.\\.\\.\\d+$', '', rownames(A))
   if(sum(duplicated(rnA))>0){
     A = A[-which(duplicated(rnA)), , drop=F]
@@ -416,20 +448,13 @@ scdata <- function(df,
   rownames(A) = rnA[!duplicated(rnA)]
   A = as.matrix(A)
 
-  B = dplyr::bind_rows(B_list)
   rnB = gsub('\\.\\.\\.\\d+$', '', rownames(B))
-
   if(sum(duplicated(rnB))>0){
     B = B[-which(duplicated(rnB)),, drop=F]
   }
-
   rownames(B) = rnB[!duplicated(rnB)]
-
   colnames(B) = gsub(' ', '_', colnames(B))
-
   B = as.matrix(B)
-  feature.vec = feature.vec[feature.vec!='Time']
-  # feature.vec = feature.vec[!duplicated(feature.vec)]
 
 
   ## Create matrix with pre-period outcomes for the donors
@@ -439,6 +464,11 @@ scdata <- function(df,
                         idvar     = "Time",
                         timevar   = "ID")
 
+
+  Y.pre <- as.matrix(data.bal[rows.tr.pre, outcome.var])
+  rownames(Y.pre) <- paste(unit.tr,as.character(data.bal[rows.tr.pre, "Time"]),sep=".")
+  colnames(Y.pre) <- outcome.var
+
   # if "Time" is not in numeric format the matrix becomes a matrix of characters,
   # this is why we do everything in one step
   Y.donors <- as.matrix(aux[, colnames(aux) != "Time", drop=FALSE])
@@ -447,8 +477,6 @@ scdata <- function(df,
   colnames(Y.donors) <- paste(unit.tr, Y.names, sep = ".")
   rownames(Y.donors) <- paste(unit.tr, as.character(aux[,'Time']), sep = ".")
   colnames(Y.donors) = gsub(' ', '_', colnames(Y.donors))
-  # print(colnames(B))
-  # print(colnames(Y.donors))
   Y.donors    <- Y.donors[ , colnames(B)]  # Re-order according to B
 
   ## Create matrix with post-period outcomes for the donors
@@ -461,16 +489,13 @@ scdata <- function(df,
   # if "Time" is not in numeric format the matrix becomes a matrix of characters,
   # this is why we do everything in one step
   Y.donors.post <- as.matrix(aux.post[, colnames(aux) != "Time", drop=FALSE])
-
   Y.names.post     <- stringr::str_remove(colnames(Y.donors.post), outcome.var)
   Y.names.post    <- stringr::str_remove(Y.names.post,".")
-
-
   colnames(Y.donors.post) <- paste(unit.tr, Y.names.post, sep = ".")
   rownames(Y.donors.post) <- paste(unit.tr, as.character(aux.post[,'Time']), sep = ".")
   colnames(Y.donors.post) = gsub(' ', '_', colnames(Y.donors.post))
-
   Y.donors.post    <- Y.donors.post[ , colnames(B)]  # Re-order according to B
+
 
   ############################################################################
   ##############################################################################
@@ -496,7 +521,6 @@ scdata <- function(df,
   colnames(P) <- paste(unit.tr, P.names, sep = ".")
   colnames(P) = gsub('\\.\\.', '.', colnames(P))
   colnames(P) = gsub(' ', '_', colnames(P))
-
   P <- P[, colnames(B), drop = F]  # Re-order as the matrix B
 
   # If the outcome variable is within the specified features then we need to
@@ -510,14 +534,9 @@ scdata <- function(df,
       P <- cbind(P, rep(1, length(rows.tr.post)))
       colnames(P) <- c(colnames(P[, 1:(dim(P)[2] - 1), drop = FALSE]), paste(unit.tr,"0.constant", sep = "."))
     }
-
-    # Add covariates used for adjustment in outcome variable equation (if present)
-
-
   }
 
   T1 <- length(period.post)
-
 
   ############################################################################
   ############################################################################
@@ -548,9 +567,7 @@ scdata <- function(df,
   }
 
   A_outcome = A[grepl(outcome.var, rownames(A)), , drop=F]
-
   A_nonoutcome = A[!(grepl(outcome.var, rownames(A))), ,drop=F]
-
   A_outcome = A_outcome[order(rownames(A_outcome)), , drop=F]
   if(nrow(A_nonoutcome)> 0){
     A_nonoutcome = A_nonoutcome[order(rownames(A_nonoutcome)),, drop=F ]
@@ -558,7 +575,6 @@ scdata <- function(df,
   } else{
     A = A_outcome
   }
-
 
   B_outcome = B[grepl(outcome.var, rownames(B)), , drop=F]
   B_nonoutcome = B[!(grepl(outcome.var, rownames(B))), ,drop=F]
@@ -668,6 +684,4 @@ scdata <- function(df,
   class(df.sc) <- 'scdata'
 
   return(df.sc = df.sc)
-
-
 }
