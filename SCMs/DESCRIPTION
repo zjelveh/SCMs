@@ -8,14 +8,15 @@ Authors@R:
            )
 License: GPL-2
 Encoding: UTF-8
-Imports: abind       (>= 1.4.5),
-         CVXR        (>= 1.0-10),
-         doSNOW      (>= 1.0.19),
+Imports: CVXR        (>= 1.0-10),
          dplyr       (>= 1.0.7),
          ECOSolveR   (>= 0.5.4),
-         fastDummies (>= 1.6.3),
          foreach     (>= 1.5.1),
          ggplot2     (>= 3.3.3),
+         kernlab,
+         cowplot,
+         optimx,
+         data.table,
          magrittr    (>= 2.0.1),
          MASS        (>= 7.3),
          Matrix      (>= 1.3.3),

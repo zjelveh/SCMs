@@ -14,8 +14,6 @@
 #'
 #' @return A list containing the prepared data for SCM analysis.
 #'
-#' @import data.table
-#' @import scpi
 #'
 #' @export
 #'
@@ -36,7 +34,6 @@ create_scm_dataset <- function(dataset,
                                min_period,
                                end_period,
                                constant = FALSE) {
-  require(data.table)
   
   # Convert input to data.table
   dataset <- data.table::as.data.table(dataset)

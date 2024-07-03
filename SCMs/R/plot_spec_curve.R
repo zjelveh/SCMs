@@ -12,10 +12,6 @@
 #'
 #' @return A ggplot object representing the specification curve.
 #'
-#' @import data.table
-#' @import ggplot2
-#' @import tidyverse
-#' @import cowplot
 #'
 #' @export
 #'
@@ -138,7 +134,6 @@ plot_spec_curve <- function(
   var <- enquo(var)
   group <- enquo(group)
   
-  library(tidyverse)
   
   # Clean up variable names
   df$`Matching\nVars` = gsub('every_period__', '', df$`Matching\nVars`)

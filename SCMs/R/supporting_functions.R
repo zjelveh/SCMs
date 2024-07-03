@@ -1795,7 +1795,7 @@ outcomeGet <- function(Y.pre.fit, Y.post.fit, Y.df, units.est, treated.units,
   return(list(toplot = toplot, treated.reception = treated.reception, plot.type = plot.type))
 }
 
-
+#' @export
 collect.optimx <-
   function(res, opt = "min") {
     # reorder dataframe for best solution
@@ -1858,7 +1858,7 @@ most_similar <- function(
     min_period, 
     col_name_period){
   
-  dataset = as.data.table(dataset)
+  dataset = data.table::as.data.table(dataset)
   
   dataset_pre_treatment = dataset[between(get(col_name_period), min_period, (treated_period-1))]
   dataset_pre_treatment_control = dataset_pre_treatment[get(col_name_unit_name)!=name_treated_unit]
