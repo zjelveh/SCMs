@@ -56,7 +56,7 @@ estimate_sc <- function(dataset,           # Input dataset (panel data format)
     min_period = min_period,
     end_period = end_period
   )
-
+print("FDJFAD")
   # Error handling: Check if data preparation was successful
   if (!methods::is(data, "scdata") & !methods::is(data, "scdataMulti")) {
     stop("data should be the object returned by running scdata or scdata_multi!")
