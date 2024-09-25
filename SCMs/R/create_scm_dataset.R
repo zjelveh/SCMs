@@ -34,10 +34,11 @@ create_scm_dataset <- function(dataset,
                                min_period,
                                end_period,
                                constant = FALSE) {
-  
+  print('yhoooooooooooo')
   # Convert input to data.table
   dataset <- data.table::as.data.table(dataset)
   
+  print(head(dataset))
   # Create unit name and number columns
   dataset[, unit_name := get(col_name_unit_name)]
   dataset[, unit_numbers := as.numeric(as.factor(unit_name))]
