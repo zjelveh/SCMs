@@ -84,9 +84,7 @@ summary.scdata <- function(object, ...) {
 
     } else {
       cat("Pre-treatment periods used in estimation per feature:\n")
-      print(T0)
       cat("Covariates used for adjustment per feature:\n")
-      print(K)
     }
 
 }

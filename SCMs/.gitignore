@@ -3,3 +3,4 @@
 sftp.json
 .vscode
 .Rhistory
+.Rbuildignore

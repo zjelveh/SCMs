@@ -826,8 +826,6 @@ insampleUncertaintyGet <- function(Z.na, V.na, P.na, beta, Sigma.root, J, KMI, I
                                    w.lb.est, w.ub.est) {
   
   Q <- t(Z.na) %*% V.na %*% Z.na / TT
-  print('how')
-  print(Z.na)
   colnames(Q) <- colnames(Z.na)
   
   jj <- nrow(P.na)
@@ -864,9 +862,6 @@ insampleUncertaintyGet <- function(Z.na, V.na, P.na, beta, Sigma.root, J, KMI, I
       }
       
       zeta <- rnorm(length(beta))
-      print('sr')
-      print(Sigma.root) 
-      print(zeta)
       G <- Sigma.root %*% zeta
       
       a <- -2 * G - 2 * Q %*% beta

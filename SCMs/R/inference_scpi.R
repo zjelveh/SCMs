@@ -19,8 +19,6 @@ inference_scpi <- function(sc.pred,
                            cores,
                            verbose
 ) {
-print('ur')
-print(u.order)
 
   if (methods::is(sc.pred$data, 'scdata') == TRUE) {
     class.type <- 'scpi_data'
@@ -1311,11 +1309,6 @@ print(u.order)
   
 #   ## Define constrained problem to be simulated
 #   if (w.lb.est == TRUE || w.ub.est == TRUE) {
-#     print(Z.na)
-#     print(V.na)
-#     print(P.na)
-#     print(beta)
-#     print(Sigma.root)
 #     vsigg <- insampleUncertaintyGet(
 #       Z.na, V.na, P.na, beta, Sigma.root, J, KMI, I,
 #       w.constr.inf[[1]], Q.star, Q2.star, lb, TT, sims, cores, verbose,
