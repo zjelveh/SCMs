@@ -17,10 +17,6 @@
 #'
 #' @return A list of class 'scdata' containing the prepared data for SCM analysis.
 #'
-#' @import data.table
-#' @import tidyr
-#' @import dplyr
-#' @import stringr
 #'
 #' @export
 #'

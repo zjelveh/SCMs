@@ -7,16 +7,6 @@
 "_PACKAGE"
 
 
-#' @importFrom stats predict fitted coef
-#' @importFrom kernlab alpha
-#' @importFrom data.table data.table as.data.table
-
-#' @importFrom CVXR Variable Minimize Problem solve
-#' @rawNamespace import(stats, except = c(lag, filter))
-#' @rawNamespace import(dplyr, except = c(lag, filter, first))
-#' @rawNamespace import(CVXR, except = c(id, size))
-#' @rawNamespace import(kernlab, except = c(alpha, predict, fitted, coef))
-#'
 #' @section Important Functions:
 #' \itemize{
 #'   \item \code{estimate_scm}: Estimates the Synthetic Control Model

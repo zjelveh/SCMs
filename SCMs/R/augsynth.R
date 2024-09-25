@@ -173,8 +173,6 @@ choose_lambda <- function(lambdas,
 ################################################################################
 
 #' Get Lambda Errors
-#' @importFrom stats sd
-#'
 #' @param lambdas Vector of lambda values to compute errors for
 #' @param X_c Matrix of control group pre-treatment outcomes
 #' @param X_t Matrix of treatment group pre-treatment outcomes

@@ -11,10 +11,6 @@
 #'
 #' @return A list of class "scest" containing the estimation results and data.
 #'
-#' @import methods
-#' @import CVXR
-#' @import optimx
-#'
 #' @export
 #'
 #' @examples

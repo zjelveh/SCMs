@@ -8,8 +8,6 @@
 #'
 #' @return A list of data tables containing treatment effect estimates for each control unit and the actual treated unit.
 #'
-#' @import data.table
-#'
 #' @export
 #'
 #' @examples

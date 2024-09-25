@@ -19,8 +19,7 @@ estimate_sc(
   w.constr = NULL,
   V = "separate",
   V.mat = NULL,
-  solver = "ECOS",
-  P = NULL
+  solver = "ECOS"
 )
 }
 \arguments{

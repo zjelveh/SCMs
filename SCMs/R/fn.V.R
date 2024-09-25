@@ -12,8 +12,6 @@
 #'
 #' @return Numeric. The computed loss value.
 #'
-#' @import kernlab
-#'
 #' @examples
 #' # Example usage (replace with actual example when available)
 #' # loss <- fn.V(variables.v = c(0.5, 0.5), X0.scaled = matrix(...), X1.scaled = matrix(...),
