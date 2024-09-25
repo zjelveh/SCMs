@@ -27,8 +27,8 @@
 #' # result <- estimate_sc(dataset = my_data, outcome = "gdp", covagg = c("population", "unemployment"),
 #' #                       col_name_unit_name = "state", name_treated_unit = "California",
 #' #                       col_name_period = "year", treated_period = 2000, min_period = 1990, end_period = 2010)
-estimate_sc <- function(dataset,             # Input dataset (panel data format)
-                        outcome,            # Name of the outcome variable (column in dataset)
+estimate_sc <- function(dataset,           # Input dataset (panel data format)
+                        outcome,           # Name of the outcome variable (column in dataset)
                         covagg,            # List of covariates used for matching (columns in dataset)
                         col_name_unit_name, # Column name in dataset containing unit names (e.g., state names)
                         name_treated_unit, # Name of the treated unit (e.g., the state that received treatment)
@@ -41,8 +41,8 @@ estimate_sc <- function(dataset,             # Input dataset (panel data format)
                         w.constr = NULL,    # Constraints on the weights (optional)
                         V = "separate",     # Covariance matrix estimation method (usually "separate")
                         V.mat = NULL,       # Pre-computed covariance matrix (optional)
-                        solver = "ECOS",    # Solver to use for the optimization problem
-                        P = NULL) {         # Number of factors to use (optional, for AugSynth)
+                        solver = "ECOS"){#,    # Solver to use for the optimization problem
+                        #P = NULL) {         # Number of factors to use (optional, for AugSynth)
 
   # 1. Data Preparation
   data <- create_scm_dataset(       # Create a formatted dataset for SCM
