@@ -4,7 +4,7 @@
 \alias{coef.scpi}
 \title{Coef Method for Synthetic Control Methods}
 \usage{
-\method{coef}{scpi}(object, ...)
+coef.scpi(object, ...)
 }
 \arguments{
 \item{object}{Class "scpi" object, obtained by calling \code{\link{scpi}}.}

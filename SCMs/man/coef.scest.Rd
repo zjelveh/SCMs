@@ -4,7 +4,7 @@
 \alias{coef.scest}
 \title{Coef Method for Synthetic Control Methods}
 \usage{
-\method{coef}{scest}(object, ...)
+coef.scest(object, ...)
 }
 \arguments{
 \item{object}{Class "scest" object, obtained by calling \code{\link{scest}}.}
