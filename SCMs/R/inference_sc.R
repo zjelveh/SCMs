@@ -57,7 +57,15 @@ inference_sc <- function(
     e.bounds     = NULL,
     verbose      = TRUE
 ){
-      
+  
+  # Start by defining class.type based on sc.pred
+  if (!is.null(sc.pred$data$specs) && !is.null(sc.pred$data$specs$class.type)) {
+    class.type <- sc.pred$data$specs$class.type
+  } else {
+    # Default class type if not found in data
+    class.type <- "scpi_data"
+  }
+  
   if (inference_type == "scpi") {
     # Perform SCPI inference
     inference.results <- inference_scpi(
@@ -89,7 +97,7 @@ inference_sc <- function(
       est.results = sc.pred$est.results,
       inference.results = inference.results
     )
-  
+    
     class(result) <- "scpi"
     
     # Set class type based on data structure
@@ -106,7 +114,14 @@ inference_sc <- function(
       cores = cores,
       verbose = verbose
     )
-    result = inference.results
+    
+    # Now inference.results contains both taus and rmse
+    result <- list(
+      data = sc.pred$data,
+      est.results = sc.pred$est.results,
+      inference.results = inference.results$taus,
+      rmse = inference.results$rmse
+    )
   }
   
   return(result)
