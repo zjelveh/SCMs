@@ -15,27 +15,90 @@ scest(
 )
 }
 \arguments{
-\item{data}{A list of class "scdata" containing the prepared data for synthetic control estimation.}
+\item{data}{A list of class "scdata" containing the prepared data from \code{scdata()}.}
 
-\item{w.constr}{A list specifying constraints on the weights. Default is NULL.}
+\item{w.constr}{List specifying constraints on the synthetic control weights. Options include:
+\itemize{
+\item \code{list(name = "simplex")} - Standard simplex constraint (weights sum to 1, non-negative)
+\item \code{list(name = "lasso", Q = 0.1)} - L1 penalty with regularization parameter Q
+\item \code{list(name = "ridge", Q = 0.1)} - L2 penalty with regularization parameter Q
+\item \code{list(name = "ols")} - Ordinary least squares (no constraints)
+\item \code{list(name = "L1-L2", Q1 = 0.1, Q2 = 0.1)} - Combined L1 and L2 penalties
+}
+Default is NULL (no constraints).}
 
-\item{feature_weights}{Character. Method for assigning weights to features. Can be "uniform" or "optimize". Default is "uniform".}
+\item{feature_weights}{Character. Method for weighting pre-treatment periods/features:
+\itemize{
+\item \code{"uniform"} - Equal weights for all periods (default)
+\item \code{"optimize"} - Optimize feature weights using nested optimization
+}}
 
-\item{V}{Character or matrix. Specifies the weighting matrix. Default is "separate".}
+\item{V}{Character or matrix specifying the feature weighting approach:
+\itemize{
+\item \code{"separate"} - Optimize V matrix separately (default)
+\item \code{"nested"} - Nested optimization of V and W matrices
+\item Custom matrix - User-provided V matrix
+}}
 
-\item{V.mat}{Matrix. Custom weighting matrix. Default is NULL.}
+\item{V.mat}{Matrix. Custom V (feature weighting) matrix. If provided, overrides V parameter.}
 
-\item{solver}{Character. The solver to use for optimization. Default is "ECOS".}
+\item{solver}{Character. CVXR solver to use ("ECOS", "OSQP", "GUROBI", etc.).
+Must be installed on system. Default is "ECOS".}
 
-\item{save.data}{Not used in the current implementation.}
+\item{save.data}{Logical. Whether to save input data in output object (for debugging). Default is NULL.}
 }
 \value{
-A list of class "scest" containing the estimation results and data.
+A list of class "scest" containing:
+\itemize{
+\item \code{w.weights} - Vector of synthetic control weights
+\item \code{Y.pre.fit} - Fitted pre-treatment outcomes
+\item \code{Y.post.fit} - Fitted post-treatment outcomes
+\item \code{loss.v} - Pre-treatment fit loss
+\item \code{specs} - Estimation specifications
+\item \code{data} - Original data (if save.data = TRUE)
+\item \code{V.mat} - Feature weighting matrix used
+\item Additional estimation metadata
+}
 }
 \description{
-This function performs synthetic control estimation for a single treated unit.
+This function estimates synthetic control weights for a single treated unit using various
+constraint specifications and optimization methods. It implements the core synthetic control methodology
+with flexible constraint options and feature weighting schemes.
+}
+\details{
+The function implements the synthetic control method by solving the optimization problem:
+\deqn{\min_W ||X_1 - X_0 W||_V^2 + penalty(W)}
+
+where \eqn{X_1} is the treated unit's pre-treatment characteristics, \eqn{X_0} is the control units'
+characteristics matrix, \eqn{W} are the synthetic control weights, and \eqn{V} is the feature weighting matrix.
+
+Different constraint types impose different penalty functions:
+\itemize{
+\item Simplex: \eqn{\sum W_i = 1, W_i \geq 0}
+\item Lasso: \eqn{Q \sum |W_i|}
+\item Ridge: \eqn{Q \sum W_i^2}
+\item OLS: No constraints
+}
 }
 \examples{
-# Example usage (replace with actual example when available)
-# result <- scest(data = my_scdata, w.constr = list(name = "simplex"), feature_weights = "optimize")
+\dontrun{
+# Basic simplex-constrained synthetic control
+result <- scest(data = scm_data, 
+                w.constr = list(name = "simplex"))
+
+# Lasso-regularized synthetic control  
+result_lasso <- scest(data = scm_data,
+                      w.constr = list(name = "lasso", Q = 0.1))
+
+# With optimized feature weights
+result_opt <- scest(data = scm_data,
+                    w.constr = list(name = "simplex"),
+                    feature_weights = "optimize")
+                    
+# Using custom V matrix
+custom_V <- diag(nrow(scm_data$Y.pre))
+result_custom <- scest(data = scm_data,
+                       w.constr = list(name = "simplex"),
+                       V.mat = custom_V)
+}
 }

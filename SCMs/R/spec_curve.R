@@ -1,37 +1,135 @@
 #' Generate Specification Curve for Synthetic Control Method
 #'
-#' This function generates a specification curve by running multiple variations of 
-#' Synthetic Control Method (SCM) estimations across different specifications.
+#' This function performs comprehensive specification curve analysis for Synthetic Control Methods
+#' by systematically varying multiple modeling choices and estimating treatment effects across
+#' all combinations. This approach helps assess the robustness of results to modeling assumptions
+#' and identifies the sensitivity of estimates to researcher degrees of freedom.
 #'
-#' @param dataset A data frame containing the panel data.
-#' @param outcomes Character vector. Names of the outcome variables to analyze.
-#' @param col_name_unit_name Character. Column name in dataset containing unit names.
-#' @param name_treated_unit Character. Name of the treated unit.
-#' @param covagg List of covariates used for matching.
-#' @param treated_period Numeric. Time period when treatment starts for the treated unit.
-#' @param min_period Numeric. Earliest time period in the dataset.
-#' @param end_period Numeric. Latest time period in the dataset.
-#' @param col_name_period Character. Column name in dataset containing time periods.
-#' @param feature_weights Character vector. Methods for assigning weights to predictors. Default is c('uniform', 'optimize').
-#' @param num_pre_period_years Numeric or NA. Number of pre-treatment periods to use. If NA, uses all available pre-treatment periods.
-#' @param outcome_models Character vector. Outcome models to fit. Default is c('none', 'augsynth', 'ridge', 'lasso', 'ols').
-#' @param donor_sample Character vector. Method for selecting donor units. Default is c('all', 'most_similar').
-#' @param sim_function Function. Function to select most similar donor units. Default is most_similar.
-#' @param constraints List of lists. Each inner list specifies a constraint type for the SCM estimation.
-#' @param cores Integer. Number of cores to use for parallel processing. Default is 1 (sequential).
-#' @param use_cache Logical. Whether to cache results to disk. Default is FALSE.
-#' @param cache_dir Character. Directory to store cache files if use_cache is TRUE. Default is tempdir().
-#' @param verbose Logical. Whether to display progress messages. Default is TRUE.
+#' @param dataset Data frame containing panel data in long format with units, time periods, and outcomes.
+#' @param outcomes Character vector of outcome variable names to analyze. Multiple outcomes will be processed separately.
+#' @param col_name_unit_name Character. Name of column containing unit identifiers (e.g., "state", "country").
+#' @param name_treated_unit Character. Identifier of the treated unit as it appears in the data.
+#' @param covagg List of covariate specifications for pre-treatment matching. Each element should be a vector of variable names.
+#' @param treated_period Numeric. First time period when treatment is active for the treated unit.
+#' @param min_period Numeric. Earliest time period available in the dataset.
+#' @param end_period Numeric. Latest time period available in the dataset.
+#' @param col_name_period Character. Name of column containing time period identifiers.
+#' @param feature_weights Character vector of feature weighting methods:
+#'   \itemize{
+#'     \item \code{"uniform"} - Equal weights for all pre-treatment periods
+#'     \item \code{"optimize"} - Data-driven optimization of feature weights  
+#'   }
+#'   Default is \code{c('uniform', 'optimize')}.
+#' @param num_pre_period_years Numeric or NA. Number of pre-treatment periods to include in estimation.
+#'   If NA, uses all available pre-treatment periods. Default is NA.
+#' @param outcome_models Character vector of outcome modeling approaches:
+#'   \itemize{
+#'     \item \code{"none"} - Standard synthetic control (no outcome model)
+#'     \item \code{"augsynth"} - Augmented synthetic control method
+#'     \item \code{"ridge"} - Ridge regression outcome model
+#'     \item \code{"lasso"} - Lasso regression outcome model  
+#'     \item \code{"ols"} - OLS regression outcome model
+#'   }
+#'   Default is \code{c('none', 'augsynth', 'ridge', 'lasso', 'ols')}.
+#' @param donor_sample Character vector specifying donor pool selection:
+#'   \itemize{
+#'     \item \code{"all"} - Use all available control units
+#'     \item \code{"most_similar"} - Use only most similar control units
+#'   }
+#'   Default is \code{c('all', 'most_similar')}.
+#' @param sim_function Function to determine similarity for donor selection when \code{donor_sample} includes "most_similar".
+#'   Default uses built-in similarity function.
+#' @param constraints List of constraint specifications for weight optimization. Each element should be a list
+#'   with constraint parameters (e.g., \code{list(name = "simplex")}, \code{list(name = "lasso", Q = 0.1)}).
+#' @param cores Integer. Number of CPU cores for parallel processing. Default is 1 (sequential).
+#'   Higher values significantly speed up computation but require more memory.
+#' @param use_cache Logical. Whether to cache intermediate results to avoid recomputation. Default is FALSE.
+#'   Useful for large specification spaces or when iterating on analysis.
+#' @param cache_dir Character. Directory path for storing cache files when \code{use_cache = TRUE}.
+#'   Default is temporary directory from \code{tempdir()}.
+#' @param verbose Logical. Whether to display progress messages and warnings. Default is TRUE.
 #'
-#' @return A nested list containing results for each combination of specifications.
+#' @details
+#' The function creates a Cartesian product of all specification choices and estimates synthetic controls
+#' for each combination. This implementation includes:
+#' \itemize{
+#'   \item \strong{Parallel Processing}: Distributes computations across multiple cores for efficiency
+#'   \item \strong{Error Handling}: Gracefully handles failed estimations and continues processing
+#'   \item \strong{Caching System}: Optionally stores results to disk using digest-based keys
+#'   \item \strong{Progress Tracking}: Provides real-time updates on estimation progress
+#'   \item \strong{Memory Management}: Efficiently handles large specification spaces
+#' }
+#'
+#' The resulting specification curve can reveal:
+#' \itemize{
+#'   \item Sensitivity of treatment effect estimates to modeling choices
+#'   \item Distribution of effect sizes across specifications  
+#'   \item Identification of modeling choices that drive results
+#'   \item Assessment of overall robustness of findings
+#' }
+#'
+#' @return A nested list structure containing:
+#' \itemize{
+#'   \item \code{results} - List of estimation results for each specification
+#'   \item \code{specifications} - Data frame describing each specification combination
+#'   \item \code{summary_stats} - Summary statistics across all specifications
+#'   \item \code{failed_runs} - Information about any failed estimations
+#'   \item \code{metadata} - Information about the analysis (timing, parameters, etc.)
+#' }
+#' 
+#' Each element in \code{results} contains the full output from \code{scest()} and \code{inference_sc()}
+#' for that specification, allowing detailed post-hoc analysis.
+#'
+#' @references 
+#' \itemize{
+#'   \item Simonsohn, U., Simmons, J. P., & Nelson, L. D. (2020). Specification curve analysis. 
+#'         \emph{Nature Human Behaviour}, 4(11), 1208-1214.
+#'   \item Huntington-Klein, N. et al. (2021). The influence of hidden researcher decisions in applied microeconomics. 
+#'         \emph{Economic Inquiry}, 59(3), 944-960.
+#' }
 #'
 #' @examples
 #' \dontrun{
-#' results <- spec_curve(dataset = my_data, outcomes = c("gdp"),
-#'                       col_name_unit_name = "state", name_treated_unit = "California",
-#'                       covagg = list(c("population")), treated_period = 2000,
-#'                       min_period = 1990, end_period = 2010, col_name_period = "year",
-#'                       cores = 2)
+#' # Basic specification curve analysis
+#' results <- spec_curve(
+#'   dataset = state_panel,
+#'   outcomes = "gdp_per_capita",
+#'   col_name_unit_name = "state", 
+#'   name_treated_unit = "California",
+#'   covagg = list(c("population", "income")),
+#'   treated_period = 2000,
+#'   min_period = 1990, 
+#'   end_period = 2010,
+#'   col_name_period = "year",
+#'   constraints = list(
+#'     list(name = "simplex"),
+#'     list(name = "lasso", Q = 0.1),
+#'     list(name = "ridge", Q = 0.1)
+#'   ),
+#'   cores = 4
+#' )
+#'
+#' # Multi-outcome analysis with caching
+#' results_multi <- spec_curve(
+#'   dataset = policy_data,
+#'   outcomes = c("unemployment", "gdp", "investment"),
+#'   col_name_unit_name = "country",
+#'   name_treated_unit = "Germany", 
+#'   covagg = list(
+#'     c("population", "gdp_lag"),
+#'     c("population", "gdp_lag", "trade_openness")
+#'   ),
+#'   treated_period = 2005,
+#'   min_period = 1995,
+#'   end_period = 2015,
+#'   col_name_period = "year",  
+#'   use_cache = TRUE,
+#'   cache_dir = "./cache",
+#'   cores = 8
+#' )
+#' 
+#' # Plot results
+#' plot_spec_curve(results)
 #' }
 #' @export
 spec_curve <- function(

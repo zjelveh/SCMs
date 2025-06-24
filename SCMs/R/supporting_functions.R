@@ -1790,6 +1790,11 @@ outcomeGet <- function(Y.pre.fit, Y.post.fit, Y.df, units.est, treated.units,
   return(list(toplot = toplot, treated.reception = treated.reception, plot.type = plot.type))
 }
 
+#' @title Collect and Process optimx Results
+#' @description Helper function to process and reorder optimization results from optimx.
+#' @param res Results object from optimx optimization.
+#' @param opt Character. Direction of optimization: "min" for minimum, "max" for maximum.
+#' @return Processed optimization results.
 #' @export
 collect.optimx <-
   function(res, opt = "min") {

@@ -21,41 +21,81 @@ scdata(
 )
 }
 \arguments{
-\item{df}{Data frame containing the panel data.}
+\item{df}{Data frame containing the panel data in long format.}
 
-\item{id.var}{Character. Name of the column containing unit identifiers.}
+\item{id.var}{Character. Name of the column containing unit identifiers (e.g., state names, country codes).}
 
-\item{time.var}{Character. Name of the column containing time periods.}
+\item{time.var}{Character. Name of the column containing time periods (e.g., year, quarter).}
 
-\item{outcome.var}{Character. Name of the column containing the outcome variable.}
+\item{outcome.var}{Character. Name of the column containing the outcome variable of interest.}
 
-\item{period.pre}{Numeric vector. Pre-treatment time periods.}
+\item{period.pre}{Numeric vector. Pre-treatment time periods used for fitting the synthetic control.}
 
-\item{period.post}{Numeric vector. Post-treatment time periods.}
+\item{period.post}{Numeric vector. Post-treatment time periods for evaluating treatment effects.}
 
-\item{unit.tr}{Character. Name of the treated unit.}
+\item{unit.tr}{Character. Name or identifier of the treated unit.}
 
-\item{unit.co}{Character vector. Names of the control units.}
+\item{unit.co}{Character vector. Names or identifiers of the potential control units (donor pool).}
 
-\item{anticipation}{Numeric. Number of periods to account for anticipation effects. Default is 0.}
+\item{anticipation}{Numeric. Number of pre-treatment periods to exclude due to anticipation effects. Default is 0.}
 
-\item{constant}{Logical. Whether to include a constant term. Default is FALSE.}
+\item{constant}{Logical. Whether to include a constant term in the synthetic control weights. Default is FALSE.}
 
-\item{verbose}{Logical. Whether to print warnings. Default is TRUE.}
+\item{verbose}{Logical. Whether to print diagnostic messages and warnings. Default is TRUE.}
 
-\item{covagg}{List. Specifies how covariates should be aggregated.}
+\item{covagg}{List. Specification for covariate aggregation (advanced usage). Default is empty list.}
 
-\item{cointegrated.data}{Logical. Whether the data is cointegrated. Default is FALSE.}
+\item{cointegrated.data}{Logical. Whether to treat the data as cointegrated (affects some computations). Default is FALSE.}
 }
 \value{
-A list of class 'scdata' containing the prepared data for SCM analysis.
+A list of class 'scdata' containing:
+\itemize{
+\item \code{Y.pre}: Matrix of pre-treatment outcomes (controls × time periods)
+\item \code{Y.post}: Matrix of post-treatment outcomes
+\item \code{Y.donors}: Full outcome matrix for donor units
+\item \code{Y.treated}: Outcome vector for treated unit
+\item \code{specs}: List containing specification details
+\item Additional metadata for estimation and plotting
+}
 }
 \description{
-This function prepares a data structure for use with Synthetic Control Methods (SCM) by formatting and organizing the input data.
+This function prepares a data structure for use with Synthetic Control Methods (SCM)
+by formatting and organizing the input data. It validates inputs, structures the data appropriately,
+and creates matrices needed for synthetic control estimation.
+}
+\details{
+This function performs several key operations:
+\itemize{
+\item Validates that all required variables exist in the data
+\item Checks for balanced panel structure
+\item Creates outcome matrices for treated and control units
+\item Handles missing data appropriately
+\item Prepares data structures required by estimation functions
+}
+
+The function expects panel data in long format where each row represents one unit-time observation.
 }
 \examples{
-# Example usage (replace with actual example when available)
-# scm_data <- scdata(df = my_data, id.var = "state", time.var = "year", 
-#                    outcome.var = "gdp", period.pre = 1980:1999, period.post = 2000:2010,
-#                    unit.tr = "California", unit.co = c("New York", "Texas"))
+\dontrun{
+# Basic usage with state-level data
+scm_data <- scdata(df = state_panel, 
+                   id.var = "state", 
+                   time.var = "year", 
+                   outcome.var = "gdp_per_capita",
+                   period.pre = 1980:1999, 
+                   period.post = 2000:2010,
+                   unit.tr = "California", 
+                   unit.co = c("New York", "Texas", "Florida"))
+                   
+# With anticipation effects
+scm_data <- scdata(df = policy_data,
+                   id.var = "country",
+                   time.var = "year", 
+                   outcome.var = "unemployment_rate",
+                   period.pre = 1990:2004,
+                   period.post = 2007:2015,
+                   unit.tr = "Germany",
+                   unit.co = c("France", "Italy", "Spain"),
+                   anticipation = 2)  # Exclude 2 pre-treatment years
+}
 }

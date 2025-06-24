@@ -374,29 +374,3 @@ save_plots <- function(plots, base_path) {
 }
 
 
-
-
-# Create visualization of specification curve
-p <- plot_spec_curve(sc, outcomes=c('oiso', 'oisp'), name_treated_unit = 'CA')
-p
-print(p)
-
-
-p <- plot_spec_curve(sc, outcomes=c('num_homicide'), name_treated_unit = 'PAPEP0000')
-p
-
-p <- plot_spec_curve(results,normalize_outcomes = TRUE, rmse_threshold = 20,
-                     outcomes=c( 'num_homicide'),
-                     name_treated_unit = 'PAPEP0000')
-p
-
-
-hogan_results = fread('~/Dropbox/research/synth_control_paper/shap_exploration/data/spec_curve_hogan_results.csv')
-kaplan_results = fread('~/Dropbox/research/synth_control_paper/shap_exploration/data/spec_curve_HOMI_results.csv')
-ois_results = fread('~/Dropbox/research/synth_control_paper/shap_exploration/data/spec_curve_OIS_results.csv')
-
-names(hogan_results)
-names(kaplan_results)
-names(ois_results)
-
-

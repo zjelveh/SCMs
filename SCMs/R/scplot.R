@@ -65,18 +65,26 @@
 #' @seealso \code{\link{scdata}}, \code{\link{scdataMulti}}, \code{\link{scest}}, \code{\link{scpi}}, \code{\link{scplotMulti}}
 #'
 #' @examples
+#' \dontrun{
+#' # Create example data
+#' df <- data.frame(
+#'   unit = rep(c("treated", "control1", "control2"), each = 20),
+#'   time = rep(1:20, 3),
+#'   outcome = c(rnorm(20, mean = 1:20), rnorm(20, mean = 1:20), rnorm(20, mean = 1:20))
+#' )
 #'
-#' data <- scpi_germany
+#' # Prepare data for SCM
+#' scm_data <- scdata(df = df, id.var = "unit", time.var = "time",
+#'                    outcome.var = "outcome", period.pre = 1:10,
+#'                    period.post = 11:20, unit.tr = "treated",
+#'                    unit.co = c("control1", "control2"))
 #'
-#' df <- scdata(df = data, id.var = "country", time.var = "year",
-#'              outcome.var = "gdp", period.pre = (1960:1990),
-#'              period.post = (1991:2003), unit.tr = "West Germany",
-#'              unit.co = setdiff(unique(data$country), "West Germany"),
-#'              constant = TRUE, cointegrated.data = TRUE)
+#' # Estimate synthetic control
+#' result <- scest(scm_data, w.constr = list(name = "simplex"))
 #'
-#' result <- scest(df, w.constr = list(name = "simplex", Q = 1))
-#'
+#' # Plot results
 #' scplot(result)
+#' }
 #'
 #' @export
 #'

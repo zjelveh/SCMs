@@ -9,17 +9,12 @@
 This package provides tools for implementing Synthetic Control Methods (SCM),
 performing inference, conducting specification curve analysis, and visualizing results.
 
-This and that
+Comprehensive toolkit for Synthetic Control Methods (SCM) with advanced features including specification curve analysis, multiple inference procedures, and robust estimation techniques. Provides functions for data preparation, model estimation, statistical inference (including SCPI and placebo-based methods), and visualization of results. Supports multiple outcome models (OLS, Ridge, Lasso, Augmented Synthetic Control) and includes parallel processing capabilities for large-scale specification curve analysis.
 
 This and that
 }
 \author{
-\strong{Maintainer}: 
-
-Authors:
-\itemize{
-  \item Zubin Jelveh
-}
+\strong{Maintainer}: Zubin Jelveh \email{zjelveh@umd.edu}
 
 }
 \keyword{internal}
