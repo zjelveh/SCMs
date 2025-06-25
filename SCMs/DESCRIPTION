@@ -7,7 +7,7 @@ Authors@R:
            role = c("aut", "cre"),
            email = "zjelveh@umd.edu")
            )
-License: GPL-2
+License: GPL-3
 Encoding: UTF-8
 Imports: CVXR        (>= 1.0-10),
          dplyr       (>= 1.0.7),

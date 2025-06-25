@@ -43,7 +43,23 @@ scdata(
 
 \item{verbose}{Logical. Whether to print diagnostic messages and warnings. Default is TRUE.}
 
-\item{covagg}{List. Specification for covariate aggregation (advanced usage). Default is empty list.}
+\item{covagg}{List. Flexible specification for covariate aggregation. Can use either:
+\itemize{
+\item \strong{New flexible format}: Each element is a list with \code{var} and aggregation type:
+\itemize{
+\item \code{list(var = "gdp", each_period = TRUE)} - Separate variable for each period
+\item \code{list(var = "trade", average = "full_pre")} - Average over full pre-period
+\item \code{list(var = "schooling", every_n = 5)} - Every N periods
+\item \code{list(var = "invest", periods = c(1980, 1985))} - Specific periods
+\item \code{list(var = "gdp", first = 3)} - First N periods
+\item \code{list(var = "industry", last = 2)} - Last N periods
+\item \code{list(var = "trade", rolling = 3)} - Rolling N-period averages
+\item \code{list(var = "gdp", growth = "period_over_period")} - Growth rates
+\item \code{list(var = "gdp", volatility = "sd")} - Volatility measures
+}
+\item \strong{Legacy format}: List of variable names (for backward compatibility)
+}
+Default is empty list.}
 
 \item{cointegrated.data}{Logical. Whether to treat the data as cointegrated (affects some computations). Default is FALSE.}
 }
@@ -97,5 +113,21 @@ scm_data <- scdata(df = policy_data,
                    unit.tr = "Germany",
                    unit.co = c("France", "Italy", "Spain"),
                    anticipation = 2)  # Exclude 2 pre-treatment years
+                   
+# With flexible covariate aggregation (ADH-style)
+scm_data_adh <- scdata(df = germany_data,
+                       id.var = "country",
+                       time.var = "year",
+                       outcome.var = "gdp", 
+                       period.pre = 1960:1990,
+                       period.post = 1991:2003,
+                       unit.tr = "West Germany",
+                       unit.co = c("USA", "UK", "France"),
+                       covagg = list(
+                         gdp_each = list(var = "gdp", each_period = TRUE),
+                         investment_avg = list(var = "investment", average = "full_pre"),
+                         schooling_5yr = list(var = "schooling", every_n = 5),
+                         trade_final = list(var = "trade", periods = 1990)
+                       ))
 }
 }

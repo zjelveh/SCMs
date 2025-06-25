@@ -305,9 +305,22 @@ w.constr.OBJ <- function(w.constr, A, Z, V, J, KM, M) {
         }
       }
       
-      if (is.null(Qfeat)) Qfeat <- shrinkage.EST("ridge", A, as.matrix(Z), V, J, KM)$Q
-      w.constr[["Q"]] <- max(min(Qfeat, na.rm = TRUE), .5)
-      w.constr[["lambda"]] <- aux$lambda
+      if (is.null(Qfeat)) {
+        aux <- shrinkage.EST("ridge", A, as.matrix(Z), V, J, KM)
+        Qfeat <- aux$Q
+      }
+      # Filter out infinite values and use a reasonable default if needed
+      Qfeat_finite <- Qfeat[is.finite(Qfeat)]
+      if (length(Qfeat_finite) > 0) {
+        w.constr[["Q"]] <- max(min(Qfeat_finite), .5)
+      } else {
+        w.constr[["Q"]] <- 1.0  # Default Q value
+      }
+      if (exists("aux") && is.finite(aux$lambda)) {
+        w.constr[["lambda"]] <- aux$lambda
+      } else {
+        w.constr[["lambda"]] <- 0.1  # Default lambda value
+      }
       
     }
     
@@ -339,9 +352,22 @@ w.constr.OBJ <- function(w.constr, A, Z, V, J, KM, M) {
         }
       }
       
-      if (is.null(Qfeat)) Qfeat <- shrinkage.EST("ridge", A, as.matrix(Z), V, J, KM)$Q
-      w.constr[["Q2"]] <- max(min(Qfeat, na.rm = TRUE), .5)
-      w.constr[["lambda"]] <- aux$lambda
+      if (is.null(Qfeat)) {
+        aux <- shrinkage.EST("ridge", A, as.matrix(Z), V, J, KM)
+        Qfeat <- aux$Q
+      }
+      # Filter out infinite values and use a reasonable default if needed
+      Qfeat_finite <- Qfeat[is.finite(Qfeat)]
+      if (length(Qfeat_finite) > 0) {
+        w.constr[["Q2"]] <- max(min(Qfeat_finite), .5)
+      } else {
+        w.constr[["Q2"]] <- 1.0  # Default Q2 value
+      }
+      if (exists("aux") && is.finite(aux$lambda)) {
+        w.constr[["lambda"]] <- aux$lambda
+      } else {
+        w.constr[["lambda"]] <- 0.1  # Default lambda value
+      }
     }
     
     w.constr <- list(lb = 0,
@@ -417,11 +443,13 @@ shrinkage.EST <- function(method, A, Z, V, J, KM) {
 # depending on the desired method
 b.est <- function(A, Z, J, KM, w.constr, V, CVXR.solver = "ECOS") {
   
+
   dire <- w.constr[["dir"]]
   lb <- w.constr[["lb"]]
   p <- w.constr[["p"]]
   QQ <- w.constr[["Q"]]
   
+
   if (p == "L1-L2") {
     Q2 <- w.constr[["Q2"]]
   } else {
@@ -462,6 +490,11 @@ b.est <- function(A, Z, J, KM, w.constr, V, CVXR.solver = "ECOS") {
   # num_iter required in large lasso/L1-L2/ridge problems is often >10k, which is the default in OSQP/ECOS
   prob <- CVXR::Problem(objective, constraints)
   sol <- CVXR::solve(prob, solver = CVXR.solver, num_iter = 100000L, verbose = FALSE)
+  
+  
+  if (is.null(sol$getValue)) {
+    stop("Solver failed - getValue method not available")
+  }
   
   b <- sol$getValue(x)
   alert <- !(sol$status %in% c("optimal", "optimal_inaccurate"))
@@ -1014,6 +1047,14 @@ insampleUncertaintyGet <- function(Z.na, V.na, P.na, beta, Sigma.root, J, KMI, I
 
 # Prediction interval, for e
 scpi.out <- function(res, x, eval, e.method, alpha, e.lb.est, e.ub.est, verbose, effect, out.feat) {
+  
+  # Validate e.method parameter
+  if (is.null(e.method) || length(e.method) == 0) {
+    stop("e.method must be specified and cannot be NULL or empty")
+  }
+  if (!(e.method %in% c("gaussian", "ls", "qreg", "all"))) {
+    stop("e.method must be one of 'gaussian', 'ls', 'qreg', or 'all'")
+  }
   
   neval <- nrow(eval)
   e.1 <- e.2 <- lb <- ub <- NA

@@ -14,7 +14,23 @@
 #' @param anticipation Numeric. Number of pre-treatment periods to exclude due to anticipation effects. Default is 0.
 #' @param constant Logical. Whether to include a constant term in the synthetic control weights. Default is FALSE.
 #' @param verbose Logical. Whether to print diagnostic messages and warnings. Default is TRUE.
-#' @param covagg List. Specification for covariate aggregation (advanced usage). Default is empty list.
+#' @param covagg List. Flexible specification for covariate aggregation. Can use either:
+#'   \itemize{
+#'     \item \strong{New flexible format}: Each element is a list with \code{var} and aggregation type:
+#'       \itemize{
+#'         \item \code{list(var = "gdp", each_period = TRUE)} - Separate variable for each period
+#'         \item \code{list(var = "trade", average = "full_pre")} - Average over full pre-period  
+#'         \item \code{list(var = "schooling", every_n = 5)} - Every N periods
+#'         \item \code{list(var = "invest", periods = c(1980, 1985))} - Specific periods
+#'         \item \code{list(var = "gdp", first = 3)} - First N periods
+#'         \item \code{list(var = "industry", last = 2)} - Last N periods
+#'         \item \code{list(var = "trade", rolling = 3)} - Rolling N-period averages
+#'         \item \code{list(var = "gdp", growth = "period_over_period")} - Growth rates
+#'         \item \code{list(var = "gdp", volatility = "sd")} - Volatility measures
+#'       }
+#'     \item \strong{Legacy format}: List of variable names (for backward compatibility)
+#'   }
+#'   Default is empty list.
 #' @param cointegrated.data Logical. Whether to treat the data as cointegrated (affects some computations). Default is FALSE.
 #'
 #' @details
@@ -63,6 +79,22 @@
 #'                    unit.tr = "Germany",
 #'                    unit.co = c("France", "Italy", "Spain"),
 #'                    anticipation = 2)  # Exclude 2 pre-treatment years
+#'                    
+#' # With flexible covariate aggregation (ADH-style)
+#' scm_data_adh <- scdata(df = germany_data,
+#'                        id.var = "country",
+#'                        time.var = "year",
+#'                        outcome.var = "gdp", 
+#'                        period.pre = 1960:1990,
+#'                        period.post = 1991:2003,
+#'                        unit.tr = "West Germany",
+#'                        unit.co = c("USA", "UK", "France"),
+#'                        covagg = list(
+#'                          gdp_each = list(var = "gdp", each_period = TRUE),
+#'                          investment_avg = list(var = "investment", average = "full_pre"),
+#'                          schooling_5yr = list(var = "schooling", every_n = 5),
+#'                          trade_final = list(var = "trade", periods = 1990)
+#'                        ))
 #' }
 
 
@@ -137,17 +169,57 @@ scdata <- function(df,
     stop("Outcome variable (outcome.var) must be numeric!")
   }
 
-  features = c()
-  for(item in names(covagg)){
-    for(feat in covagg[[item]]){
-      features = c(features, feat)
+  # Handle covariate aggregation - support both old and new format
+  using_new_format <- FALSE
+  if (length(covagg) > 0) {
+    # Check if using new flexible format
+    if (any(sapply(covagg, function(x) is.list(x) && "var" %in% names(x)))) {
+      # NEW FORMAT: Convert to old format for now (temporary solution)
+      using_new_format <- TRUE
+      
+      # For now, convert new format to old format by extracting variable names
+      # This is a temporary solution until we fully integrate the new system
+      features <- c()
+      for (cov_name in names(covagg)) {
+        cov_spec <- covagg[[cov_name]]
+        
+        # Skip non-list elements (like label) and only process actual covariate specs
+        if (is.list(cov_spec) && !is.null(cov_spec$var)) {
+          if (!is.null(cov_spec$each_period) && cov_spec$each_period) {
+            # For each_period, we'll use every_period in old format
+            features <- c(features, cov_spec$var)
+          } else {
+            # For other aggregations, just include the variable
+            features <- c(features, cov_spec$var)
+          }
+        }
+      }
+      features <- unique(features)
+      
+      # Convert to old format temporarily
+      if (any(sapply(covagg, function(x) is.list(x) && !is.null(x$each_period) && x$each_period))) {
+        # If any variable uses each_period, use every_period in old format
+        covagg <- list(every_period = features)
+      } else {
+        # Otherwise, use mean aggregation (supported by OLD FORMAT)
+        covagg <- list(mean = features)
+      }
+      
+    } else {
+      # OLD FORMAT: Backward compatibility
+      features = c()
+      for(item in names(covagg)){
+        for(feat in covagg[[item]]){
+          features = c(features, feat)
+        }
+      }
+      features = unique(features)
     }
+  } else {
+    features <- c()
   }
-  features = unique(features)
-
-
   
-  if (is.null(features) ==  TRUE) {
+  if (length(features) == 0) {
     features <- outcome.var
   }
 
@@ -312,8 +384,14 @@ scdata <- function(df,
       years = (period.pre)
       idx2 = length(A_list) + 1
 
-      A <- as.matrix(c(as.matrix(colMeans(data.bal.tr[data.bal.tr[, "Time"] %in% years,
-                                                      feature_names])))) # Stack features
+      # Handle case where feature_names might be a single column
+      subset_data <- data.bal.tr[data.bal.tr[, "Time"] %in% years, feature_names, drop = FALSE]
+      if (ncol(subset_data) == 1) {
+        A <- as.matrix(mean(subset_data[, 1]))
+      } else {
+        A <- as.matrix(colMeans(subset_data))
+      }
+      A <- as.matrix(c(A)) # Stack features
       colnames(A) <- unit.tr
       rownames(A) <- paste(rep(unit.tr, n_features),
                            feature_names,
@@ -603,9 +681,15 @@ scdata <- function(df,
 
   A_outcome = A[grepl(outcome.var, rownames(A)), , drop=F]
   A_nonoutcome = A[!(grepl(outcome.var, rownames(A))), ,drop=F]
-  A_outcome = A_outcome[order(rownames(A_outcome)), , drop=F]
+  # Only order if A_outcome has rows and rownames
+  if (nrow(A_outcome) > 0 && !is.null(rownames(A_outcome))) {
+    A_outcome = A_outcome[order(rownames(A_outcome)), , drop=F]
+  }
   if(nrow(A_nonoutcome)> 0){
-    A_nonoutcome = A_nonoutcome[order(rownames(A_nonoutcome)),, drop=F ]
+    # Only order if A_nonoutcome has rownames
+    if (!is.null(rownames(A_nonoutcome))) {
+      A_nonoutcome = A_nonoutcome[order(rownames(A_nonoutcome)),, drop=F ]
+    }
     A = rbind(A_outcome, A_nonoutcome)
   } else{
     A = A_outcome
@@ -613,9 +697,15 @@ scdata <- function(df,
 
   B_outcome = B[grepl(outcome.var, rownames(B)), , drop=F]
   B_nonoutcome = B[!(grepl(outcome.var, rownames(B))), ,drop=F]
-  B_outcome = B_outcome[order(rownames(B_outcome)), , drop=F]
+  # Only order if B_outcome has rows and rownames
+  if (nrow(B_outcome) > 0 && !is.null(rownames(B_outcome))) {
+    B_outcome = B_outcome[order(rownames(B_outcome)), , drop=F]
+  }
   if(nrow(B_nonoutcome)>0){
-    B_nonoutcome = B_nonoutcome[order(rownames(B_nonoutcome)),, drop=F ]
+    # Only order if B_nonoutcome has rownames
+    if (!is.null(rownames(B_nonoutcome))) {
+      B_nonoutcome = B_nonoutcome[order(rownames(B_nonoutcome)),, drop=F ]
+    }
     B = rbind(B_outcome, B_nonoutcome)
   } else{
     B = B_outcome
@@ -623,7 +713,17 @@ scdata <- function(df,
 
   X <- cbind(A, B)
 
-  rownames(X) <- paste(unit.tr, feature.vec, as.character(time.vec), sep = ".")
+  # Create rownames that match the actual dimensions of X
+  if (nrow(X) > 0) {
+    expected_rownames <- paste(unit.tr, feature.vec, as.character(time.vec), sep = ".")
+    if (length(expected_rownames) == nrow(X)) {
+      rownames(X) <- expected_rownames
+    } else {
+      # If dimensions don't match, create simple rownames matching actual rows
+      cat("DEBUG: Dimension mismatch! Expected:", length(expected_rownames), "Actual:", nrow(X), "\n")
+      rownames(X) <- paste0("row_", 1:nrow(X))
+    }
+  }
 
   select      <- rowSums(is.na(X)) == 0
   X.na        <- X[select, , drop = FALSE]

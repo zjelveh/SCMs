@@ -149,6 +149,29 @@ plot_spec_curve <- function(
     stop("Not enough specifications to plot after RMSE filtering")
   }
   
+  # Check if post_period column exists, if not create it
+  if (!"post_period" %in% names(sc_results_df)) {
+    warning("post_period column missing - this may indicate an issue with donor_sample='all'. Creating post_period column based on time periods.")
+    
+    # Create post_period column based on the time column and treated period
+    # We need to infer the treated period from the data
+    if ("time" %in% names(sc_results_df)) {
+      # Find the treated period from the first specification's data
+      treated_periods <- unique(sc_results_df[unit_type == "treated"]$time)
+      if (length(treated_periods) > 0) {
+        treated_start <- min(treated_periods)
+        sc_results_df[, post_period := time >= treated_start]
+      } else {
+        # Fallback: assume post-period is latter half of time periods
+        all_times <- sort(unique(sc_results_df$time))
+        mid_point <- all_times[ceiling(length(all_times)/2)]
+        sc_results_df[, post_period := time >= mid_point]
+      }
+    } else {
+      stop("Cannot create post_period column - no time variable found")
+    }
+  }
+  
   # Calculate average effects AND keep RMSE values
   average_effect_df = sc_results_df[
     post_period==TRUE,
@@ -242,7 +265,8 @@ plot_spec_curve <- function(
       legend.position = "none",
       panel.spacing = unit(.75, "lines"),
       axis.text = element_text(colour = "black"),
-      strip.text.x = element_blank()) +
+      strip.text.x = element_blank(),
+      strip.text.y = element_text(angle = 90, hjust = 0.5)) +
     labs(x = "", y = "")
   
   var = df$Estimate

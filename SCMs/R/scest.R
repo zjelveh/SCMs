@@ -222,13 +222,14 @@ scest <- function(data,
   A.hat <- Z_scaled %*% b
 
   # Prepare pre-treatment fit
-  if (out.in.features == TRUE) {
-    fit.pre <- A.hat[1:T0.features[outcome.var], , drop = FALSE]
-    names <- strsplit(rownames(fit.pre), "\\.")
-    rownames(fit.pre) <- unlist(lapply(names, function(x) paste(x[1], x[3], sep=".")))
-  } else {
-    fit.pre <- Y.donors %*% w
+  # ALWAYS use time-varying predictions regardless of matching features
+  # This ensures inference gets the time series it expects
+  
+  # Ensure w is a proper column matrix for matrix multiplication
+  if (is.vector(w)) {
+    w <- matrix(w, ncol = 1)
   }
+  fit.pre <- Y.donors %*% w
 
   # Post-treatment prediction
   fit.post <- P %*% b

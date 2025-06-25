@@ -646,7 +646,7 @@ inference_scpi <- function(sc.pred,
 
     pi.e   <- scpi.out(res = e.res.na, x = e.des.0.na, eval = e.des.1,
                        e.method = "gaussian", alpha = e.alpha / 2,
-                       e.lb.est = e.lb.est, e.ub.est =  e.lb.est,
+                       e.lb.est = e.lb.est, e.ub.est =  e.lb.est, verbose = verbose,
                        effect = sc.pred$data$specs$effect, out.feat = out.feat)
 
     e.lb.gau <- pi.e$lb
@@ -667,7 +667,7 @@ inference_scpi <- function(sc.pred,
 
     pi.e   <- scpi.out(res = e.res.na, x = e.des.0.na, eval = e.des.1,
                        e.method = "ls", alpha = e.alpha / 2,
-                       e.lb.est = e.lb.est, e.ub.est =  e.lb.est,
+                       e.lb.est = e.lb.est, e.ub.est =  e.lb.est, verbose = verbose,
                        effect = sc.pred$data$specs$effect, out.feat = out.feat)
 
     e.lb.ls <- pi.e$lb

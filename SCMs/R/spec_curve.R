@@ -232,11 +232,53 @@ spec_curve <- function(
     const <- constraints[[const_idx]]
     ca <- covagg[[ca_idx]]
     
-    # Create feature names
-    feature_names <- paste0(
-      names(ca), '__',
-      paste0(ca, collapse='_')
-    )
+    # Create feature names - handle both old and new covagg formats
+    # Check if user provided a custom label first
+    if (!is.null(ca$label) && is.character(ca$label) && length(ca$label) == 1) {
+      feature_names <- ca$label
+    } else if (is.list(ca) && "var" %in% names(ca)) {
+      # NEW FORMAT: Create descriptive name from specification
+      spec_parts <- c()
+      spec_parts <- c(spec_parts, ca$var)
+      
+      if (!is.null(ca$each_period) && ca$each_period) {
+        spec_parts <- c(spec_parts, "each_period")
+      } else if (!is.null(ca$average)) {
+        spec_parts <- c(spec_parts, paste0("avg_", ca$average))
+      } else if (!is.null(ca$every_n)) {
+        spec_parts <- c(spec_parts, paste0("every_", ca$every_n))
+      } else if (!is.null(ca$periods)) {
+        spec_parts <- c(spec_parts, paste0("periods_", paste(ca$periods, collapse="-")))
+      } else if (!is.null(ca$first)) {
+        spec_parts <- c(spec_parts, paste0("first_", ca$first))
+      } else if (!is.null(ca$last)) {
+        spec_parts <- c(spec_parts, paste0("last_", ca$last))
+      } else if (!is.null(ca$rolling)) {
+        spec_parts <- c(spec_parts, paste0("roll_", ca$rolling))
+      } else if (!is.null(ca$growth)) {
+        spec_parts <- c(spec_parts, paste0("growth_", ca$growth))
+      } else if (!is.null(ca$volatility)) {
+        spec_parts <- c(spec_parts, paste0("vol_", ca$volatility))
+      }
+      
+      feature_names <- paste(spec_parts, collapse = "_")
+    } else {
+      # OLD FORMAT: Original logic
+      # Check for custom label in old format too
+      if (!is.null(ca$label) && is.character(ca$label) && length(ca$label) == 1) {
+        feature_names <- ca$label
+      } else {
+        # Remove label from the list before processing if it exists
+        ca_for_name <- ca
+        if (!is.null(ca_for_name$label)) {
+          ca_for_name$label <- NULL
+        }
+        feature_names <- paste0(
+          paste(names(ca_for_name), collapse='_'), '__',
+          paste0(ca_for_name, collapse='_')
+        )
+      }
+    }
     
     # Adjust min_period if needed
     local_min_period <- min_period
@@ -274,11 +316,21 @@ spec_curve <- function(
     
     if (!use_cache || !cache_hit) {
       # Estimate Synthetic Control
+      # Ensure ca is in proper format for estimate_sc
+      if (is.list(ca) && "var" %in% names(ca)) {
+        # NEW FORMAT: Wrap single spec in a list with a name
+        ca_formatted <- list()
+        ca_formatted[[names(covagg)[ca_idx]]] <- ca
+      } else {
+        # OLD FORMAT: Use as-is
+        ca_formatted <- ca
+      }
+      
       sc.pred <- 
         estimate_sc(
           dataset2,
           outc,
-          ca,
+          ca_formatted,
           col_name_unit_name,
           name_treated_unit,
           col_name_period,
@@ -292,6 +344,7 @@ spec_curve <- function(
       
       
       if (!is.null(sc.pred)) {
+        
         # Perform inference
         sc.infer <- tryCatch({
           inference_sc(
@@ -370,12 +423,15 @@ spec_curve <- function(
     # Use foreach for parallel execution
     results_list <- foreach::foreach(
       i = 1:nrow(param_grid),
-      .packages = c('data.table', 'digest', 'devtools'),  # Add your package here
+      .packages = c('data.table', 'digest', 'devtools', 'SCMs'),  # Include SCMs package
       .export =  c('estimate_sc', 'inference_sc', 'create_scm_dataset', 
-                   'sim_function', 'most_similar')  # Explicitly export functions
+                   'sim_function', 'most_similar', 'process_covariates',
+                   'process_each_period_dt', 'process_specific_periods_dt',
+                   'process_every_n_periods_dt', 'process_averages_dt',
+                   'process_first_n_dt', 'process_last_n_dt')  # Export new functions
     ) %dopar% {
-      # Load custom SCM package
-      load_all('~/Dropbox/research/synth_control_paper/repo/SCMs/SCMs/')
+      # Load SCMs package (use library instead of load_all for installed package)
+      library(SCMs)
       
       p <- param_grid[i, ]
       process_spec(

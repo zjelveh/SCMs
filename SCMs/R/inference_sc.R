@@ -58,6 +58,38 @@ inference_sc <- function(
     verbose      = TRUE
 ){
   
+  # Check if sc.pred structure is valid
+  if (is.null(sc.pred)) {
+    return(NULL)
+  }
+  
+  if (is.null(sc.pred$data) || is.null(sc.pred$data$specs)) {
+    return(NULL)
+  }
+  
+  # Check column name
+  col_name_unit <- sc.pred$data$specs$col.name.unit
+  
+  if (is.null(col_name_unit)) {
+    # Try to infer the unit column name from common patterns
+    possible_names <- c("country", "state", "unit", "id", "unit_id", "unit_name", "ori9", "stateid")
+    col_name_unit <- NULL
+    for (name in possible_names) {
+      if (name %in% names(dataset)) {
+        col_name_unit <- name
+        break
+      }
+    }
+    
+    if (is.null(col_name_unit)) {
+      return(NULL)
+    }
+  }
+  
+  if (!col_name_unit %in% names(dataset)) {
+    return(NULL)
+  }
+  
   # Start by defining class.type based on sc.pred
   if (!is.null(sc.pred$data$specs) && !is.null(sc.pred$data$specs$class.type)) {
     class.type <- sc.pred$data$specs$class.type
@@ -108,12 +140,16 @@ inference_sc <- function(
     }
   } else {
     # Perform placebo inference
-    inference.results <- inference_placebo(
-      sc.pred = sc.pred,
-      dataset = dataset, 
-      cores = cores,
-      verbose = verbose
-    )
+    inference.results <- tryCatch({
+      inference_placebo(
+        sc.pred = sc.pred,
+        dataset = dataset, 
+        cores = cores,
+        verbose = verbose
+      )
+    }, error = function(e) {
+      return(NULL)
+    })
     
     # Now inference.results contains both taus and rmse
     result <- list(
