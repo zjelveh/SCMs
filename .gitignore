@@ -1,4 +1,6 @@
 .Rproj.user
+.lintr
+sftp.json
+.vscode
 .Rhistory
-.RData
-.Ruserdata
+.Rbuildignore
