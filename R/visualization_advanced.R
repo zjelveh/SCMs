@@ -75,7 +75,7 @@ plot_shapley_distributions <- function(xgb_results, metric = "mean_abs_shap", nc
               vjust = -0.5,
               hjust = -0.1,
               size = 3) +
-    facet_wrap(~feature, scales = "free", ncol = ncol) +
+    facet_wrap(~feature, scales = "free_y", ncol = ncol) +
     labs(title = paste("Distribution of", x_label, "with Treated Unit Values Highlighted"),
          subtitle = paste("Treated Unit:", treated_unit_name),
          x = x_label,

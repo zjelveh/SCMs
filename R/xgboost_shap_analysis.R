@@ -14,6 +14,7 @@ predict <- stats::predict
 #' @param spec_train_test_split Logical. Whether to split specifications for train/test.
 #' @param spec_split_ratio Numeric. Proportion of specifications for training (0-1).
 #' @param spec_features Character vector. Specification features to use as predictors.
+#' @param treated_unit_only Logical. If TRUE, only analyze the treated unit. If FALSE, analyze all units.
 #'
 #' @return List containing configuration parameters for XGBoost SHAP analysis.
 #'
@@ -35,7 +36,8 @@ create_xgboost_config <- function(dataset_name,
                                   outcome_filter = NULL,
                                   spec_train_test_split = TRUE,
                                   spec_split_ratio = 0.7,
-                                  spec_features = c("outcome_model", "const", "fw", "feat")) {
+                                  spec_features = c("outcome_model", "const", "fw", "feat"),
+                                  treated_unit_only = TRUE) {
   
   config <- list(
     dataset_name = dataset_name,
@@ -44,7 +46,8 @@ create_xgboost_config <- function(dataset_name,
     outcome_filter = outcome_filter,
     spec_train_test_split = spec_train_test_split,
     spec_split_ratio = spec_split_ratio,
-    spec_features = spec_features
+    spec_features = spec_features,
+    treated_unit_only = treated_unit_only
   )
   
   return(config)
@@ -308,7 +311,11 @@ analyze_unit_xgboost <- function(unit_data, unit, config, treated_unit_name) {
     shap_dt <- as.data.table(shap_values)
     shap_dt[, unit := unit]
     shap_dt[, is_treated := ifelse(unit == treated_unit_name, treated_unit_name, "Other")]
-    shap_long <- melt(shap_dt, id.vars = c("unit", "is_treated"), variable.name = "feature", value.name = "shapley_value")
+    # Add specification features to identify each row
+    shap_dt <- cbind(shap_dt, spec_features_dt)
+    # Create unique identifier for each specification
+    shap_dt[, spec_id := paste(spec_features_dt, collapse = "_"), by = 1:nrow(shap_dt)]
+    shap_long <- melt(shap_dt, id.vars = c("unit", "is_treated", "spec_id", spec_features), variable.name = "feature", value.name = "shapley_value")
     
     results_dt <- data.table(
       unit = unit, 
@@ -389,8 +396,14 @@ run_xgboost_shap_analysis <- function(config) {
   all_shapley_values <- data.table()
   predictions_dt <- data.table()
 
-  # Get unique units
-  unique_units <- sort(unique(avg_tau_by_spec$unit_name))
+  # Get unique units - filter to treated unit only if specified
+  if(config$treated_unit_only) {
+    unique_units <- config$treated_unit_name
+    cat("Analyzing treated unit only:", unique_units, "\n")
+  } else {
+    unique_units <- sort(unique(avg_tau_by_spec$unit_name))
+    cat("Analyzing all", length(unique_units), "units\n")
+  }
   
   # Process each unit
   for(unit in unique_units) {
