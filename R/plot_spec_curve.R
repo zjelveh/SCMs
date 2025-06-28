@@ -1,337 +1,286 @@
-#' @title Plot Specification Curve for Synthetic Control Method Results
-#' @description This function creates a specification curve plot based on the results from multiple Synthetic Control Method (SCM) estimations across different specifications.
+#' Plot Specification Curve Using Direct Long Format Data
 #'
-#' @param spec_curve_results List. Results from the spec_curve function.
-#' @param outcomes Character vector. Names of the outcome variables to plot.
+#' @title Plot Specification Curve with Perfect SHAP Alignment
+#' @description Creates specification curve plots directly from long format data,
+#' ensuring perfect alignment between SHAP values and specifications through 
+#' shared spec_number identifiers.
+#'
+#' @param long_data Data.table. Long format data from spec_curve(..., output_format = "long").
 #' @param name_treated_unit Character. Name of the treated unit.
+#' @param outcomes Character vector. Names of the outcome variables to plot.
 #' @param normalize_outcomes Logical. Whether to normalize outcomes. Default is FALSE.
 #' @param rmse_threshold Numeric. Threshold for root mean square error to filter results. Default is Inf.
+#' @param shap_values Data.table or NULL. SHAP values from run_xgboost_shap_analysis().
+#'   Should contain spec_number column for perfect alignment. Default is NULL.
 #' @param file_path_save Character or NA. File path to save the plot. If NA, plot is not saved. Default is NA.
 #' @param width Numeric. Width of the saved plot in inches. Default is 6.
 #' @param height Numeric. Height of the saved plot in inches. Default is 10.
 #'
 #' @return A ggplot object representing the specification curve.
 #'
-#'
 #' @export
 #'
 #' @examples
-#' # Example usage (replace with actual example when available)
-#' # plot <- plot_spec_curve(spec_curve_results = my_results, outcomes = c("gdp", "unemployment"),
-#' #                         name_treated_unit = "California", normalize_outcomes = TRUE)
+#' \dontrun{
+#' # New recommended workflow with perfect alignment
+#' 
+#' # 1. Generate long format data
+#' spec_results_long <- spec_curve(
+#'   dataset = your_data,
+#'   outcomes = "num_homicide",
+#'   name_treated_unit = "PAPEP0000",
+#'   output_format = "long"
+#' )
+#' 
+#' # 2. Run SHAP analysis with perfect alignment
+#' config <- create_catboost_config(
+#'   dataset_name = "homicide_study",
+#'   treated_unit_name = "PAPEP0000"
+#' )
+#' shap_results <- run_catboost_shap_analysis(spec_results_long, config)
+#' 
+#' # 3. Plot with guaranteed perfect alignment
+#' plot <- plot_spec_curve(
+#'   long_data = spec_results_long,
+#'   name_treated_unit = "PAPEP0000",
+#'   outcomes = "num_homicide",
+#'   shap_values = shap_results$shapley
+#' )
+#' }
 plot_spec_curve <- function(
-    spec_curve_results,
-    outcomes,
+    long_data,
     name_treated_unit,
-    normalize_outcomes=FALSE,
-    rmse_threshold=Inf,
-    file_path_save=NA,
-    width=6,
-    height=10
-){
-  # Copy input to avoid modifying original data
-  sc = copy(spec_curve_results)
-  
-  # Initialize list to store results
-  sc_results_list = list()
-  
-  # Iterate through all specifications and collect results
-  for(outcome in names(sc)){
-    if(outcome %in% outcomes){
-      for(const in names(sc[[outcome]])){
-        for(fw in names(sc[[outcome]][[const]])){
-          for(feat in names(sc[[outcome]][[const]][[fw]])){
-            for(ds in names(sc[[outcome]][[const]][[fw]][[feat]])){
-              for(ny in names(sc[[outcome]][[const]][[fw]][[feat]][[ds]])){
-                # Get the current result
-                model_specification = sc[[outcome]][[const]][[fw]][[feat]][[ds]][[ny]]
-                
-                # Skip if NULL
-                if (is.null(model_specification)) next
-                
-                tryCatch({
-                  # Check for the new structure
-                  if (!is.null(model_specification$infer) && 
-                      is.list(model_specification$infer) && 
-                      "inference.results" %in% names(model_specification$infer) &&
-                      "rmse" %in% names(model_specification$infer)) {
-                    
-                    # Get treatment effects data
-                    tau_data <- model_specification$infer$inference.results
-                    
-                    # Get RMSE data
-                    rmse_data <- model_specification$infer$rmse
-                    
-                    # Make sure they're data.tables
-                    if (!is.data.table(tau_data)) tau_data <- as.data.table(tau_data)
-                    if (!is.data.table(rmse_data)) rmse_data <- as.data.table(rmse_data)
-                    
-                    # Merge the datasets on the common keys
-                    combined <- merge(
-                      tau_data,
-                      rmse_data,
-                      by = c("unit_name", "unit_type", "outcome_model"),
-                      all.x = TRUE
-                    )
-                    
-                    estee = model_specification$estimate
-                    combined$outcome = outcome
-                    combined$const = const
-                    combined$fw = fw
-                    combined$data_sample = ds
-                    combined$feat = feat
-                    combined$num_pre_period_years = ny
-                    
-                    # Use pre_rmse from the merged data instead of calculating it
-                    # But keep the old way as a fallback
-                    if ("pre_rmse" %in% names(combined)) {
-                      combined$rmse <- combined$pre_rmse
-                    } else {
-                      combined$rmse = sqrt(mean((estee$data$Y.pre-estee$est.results$Y.pre.fit)^2))
-                    }
-                    
-                    # Normalize outcomes if requested
-                    if(normalize_outcomes){
-                      treat_period = estee$treated_period
-                      min_period = estee$min_period
-                      col_name_period = estee$col_name_period
-                      sd_outcome = sd(estee$data$Y.donors)
-                      combined[, tau:=tau/sd_outcome] 
-                    }
-                    
-                    sc_results_list[[length(sc_results_list) + 1]] = combined
-                  } else {
-                    # Old structure fallback
-                    # Try to handle old structure if the new one isn't found
-                    combined = rbindlist(model_specification$infer)
-                    
-                    estee = model_specification$estimate
-                    combined$outcome = outcome
-                    combined$const = const
-                    combined$fw = fw
-                    combined$data_sample = ds
-                    combined$feat = feat
-                    combined$num_pre_period_years = ny
-                    combined$rmse = sqrt(mean((estee$data$Y.pre-estee$est.results$Y.pre.fit)^2))
-                    
-                    # Normalize outcomes if requested
-                    if(normalize_outcomes){
-                      treat_period = estee$treated_period
-                      min_period = estee$min_period
-                      col_name_period = estee$col_name_period
-                      sd_outcome = sd(estee$data$Y.donors)
-                      combined[, tau:=tau/sd_outcome] 
-                    }
-                    
-                    sc_results_list[[length(sc_results_list) + 1]] = combined
-                  }
-                }, error = function(e) {
-                  warning(sprintf("Error processing specification %s/%s/%s/%s/%s/%s: %s", 
-                                  outcome, const, fw, feat, ds, ny, e$message))
-                })
-              } 
-            } 
-          }
-        }
-      }
-    }  
+    outcomes,
+    normalize_outcomes = FALSE,
+    rmse_threshold = Inf,
+    shap_values = NULL,
+    file_path_save = NA,
+    width = 6,
+    height = 10
+) {
+
+  # Libraries imported via NAMESPACE 
+
+  # Input validation
+  if (!data.table::is.data.table(long_data)) {
+    long_data <- data.table::as.data.table(long_data)
   }
   
-  # Combine results and filter based on RMSE threshold
-  if (length(sc_results_list) == 0) {
-    stop("No valid results to plot. Check your results structure or adjust your thresholds.")
+  # Check required columns
+  required_cols <- c("unit_name", "tau", "post_period", "spec_number")
+  missing_cols <- setdiff(required_cols, names(long_data))
+  if (length(missing_cols) > 0) {
+    stop(paste("Missing required columns in long_data:", paste(missing_cols, collapse = ", ")))
   }
   
-  sc_results_df = rbindlist(sc_results_list, fill = TRUE)
-  sc_results_df = sc_results_df[rmse<rmse_threshold]
-  
-  if(nrow(sc_results_df)==0){
-    stop("Not enough specifications to plot after RMSE filtering")
+  # Filter by outcomes
+  if ("outcome" %in% names(long_data)) {
+    sc_results_df <- long_data[outcome %in% outcomes]
+  } else {
+    sc_results_df <- long_data
   }
   
-  # Check if post_period column exists, if not create it
-  if (!"post_period" %in% names(sc_results_df)) {
-    warning("post_period column missing - this may indicate an issue with donor_sample='all'. Creating post_period column based on time periods.")
-    
-    # Create post_period column based on the time column and treated period
-    # We need to infer the treated period from the data
-    if ("time" %in% names(sc_results_df)) {
-      # Find the treated period from the first specification's data
-      treated_periods <- unique(sc_results_df[unit_type == "treated"]$time)
-      if (length(treated_periods) > 0) {
-        treated_start <- min(treated_periods)
-        sc_results_df[, post_period := time >= treated_start]
-      } else {
-        # Fallback: assume post-period is latter half of time periods
-        all_times <- sort(unique(sc_results_df$time))
-        mid_point <- all_times[ceiling(length(all_times)/2)]
-        sc_results_df[, post_period := time >= mid_point]
-      }
-    } else {
-      stop("Cannot create post_period column - no time variable found")
+  # Filter by RMSE if threshold provided
+  if ("rmse" %in% names(sc_results_df) && rmse_threshold < Inf) {
+    sc_results_df <- sc_results_df[rmse < rmse_threshold]
+  }
+  
+  if (nrow(sc_results_df) == 0) {
+    stop("No data remaining after filtering")
+  }
+  
+  # Calculate average effects for plotting (post-treatment period only)
+  average_effect_df <- sc_results_df[
+    post_period == TRUE,
+    .(tau = mean(tau, na.rm = TRUE), rmse = mean(rmse, na.rm = TRUE)),
+    by = c('unit_name', 'spec_number', 'outcome', 'outcome_model', 'const', 'fw', 'feat', 'data_sample', 'num_pre_period_years')
+  ]
+  
+  # Add unit type information
+  average_effect_df[, unit_type := ifelse(unit_name == name_treated_unit, "treated", "control")]
+  
+  # Normalize outcomes if requested
+  if (normalize_outcomes) {
+    # Calculate standard deviation from control units
+    sd_outcome <- sd(average_effect_df[unit_type == "control"]$tau, na.rm = TRUE)
+    if (sd_outcome > 0) {
+      average_effect_df[, tau := tau / sd_outcome]
     }
   }
-  
-  # Calculate average effects AND keep RMSE values
-  average_effect_df = sc_results_df[
-    post_period==TRUE,
-    .(tau=mean(tau), rmse=mean(rmse)), # Keep RMSE by taking mean per specification
-    by=c('unit_name', 'outcome', 'outcome_model', 'data_sample',
-         'const', 'unit_type', 'fw', 'feat', 'num_pre_period_years')]
-  
-  # Sort and number specifications
-  df_treated_sorted = average_effect_df[unit_name==name_treated_unit]
-  df_treated_sorted = df_treated_sorted[order(tau)]
-  df_treated_sorted[, new_spec_number:=1:.N]
-  
-  # Keep these columns from the sorted data
-  keep_cols = c('outcome', 'outcome_model', 'const', 'fw', 'feat', 'data_sample', 
-                'num_pre_period_years', 'new_spec_number')
-  df_treated_sorted = df_treated_sorted[, ..keep_cols]
-  
-  # Merge and prepare final dataset for plotting
-  match_cols = c('outcome', 'outcome_model', 'const', 'fw', 'feat', 'data_sample', 'num_pre_period_years')
-  average_effect_df_all = merge(average_effect_df, df_treated_sorted, by=match_cols)
-  average_effect_df_all = average_effect_df_all[order(new_spec_number,-unit_type)]
-  
-  # Rename and recode variables for clarity
-  average_effect_df_all[const=='simplex', const:="SCM Weights - Original"]
-  average_effect_df_all[const=='lasso', const:="SCM Weights - Penalty Lasso"]
-  average_effect_df_all[const=='ridge', const:="SCM Weights - Penalty Ridge"]
-  average_effect_df_all[const=='ols', const:="OLS (unconstrated) Weights"]
-  
 
-  # Use setnames individually to avoid length mismatch errors
-  setnames(average_effect_df_all, 'const', 'Weight_Method')
-  setnames(average_effect_df_all, 'tau', 'Estimate')
-  setnames(average_effect_df_all, 'outcome', 'Outcome')
-  setnames(average_effect_df_all, 'outcome_model', 'Outcome\nModel')
-  setnames(average_effect_df_all, 'Weight_Method', 'Weight\nMethod')
-  setnames(average_effect_df_all, 'fw', 'V Weights')
-  setnames(average_effect_df_all, 'feat', 'Matching\nVars')
-  setnames(average_effect_df_all, 'data_sample', 'Donor\nPool')
-  setnames(average_effect_df_all, 'num_pre_period_years', 'Pre Length')
-  setnames(average_effect_df_all, 'unit_name', 'Unit Name')
-  setnames(average_effect_df_all, 'unit_type', 'Unit Type')
-  setnames(average_effect_df_all, 'rmse', 'RMSE')
-  setnames(average_effect_df_all, 'new_spec_number', 'Specification')
+ average_effect_df_long = melt(average_effect_df, c('unit_name', 'spec_number', 'tau', 'rmse', 'unit_type'), 
+                              variable.name = 'feature_group', value.name = 'feature')
+average_effect_df_long = average_effect_df_long[unit_name==name_treated_unit & feature_group%in%shap_values$feature_group]
+
+average_effect_df_long_shap = merge(average_effect_df_long, 
+                                    shap_values, by.x=c('unit_name', 'spec_number',
+                                                        'feature_group', 'feature'),
+                                    by.y=c('unit', 'spec_number', 'feature_group', 'feature'))
+
+
+setnames(average_effect_df_long_shap, c('tau', 'unit_name', 'rmse', 'spec_number'),
+         c('Estimate', 'Unit Name', 'RMSE', 'Specification'))
+# Rename columns to match original plotting expectations
+average_effect_df_long_shap[feature_group=='const', feature_group:= 'Weight\nMethod']
+average_effect_df_long_shap[feature_group=='outcome', feature_group:=  'Outcome']
+average_effect_df_long_shap[feature_group=='outcome_model', feature_group:= 'Outcome\nModel']
+average_effect_df_long_shap[feature_group== 'fw', feature_group:= 'V Weights']
+average_effect_df_long_shap[feature_group== 'data_sample', feature_group:='Donor\nPool']
+average_effect_df_long_shap[feature_group== 'num_pre_period_years', feature_group:='Pre Length']
+
+# Transform constraint names to match original format
+average_effect_df_long_shap[feature == 'simplex', feature := "Original"]
+average_effect_df_long_shap[feature == 'lasso', feature := "Original + Penalty Lasso"]
+average_effect_df_long_shap[feature == 'ridge', feature := "Original + Penalty Ridge"]
+average_effect_df_long_shap[feature == 'ols', feature := "OLS Weights"]
+average_effect_df_long_shap[, Type := 'Average']
+
+control_effects = average_effect_df[unit_type=='control']
+
+
+# --- 1. Data Preparation ---
+
+# Assume 'average_effect_df_long_shap' and 'control_effects' are your starting data.tables
+
+# Prepare data for the top plot (p1)
+# Get unique estimates for the treated unit
+treated_estimates <- unique(average_effect_df_long_shap[, .(
+  Specification,
+  Estimate,
+  RMSE,
+  unit_type
+)])
+
+# Standardize column names for control unit data
+setnames(control_effects,
+         old = c("unit_name", "spec_number", "tau", "rmse"),
+         new = c("Unit Name", "Specification", "Estimate", "RMSE"))
+
+# Combine treated and control data for the main effect plot
+plot_data_p1 <- rbindlist(list(
+  treated_estimates,
+  control_effects[, .(Specification, Estimate, RMSE, unit_type)]
+), use.names = TRUE, fill = TRUE)
+
+# Ensure 'unit_type' is a factor to control plotting order and legend
+plot_data_p1[, unit_type := factor(unit_type, levels = c("treated", "control"))]
+
+# Prepare data for the bottom plot (p2)
+# The data is already in the correct "long" format for the tick marks
+plot_data_p2 <- average_effect_df_long_shap
+
+# FIX: Calculate RMSE quartiles across ALL units, not just treated.
+# This uses all non-missing RMSE values to define the scale.
+all_rmse_data <- plot_data_p1 %>%
+  filter(!is.na(RMSE)) %>%
+  pull(RMSE)
+
+# Ensure there are no issues with non-finite values for quantile calculation
+if (length(all_rmse_data) > 0) {
+  rmse_quartiles <- quantile(all_rmse_data, probs = c(0, 1/3, 2/3, 1.0), na.rm = TRUE)
+} else {
+  # Provide a fallback if there's no RMSE data, to prevent crashes
+  rmse_quartiles <- c(0, 1)
+}
+
+plot_data_p1[, bin_q:= cut(RMSE, rmse_quartiles)]
+table(plot_data_p1$bin_q)
+plot_data_p1[, circle_size:=mean(RMSE) , by=.(bin_q)]
+
+# --- 2. Create the Final Plots ---
+
+p1 <- plot_data_p1 %>%
+  # Set up all aesthetics in the main ggplot() call
+  ggplot(aes(
+    x = Specification,
+    y = Estimate,
+    fill = unit_type,
+    size = RMSE,
+    alpha = unit_type
+  )) +
   
-  average_effect_df_all[, Type:='Average']
+  # Draw all points using a single layer
+  geom_point(shape = 21) +
+  geom_hline(yintercept = 0, alpha = 0.5, linetype = 'dashed') +
   
-  estimates = copy(average_effect_df_all)
+  # --- Define the Scales for Each Mapped Aesthetic ---
   
-  spec_cols = c('Outcome', 'Outcome\nModel',
-                'Weight\nMethod', 'V Weights', 'Matching\nVars', 
-                'Donor\nPool', 'Pre Length')
+  scale_fill_manual(
+    name = "Unit Type",
+    values = c(treated = "deepskyblue3", control = "firebrick3")
+  ) +
   
-  df = copy(estimates[!is.na(Estimate)])
-  var = df$Estimate
+  scale_size(
+    name = "Pre-period Fit (RMSE)",
+    range = c(0.5, 5), # Maps the data domain to a visual size range of 5 (large) to 0.5 (small)
+    breaks = sort(unique(plot_data_p1[!is.na(bin_q)]$circle_size)),
+    labels = scales::number_format(accuracy = 0.1)
+  ) +
   
-  group = NULL
-  choices = c(spec_cols)
-  desc = FALSE
-  null = 0
+  scale_alpha_manual(
+    name = "Unit Type", # Use the same name as `scale_fill_manual` to merge legends
+    values = c(treated = 0.8, control = 0.25)
+  ) +
   
-  value <- key <- NULL
-  var <- enquo(var)
-  group <- enquo(group)
+  # --- Final Touches ---
   
+  # A simpler guides call to ensure the legends look correct
+  guides(
+    alpha = "none", # Don't draw a separate legend for alpha
+    size = guide_legend(title.position = "top"),
+    fill = guide_legend(override.aes = list(alpha = 1, size = 4)) # Make legend glyphs opaque and larger
+  ) +
   
-  # Clean up variable names
-  df$`Matching\nVars` = gsub('every_period__', '', df$`Matching\nVars`)
-  df$`Matching\nVars` = gsub('c\\(|\\)', '', df$`Matching\nVars`)
-  
-  df2 = df[!duplicated(Specification)]  
-  var = df2$Estimate
-  
-  
-  # Create specification plot
-  p2 = df2 %>%
-    format_results(var = var, group = group, null = null, desc = desc) %>%
-    tidyr::gather(key, value, choices) %>%
-    dplyr::mutate(key = factor(.data$key, levels = choices)) %>%
-    ggplot(aes(x = .data$Specification,
-               y = .data$value,
-               color = .data$color)) +
-    geom_point(aes(x = .data$Specification,
-                   y = .data$value),
-               shape = 124,
-               size = 3.35) +
-    scale_color_identity() +
-    theme_minimal() +
-    facet_grid(.data$key~1, scales = "free_y", space = "free_y") +
-    theme(
-      axis.line = element_line("black", size = .5),
-      legend.position = "none",
-      panel.spacing = unit(.75, "lines"),
-      axis.text = element_text(colour = "black"),
-      strip.text.x = element_blank(),
-      strip.text.y = element_text(angle = 90, hjust = 0.5)) +
-    labs(x = "", y = "")
-  
-  var = df$Estimate
-  
-  # Create main effect plot
-  p1inf <- df %>%
-    format_results(var = var, group = group, null = null, desc = desc) %>%
-    ggplot(aes(x = .data$RMSE,
-               y = .data$Estimate,
-               fill = `Unit Type`,
-               color = `Unit Type`)
-           ) + 
-    geom_point(aes(alpha = `Unit Type`)) +
-    theme_minimal() +
-    scale_alpha_manual(values = c("treated" = 1, "control" = .25)) +
-    scale_size_continuous(name = "Model Fit", 
-                          guide = guide_legend(title = "Pre-period Fit",
-                                               reverse = TRUE,
-                                               override.aes = list(alpha = 1))) +
-    geom_hline(yintercept=0, alpha=.5, linetype='dashed') + 
-    theme(strip.text = element_blank(),
-          axis.line = element_line("black", size = .5),
-          legend.position = "right",
-          panel.spacing = unit(.75, "lines"),
-          axis.text = element_text(colour = "black")) +
-    labs(x = "RMSE", y='Average Annual Treatment Effect')
-  
-  # Create main effect plot with point size varying by RMSE
-  p1 <- df %>%
-    format_results(var = var, group = group, null = null, desc = desc) %>%
-    ggplot(aes(x = .data$Specification,
-               y = .data$Estimate,
-               fill = `Unit Type`,
-               color = `Unit Type`,
-               size = (.data$RMSE))) +  # Inverse RMSE for size (larger = better fit)
-    geom_point(aes(alpha = `Unit Type`)) +
-    theme_minimal() +
-    scale_alpha_manual(values = c("treated" = 1, "control" = .25)) +
-    scale_size_continuous(name = "Model Fit", 
-                          guide = guide_legend(title = "Pre-period Fit",
-                                               reverse = TRUE,
-                                               override.aes = list(alpha = 1))) +
-    geom_hline(yintercept=0, alpha=.5, linetype='dashed') + 
-    theme(strip.text = element_blank(),
-          axis.line = element_line("black", size = .5),
-          legend.position = "right",
-          panel.spacing = unit(.75, "lines"),
-          axis.text = element_text(colour = "black")) +
-    labs(x = "Specification #", y='Average Annual Treatment Effect')
-  
-  
-  # Combine plots
-  p = cowplot::plot_grid(p1,
-                         p2,
-                         labels = c('A','B'),
-                         align = "v",
-                         axis = "rbl",
-                         rel_heights = c(.5,.5),
-                         ncol = 1
-  )
-  
-  # Save plot if file path is provided
-  if(!is.na(file_path_save)){
-    ggsave(file_path_save, plot = p, width=width, height = height)
-  }
-  
-  return(p)
+  theme_minimal() +
+  theme(
+    legend.position = "right",
+    legend.box = "vertical",
+    axis.line = element_line(color = "black", linewidth = 0.5),
+    axis.text = element_text(colour = "black")
+  ) +
+  labs(x = NULL, y = 'Average Treatment Effect')
+
+# Now you can print p1 and combine it with p2 using plot_grid as before.
+# print(p1)
+# p2: Specification Choices and Shapley Values (Bottom) - No changes
+# ... (p2 code remains the same as the previous version) ...
+p2 <- ggplot(plot_data_p2, aes(x = Specification, y = feature)) +
+  geom_point(aes(color = shapley_value), shape = 15, size = 2.5) +
+  scale_color_gradient2(
+    name = "Shapley Value",
+    low = "#7b3294",
+    mid = "grey85",
+    high = "#008837",
+    midpoint = 0
+  ) +
+  facet_grid(feature_group ~ ., scales = "free_y", space = "free_y", switch = "y") +
+  theme_minimal() +
+  theme(
+    axis.line.x = element_line(color = "black", linewidth = 0.5),
+    axis.text.y = element_text(colour = "black", size = 8),
+    strip.placement = "outside",
+    strip.text.y.left = element_text(angle = 0, hjust = 1, face = "bold"),
+    panel.spacing = unit(1, "lines"),
+    legend.position = "bottom",
+    legend.key.width = unit(1.5, "cm")
+  ) +
+  labs(x = "Specification Number", y = "")
+
+
+# --- 3. Combine Plots (No changes) ---
+final_plot <- plot_grid(
+  p1,
+  p2,
+  ncol = 1,
+  align = 'v',
+  axis = "lr",
+  rel_heights = c(0.55, 0.45)
+)
+
+# Save plot if file path is provided
+if (!is.na(file_path_save)) {
+  ggplot2::ggsave(file_path_save, plot = final_plot, width = width, height = height)
+}
+
+return(final_plot)
 }

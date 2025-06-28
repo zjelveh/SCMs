@@ -70,23 +70,23 @@ spec_results <- run_spec_curve_analysis(config)
 plot_spec_curve(spec_results)
 ```
 
-### XGBoost + SHAP Analysis
+### CatBoost + SHAP Analysis
 
 ```r
-# Configure XGBoost analysis
-xgb_config <- create_xgboost_config(
+# Configure CatBoost analysis
+catboost_config <- create_catboost_config(
   dataset_name = "my_study",
-  file_path = "spec_curve_results.csv",
+  
   treated_unit_name = "TREATED_ID",
   outcome_filter = "outcome_variable"
 )
 
-# Run XGBoost + SHAP analysis
-xgb_results <- run_xgboost_shap_analysis(xgb_config)
+# Run CatBoost + SHAP analysis
+catboost_results <- run_catboost_shap_analysis(catboost_config)
 
 # Create advanced visualizations
-plot_shapley_distributions(xgb_results)
-plot_interaction_heatmap(xgb_results)
+plot_shapley_distributions(catboost_results)
+plot_interaction_heatmap(catboost_results)
 ```
 
 ## Package Structure

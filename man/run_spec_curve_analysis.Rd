@@ -13,18 +13,18 @@ run_spec_curve_analysis(dataset, outcomes = NULL, params, output_dir = NULL)
 
 \item{params}{List containing analysis parameters including:
 \itemize{
-  \item \code{outcomes} - Character vector of outcome variables
-  \item \code{col_name_unit_name} - Column name for unit identifiers
-  \item \code{name_treated_unit} - Name of treated unit
-  \item \code{covagg} - List of covariate specifications
-  \item \code{treated_period} - Treatment start period
-  \item \code{min_period} - Minimum period for analysis
-  \item \code{end_period} - Maximum period for analysis
-  \item \code{col_name_period} - Column name for time periods
-  \item \code{feature_weights} - Feature weighting methods
-  \item \code{donor_sample} - Donor sample selection methods
-  \item \code{outcome_models} - Outcome modeling approaches
-  \item \code{constraints} - Weight constraint specifications
+\item \code{outcomes} - Character vector of outcome variables
+\item \code{col_name_unit_name} - Column name for unit identifiers
+\item \code{name_treated_unit} - Name of treated unit
+\item \code{covagg} - List of covariate specifications
+\item \code{treated_period} - Treatment start period
+\item \code{min_period} - Minimum period for analysis
+\item \code{end_period} - Maximum period for analysis
+\item \code{col_name_period} - Column name for time periods
+\item \code{feature_weights} - Feature weighting methods
+\item \code{donor_sample} - Donor sample selection methods
+\item \code{outcome_models} - Outcome modeling approaches
+\item \code{constraints} - Weight constraint specifications
 }}
 
 \item{output_dir}{Character. Directory to save results. If NULL, results are not saved.}
@@ -35,6 +35,9 @@ List containing specification curve results for all parameter combinations.
 \description{
 Performs specification curve analysis across multiple modeling choices
 and configurations, providing a systematic exploration of researcher degrees of freedom.
+}
+\details{
+Run Comprehensive Specification Curve Analysis
 }
 \examples{
 \dontrun{

@@ -22,8 +22,10 @@
 #'     \item \code{constraints} - Weight constraint specifications
 #'   }
 #' @param output_dir Character. Directory to save results. If NULL, results are not saved.
+#' @param output_format Character. Format of returned results: "nested" (default), "long", or "both".
+#'   See \code{spec_curve} for details.
 #'
-#' @return List containing specification curve results for all parameter combinations.
+#' @return Results from \code{spec_curve} in format specified by \code{output_format}.
 #'
 #' @export
 #'
@@ -50,7 +52,7 @@
 #' # Run analysis
 #' results <- run_spec_curve_analysis(dataset, params = params)
 #' }
-run_spec_curve_analysis <- function(dataset, outcomes = NULL, params, output_dir = NULL) {
+run_spec_curve_analysis <- function(dataset, outcomes = NULL, params, output_dir = NULL, output_format = "nested") {
   # Check if outcomes is provided as an argument or in params
   if (is.null(outcomes)) {
     # Use outcomes from params if not explicitly provided
@@ -76,6 +78,9 @@ run_spec_curve_analysis <- function(dataset, outcomes = NULL, params, output_dir
     all_params$dataset <- dataset
   }
   
+  # Add output_format parameter
+  all_params$output_format <- output_format
+  
   # Call spec_curve with all parameters
   results <- do.call(spec_curve, all_params)
   
@@ -93,9 +98,10 @@ run_spec_curve_analysis <- function(dataset, outcomes = NULL, params, output_dir
 #'
 #' @title Extract and Compile Specification Curve Results
 #' @description Extracts treatment effects and RMSE data from specification curve
-#' results and compiles them into a single data frame for further analysis.
+#' results and ensures output is in long format. Handles both nested results (traditional)
+#' and long format data (new) for backward compatibility.
 #'
-#' @param results List containing specification curve results from \code{run_spec_curve_analysis}.
+#' @param results List or data.table. Results from \code{spec_curve} in any supported format.
 #'
 #' @return Data table containing compiled results with columns:
 #'   \itemize{
@@ -120,9 +126,25 @@ run_spec_curve_analysis <- function(dataset, outcomes = NULL, params, output_dir
 #' compiled_results <- extract_spec_curve_results(spec_curve_results)
 #' }
 extract_spec_curve_results <- function(results) {
+  # Check if input is already in long format
+  if (data.table::is.data.table(results)) {
+    # Input is already long format, return as-is
+    message("Input detected as long format data.table, returning as-is")
+    return(results)
+  } else if (is.list(results) && "long" %in% names(results)) {
+    # Input is a list with long format data (from output_format = "both")
+    message("Input detected as list containing long format, extracting long data")
+    return(results$long)
+  } else if (is.list(results) && length(results) > 0 && all(sapply(results, is.list))) {
+    # Input is nested format, process as before
+    message("Input detected as nested format, extracting to long format")
+  } else {
+    stop("Unrecognized input format. Expected nested list, long format data.table, or list with 'long' component.")
+  }
+  
   sc_results_list <- list()
   
-  # Loop through all model specifications and compile results
+  # Loop through all model specifications and compile results (nested format processing)
   for(outcome in names(results)) {
     for(const in names(results[[outcome]])) {
       for(fw in names(results[[outcome]][[const]])) {
@@ -151,9 +173,9 @@ extract_spec_curve_results <- function(results) {
                   
                   # Check if both datasets exist
                   if (!is.null(tau_data) && !is.null(rmse_data)) {
-                    # Make sure they're data.tables
-                    if (!is.data.table(tau_data)) tau_data <- as.data.table(tau_data)
-                    if (!is.data.table(rmse_data)) rmse_data <- as.data.table(rmse_data)
+                    # Make sure they're data.tables (using setDT for efficiency)
+                    if (!is.data.table(tau_data)) setDT(tau_data)
+                    if (!is.data.table(rmse_data)) setDT(rmse_data)
                     
                     # Merge the datasets on the common keys
                     merged_data <- merge(

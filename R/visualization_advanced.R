@@ -4,7 +4,7 @@
 #' @description Creates histograms of SHAP values across all units with the
 #' treated unit's values highlighted as vertical lines.
 #'
-#' @param xgb_results List. Results from \code{run_xgboost_shap_analysis}.
+#' @param catboost_results List. Results from \code{run_catboost_shap_analysis}.
 #' @param metric Character. Which SHAP metric to plot ("mean_shap", "sd_shap", or "mean_abs_shap").
 #' @param ncol Integer. Number of columns for facet layout.
 #'
@@ -15,15 +15,15 @@
 #' @examples
 #' \dontrun{
 #' # Plot mean absolute SHAP values
-#' p <- plot_shapley_distributions(xgb_results, metric = "mean_abs_shap")
+#' p <- plot_shapley_distributions(catboost_results, metric = "mean_abs_shap")
 #' print(p)
 #' }
-plot_shapley_distributions <- function(xgb_results, metric = "mean_abs_shap", ncol = 2) {
+plot_shapley_distributions <- function(catboost_results, metric = "mean_abs_shap", ncol = 2) {
   # Extract results data table
-  results_dt <- xgb_results$results
+  results_dt <- catboost_results$results
   
   # Get the treated unit name from config
-  treated_unit_name <- xgb_results$config$treated_unit_name
+  treated_unit_name <- catboost_results$config$treated_unit_name
   
   if(nrow(results_dt) == 0 || is.null(results_dt)) {
     stop("No results available to plot")
@@ -97,7 +97,7 @@ plot_shapley_distributions <- function(xgb_results, metric = "mean_abs_shap", nc
 #' @description Computes how much variance in treatment effects is explained
 #' by individual specification features and their pairwise interactions.
 #'
-#' @param xgb_results List. Results from \code{run_xgboost_shap_analysis}.
+#' @param catboost_results List. Results from \code{run_catboost_shap_analysis}.
 #' @param dataset_name Character. Name for the dataset (for labeling).
 #'
 #' @return List containing:
@@ -113,21 +113,21 @@ plot_shapley_distributions <- function(xgb_results, metric = "mean_abs_shap", nc
 #' @examples
 #' \dontrun{
 #' # Calculate specification interactions
-#' interactions <- calculate_specification_interactions(xgb_results, "homicide_study")
+#' interactions <- calculate_specification_interactions(catboost_results, "homicide_study")
 #' }
-calculate_specification_interactions <- function(xgb_results, dataset_name) {
+calculate_specification_interactions <- function(catboost_results, dataset_name) {
   # Check if results exist
-  if(is.null(xgb_results) || is.null(xgb_results$predictions) || 
-     nrow(xgb_results$predictions) == 0) {
+  if(is.null(catboost_results) || is.null(catboost_results$predictions) || 
+     nrow(catboost_results$predictions) == 0) {
     warning("Missing prediction data for dataset: ", dataset_name)
     return(NULL)
   }
 
   # Get treated unit name
-  treated_unit <- xgb_results$config$treated_unit_name
+  treated_unit <- catboost_results$config$treated_unit_name
 
   # Extract predictions data
-  preds_data <- xgb_results$predictions
+  preds_data <- catboost_results$predictions
 
   # Get specification features
   spec_features <- c("outcome_model", "const", "fw", "feat", "data_sample")

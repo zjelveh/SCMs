@@ -26,7 +26,7 @@ fn.V <- function(
     sigf.ipop = 5,
     bound.ipop = 10
 ) {
-  library(kernlab)
+  # kernlab functions imported via NAMESPACE
   
   # Create diagonal V matrix from variables
   V <- diag(x = as.numeric(abs(variables.v) / sum(abs(variables.v))),

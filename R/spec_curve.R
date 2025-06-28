@@ -1,3 +1,67 @@
+#' Add Specification Numbering to Long Format Data
+#'
+#' @param long_df Data.table in long format from spec curve analysis
+#' @param name_treated_unit Character. Name of the treated unit
+#' @param verbose Logical. Whether to display progress messages
+#'
+#' @return Data.table with added spec_number and spec_combination columns
+#'
+#' @keywords internal
+add_specification_numbering <- function(long_df, name_treated_unit, verbose = TRUE) {
+  # Check if post_period column exists, create if needed
+  if (!"post_period" %in% names(long_df)) {
+    if (verbose) message("Creating post_period column from time data")
+    if ("time" %in% names(long_df)) {
+      treated_periods <- unique(long_df[unit_type == "treated"]$time)
+      if (length(treated_periods) > 0) {
+        treated_start <- min(treated_periods)
+        long_df[, post_period := time >= treated_start]
+      } else {
+        all_times <- sort(unique(long_df$time))
+        mid_point <- all_times[ceiling(length(all_times)/2)]
+        long_df[, post_period := time >= mid_point]
+      }
+    } else {
+      stop("Cannot create post_period column - no time variable found")
+    }
+  }
+  
+  # Calculate average effects for specification ordering
+  spec_cols <- c('outcome', 'outcome_model', 'const', 'fw', 'feat', 'data_sample', 'num_pre_period_years')
+  available_spec_cols <- intersect(spec_cols, names(long_df))
+  
+  average_effect_df <- long_df[
+    post_period == TRUE,
+    .(tau = mean(tau, na.rm = TRUE)),
+    by = c('unit_name', available_spec_cols)
+  ]
+  
+  # Sort specifications by treated unit tau (matching plot_spec_curve logic)
+  df_treated_sorted <- average_effect_df[unit_name == name_treated_unit]
+  df_treated_sorted <- df_treated_sorted[order(tau)]
+  df_treated_sorted[, spec_number := 1:.N]
+  
+  # Create specification combination identifier
+  df_treated_sorted[, spec_combination := do.call(paste, c(.SD, sep = "_")), .SDcols = available_spec_cols]
+  
+  # Create mapping for all data
+  spec_mapping <- df_treated_sorted[, .(spec_combination, spec_number, tau_treated = tau)]
+  spec_mapping[, tau_treated := NULL]  # Remove tau to avoid conflicts
+  
+  # Add spec_combination to all data
+  long_df[, spec_combination := do.call(paste, c(.SD, sep = "_")), .SDcols = available_spec_cols]
+  
+  # Merge specification numbers back to all data
+  long_df <- merge(long_df, spec_mapping, by = "spec_combination", all.x = TRUE)
+  
+  if (verbose) {
+    n_specs <- length(unique(long_df$spec_number[!is.na(long_df$spec_number)]))
+    message(paste("Added specification numbering for", n_specs, "specifications"))
+  }
+  
+  return(long_df)
+}
+
 #' Generate Specification Curve for Synthetic Control Method
 #'
 #' This function performs comprehensive specification curve analysis for Synthetic Control Methods
@@ -48,6 +112,12 @@
 #' @param cache_dir Character. Directory path for storing cache files when \code{use_cache = TRUE}.
 #'   Default is temporary directory from \code{tempdir()}.
 #' @param verbose Logical. Whether to display progress messages and warnings. Default is TRUE.
+#' @param output_format Character. Format of the returned results:
+#'   \itemize{
+#'     \item \code{"nested"} - Traditional nested list structure (default, for backward compatibility)
+#'     \item \code{"long"} - Long format data.table with specification numbers for easy analysis
+#'     \item \code{"both"} - Returns both nested and long formats in a named list
+#'   }
 #'
 #' @details
 #' The function creates a Cartesian product of all specification choices and estimates synthetic controls
@@ -157,12 +227,19 @@ spec_curve <- function(
     cores = 1,
     use_cache = FALSE,
     cache_dir = tempdir(),
-    verbose = TRUE
+    verbose = TRUE,
+    output_format = "nested"
 ) {
   # Input validation
   if (!any(c("data.frame", "data.table") %in% class(dataset))) {
     stop("dataset must be a data.frame or data.table")
   }
+  
+  # Validate output_format parameter
+  output_format <- match.arg(output_format, choices = c("nested", "long", "both"))
+  
+  # Initialize long format collection if needed
+  collect_long_format <- output_format %in% c("long", "both")
   
   # Ensure dataset is a data.table for faster operations
   if (!data.table::is.data.table(dataset)) {
@@ -286,9 +363,9 @@ spec_curve <- function(
       local_min_period <- treated_period - ny
     }
     
-    # Select donor sample
+    # Select donor sample (avoid unnecessary copy for 'all')
     if (ds == 'all') {
-      dataset2 <- data.table::copy(dataset)
+      dataset2 <- dataset  # No copy needed if not modifying
     } else if (ds == 'most_similar') {
       dataset2 <- donor_samples[[outc]]
     }
@@ -414,11 +491,40 @@ spec_curve <- function(
   
   # Run specifications (parallel or sequential)
   if (cores > 1 && total_specs > 1) {
-    # Setup parallel backend
-    cl <- parallel::makeCluster(cores)
-    doParallel::registerDoParallel(cl)
-    on.exit(parallel::stopCluster(cl))
+    # Limit cores to reasonable maximum and available cores
+    max_cores <- min(cores, parallel::detectCores(), total_specs)
     
+    if (verbose) {
+      cat("Setting up parallel processing with", max_cores, "cores\n")
+    }
+    
+    # Setup parallel backend with error handling
+    tryCatch({
+      # Ensure required packages are loaded
+      if (!requireNamespace("doParallel", quietly = TRUE)) {
+        stop("doParallel package not available")
+      }
+      if (!requireNamespace("foreach", quietly = TRUE)) {
+        stop("foreach package not available")
+      }
+      
+      cl <- parallel::makeCluster(max_cores)
+      doParallel::registerDoParallel(cl)
+      on.exit(parallel::stopCluster(cl))
+      
+      if (verbose) {
+        cat("✓ Parallel backend registered successfully\n")
+      }
+    }, error = function(e) {
+      warning("Failed to setup parallel processing: ", e$message, ". Falling back to sequential processing.")
+      cores <<- 1  # Force sequential processing
+    })
+    
+  }
+  
+  # Execute specifications
+  if (cores > 1 && total_specs > 1) {
+    # Packages for parallel execution imported via NAMESPACE
     
     # Use foreach for parallel execution
     results_list <- foreach::foreach(
@@ -430,8 +536,7 @@ spec_curve <- function(
                    'process_every_n_periods_dt', 'process_averages_dt',
                    'process_first_n_dt', 'process_last_n_dt')  # Export new functions
     ) %dopar% {
-      # Load SCMs package (use library instead of load_all for installed package)
-      library(SCMs)
+      # SCMs package functions available in parallel worker
       
       p <- param_grid[i, ]
       process_spec(
@@ -490,33 +595,113 @@ spec_curve <- function(
     }
   }
   
-  # Convert flat results list to nested structure
+  # Process results into nested structure and/or long format
   nested_results <- list()
+  long_results_list <- list()
+
   for (res in results_list) {
     if (!is.null(res) && !is.null(res$result)) {
-      # Initialize nested structure if needed
-      if (!res$outc %in% names(nested_results)) {
-        nested_results[[res$outc]] <- list()
-      }
-      if (!res$const_name %in% names(nested_results[[res$outc]])) {
-        nested_results[[res$outc]][[res$const_name]] <- list()
-      }
-      if (!res$fw %in% names(nested_results[[res$outc]][[res$const_name]])) {
-        nested_results[[res$outc]][[res$const_name]][[res$fw]] <- list()
-      }
-      if (!res$feature_names %in% names(nested_results[[res$outc]][[res$const_name]][[res$fw]])) {
-        nested_results[[res$outc]][[res$const_name]][[res$fw]][[res$feature_names]] <- list()
-      }
-      if (!res$ds %in% names(nested_results[[res$outc]][[res$const_name]][[res$fw]][[res$feature_names]])) {
-        nested_results[[res$outc]][[res$const_name]][[res$fw]][[res$feature_names]][[res$ds]] <- list()
+      
+      # Create nested structure (for backward compatibility)
+      if (output_format %in% c("nested", "both")) {
+        # Initialize nested structure if needed
+        if (!res$outc %in% names(nested_results)) {
+          nested_results[[res$outc]] <- list()
+        }
+        if (!res$const_name %in% names(nested_results[[res$outc]])) {
+          nested_results[[res$outc]][[res$const_name]] <- list()
+        }
+        if (!res$fw %in% names(nested_results[[res$outc]][[res$const_name]])) {
+          nested_results[[res$outc]][[res$const_name]][[res$fw]] <- list()
+        }
+        if (!res$feature_names %in% names(nested_results[[res$outc]][[res$const_name]][[res$fw]])) {
+          nested_results[[res$outc]][[res$const_name]][[res$fw]][[res$feature_names]] <- list()
+        }
+        if (!res$ds %in% names(nested_results[[res$outc]][[res$const_name]][[res$fw]][[res$feature_names]])) {
+          nested_results[[res$outc]][[res$const_name]][[res$fw]][[res$feature_names]][[res$ds]] <- list()
+        }
+        
+        # Assign result
+        nested_results[[res$outc]][[res$const_name]][[res$fw]][[res$feature_names]][[res$ds]][[res$pre_period_label]] <- res$result
       }
       
-      # Assign result
-      nested_results[[res$outc]][[res$const_name]][[res$fw]][[res$feature_names]][[res$ds]][[res$pre_period_label]] <- res$result
+      # Collect long format data
+      if (collect_long_format) {
+        # Extract data from the result structure
+        if (!is.null(res$result$infer) && 
+            is.list(res$result$infer) && 
+            "inference.results" %in% names(res$result$infer) &&
+            "rmse" %in% names(res$result$infer)) {
+          
+          # Get treatment effects data
+          tau_data <- res$result$infer$inference.results
+          rmse_data <- res$result$infer$rmse
+          
+          # Make sure they're data.tables (using setDT for efficiency)
+          if (!data.table::is.data.table(tau_data)) data.table::setDT(tau_data)
+          if (!data.table::is.data.table(rmse_data)) data.table::setDT(rmse_data)
+          
+          # Merge the datasets on the common keys
+          combined <- merge(
+            tau_data,
+            rmse_data,
+            by = c("unit_name", "unit_type", "outcome_model"),
+            all.x = TRUE
+          )
+          
+          # Add specification metadata
+          combined$outcome <- res$outc
+          combined$const <- res$const_name
+          combined$fw <- res$fw
+          combined$data_sample <- res$ds
+          combined$feat <- res$feature_names
+          combined$num_pre_period_years <- res$pre_period_label
+          
+          # Use pre_rmse from the merged data if available
+          if ("pre_rmse" %in% names(combined)) {
+            combined$rmse <- combined$pre_rmse
+          } else if (!is.null(res$result$estimate)) {
+            estee <- res$result$estimate
+            combined$rmse <- sqrt(mean((estee$data$Y.pre - estee$est.results$Y.pre.fit)^2))
+          }
+          
+          long_results_list[[length(long_results_list) + 1]] <- combined
+        }
+      }
     }
   }
-  
+
+  # Create final output based on format requested
+  if (output_format == "nested") {
+    final_results <- nested_results
+  } else if (output_format == "long") {
+    if (length(long_results_list) > 0) {
+      # Combine all long format results
+      long_df <- data.table::rbindlist(long_results_list, fill = TRUE)
+      
+      # Add specification ordering and numbering
+      long_df <- add_specification_numbering(long_df, name_treated_unit, verbose)
+      final_results <- long_df
+    } else {
+      stop("No valid results found for long format conversion")
+    }
+  } else if (output_format == "both") {
+    if (length(long_results_list) > 0) {
+      long_df <- data.table::rbindlist(long_results_list, fill = TRUE)
+      long_df <- add_specification_numbering(long_df, name_treated_unit, verbose)
+      final_results <- list(
+        nested = nested_results,
+        long = long_df
+      )
+    } else {
+      final_results <- list(
+        nested = nested_results,
+        long = NULL
+      )
+    }
+  }
+
   if (verbose) message("Specification curve generation complete")
-  return(nested_results)
+  return(final_results)
 }
 
