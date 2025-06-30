@@ -4,12 +4,13 @@ inference_placebo <- function(
     cores,
     verbose
 ){
+
   # Debug: Check critical fields immediately
   if (is.null(sc.pred)) stop("sc.pred is NULL")
   if (is.null(sc.pred$data)) stop("sc.pred$data is NULL")
   if (is.null(sc.pred$data$specs)) stop("sc.pred$data$specs is NULL")
   if (is.null(sc.pred$data$specs$donors.units)) stop("donors.units is NULL")
-  
+
   # Get control units and remove treated unit from dataset
   control_units = sc.pred$data$specs$donors.units
   
@@ -27,7 +28,7 @@ inference_placebo <- function(
   }
   
   dataset = dataset[get(col_name_unit) != name_treated_unit]
-  
+
   control_taus_list = list()
   control_rmse_list = list()
   treated_taus_list = list()
@@ -113,7 +114,7 @@ inference_placebo <- function(
       }
       return(NULL)
     })
-    
+
     # Skip this control unit if estimation failed
     if (is.null(est_sc)) {
       next

@@ -57,7 +57,7 @@ inference_sc <- function(
     e.bounds     = NULL,
     verbose      = TRUE
 ){
-  
+
   # Check if sc.pred structure is valid
   if (is.null(sc.pred)) {
     return(NULL)
@@ -97,7 +97,7 @@ inference_sc <- function(
     # Default class type if not found in data
     class.type <- "scpi_data"
   }
-  
+
   if (inference_type == "scpi") {
     # Perform SCPI inference
     inference.results <- inference_scpi(

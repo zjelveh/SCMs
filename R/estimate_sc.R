@@ -44,6 +44,7 @@ estimate_sc <- function(dataset,           # Input dataset (panel data format)
                         solver = "ECOS"){#,    # Solver to use for the optimization problem
                         #P = NULL) {         # Number of factors to use (optional, for AugSynth)
 
+
   # 1. Data Preparation
   data <- create_scm_dataset(       # Create a formatted dataset for SCM
     dataset = dataset, 
@@ -61,7 +62,6 @@ estimate_sc <- function(dataset,           # Input dataset (panel data format)
   if (!methods::is(data, "scdata") & !methods::is(data, "scdataMulti")) {
     stop("data should be the object returned by running scdata or scdata_multi!")
   }
-
   # 2. SCM Estimation
   scm_model <- scest(data = data,     # Estimate the Synthetic Control
     w.constr = w.constr,

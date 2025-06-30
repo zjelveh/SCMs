@@ -108,7 +108,7 @@ plot_spec_curve <- function(
     }
   }
 
- average_effect_df_long = melt(average_effect_df, c('unit_name', 'spec_number', 'tau', 'rmse', 'unit_type'), 
+average_effect_df_long = melt(average_effect_df, c('unit_name', 'spec_number', 'tau', 'rmse', 'unit_type'), 
                               variable.name = 'feature_group', value.name = 'feature')
 average_effect_df_long = average_effect_df_long[unit_name==name_treated_unit & feature_group%in%shap_values$feature_group]
 
@@ -125,14 +125,15 @@ average_effect_df_long_shap[feature_group=='const', feature_group:= 'Weight\nMet
 average_effect_df_long_shap[feature_group=='outcome', feature_group:=  'Outcome']
 average_effect_df_long_shap[feature_group=='outcome_model', feature_group:= 'Outcome\nModel']
 average_effect_df_long_shap[feature_group== 'fw', feature_group:= 'V Weights']
-average_effect_df_long_shap[feature_group== 'data_sample', feature_group:='Donor\nPool']
+average_effect_df_long_shap[feature_group== 'feat', feature_group:= 'Features']
+average_effect_df_long_shap[feature_group== 'data_sample', feature_group:='Donor Pool']
 average_effect_df_long_shap[feature_group== 'num_pre_period_years', feature_group:='Pre Length']
 
 # Transform constraint names to match original format
-average_effect_df_long_shap[feature == 'simplex', feature := "Original"]
-average_effect_df_long_shap[feature == 'lasso', feature := "Original + Penalty Lasso"]
-average_effect_df_long_shap[feature == 'ridge', feature := "Original + Penalty Ridge"]
-average_effect_df_long_shap[feature == 'ols', feature := "OLS Weights"]
+average_effect_df_long_shap[feature == 'simplex' & feature_group=='Weight\nMethod', feature := "Original"]
+average_effect_df_long_shap[feature == 'lasso' & feature_group=='Weight\nMethod', feature := "Original + Penalty Lasso"]
+average_effect_df_long_shap[feature == 'ridge' & feature_group=='Weight\nMethod', feature := "Original + Penalty Ridge"]
+average_effect_df_long_shap[feature == 'ols' & feature_group=='Weight\nMethod', feature := "OLS Weights"]
 average_effect_df_long_shap[, Type := 'Average']
 
 control_effects = average_effect_df[unit_type=='control']
@@ -155,6 +156,7 @@ treated_estimates <- unique(average_effect_df_long_shap[, .(
 setnames(control_effects,
          old = c("unit_name", "spec_number", "tau", "rmse"),
          new = c("Unit Name", "Specification", "Estimate", "RMSE"))
+
 
 # Combine treated and control data for the main effect plot
 plot_data_p1 <- rbindlist(list(
@@ -184,10 +186,11 @@ if (length(all_rmse_data) > 0) {
 }
 
 plot_data_p1[, bin_q:= cut(RMSE, rmse_quartiles)]
-table(plot_data_p1$bin_q)
+
 plot_data_p1[, circle_size:=mean(RMSE) , by=.(bin_q)]
 
 # --- 2. Create the Final Plots ---
+data.table::setorder(plot_data_p1, -unit_type)
 
 p1 <- plot_data_p1 %>%
   # Set up all aesthetics in the main ggplot() call
@@ -196,6 +199,7 @@ p1 <- plot_data_p1 %>%
     y = Estimate,
     fill = unit_type,
     size = RMSE,
+    color = unit_type,
     alpha = unit_type
   )) +
   
@@ -205,9 +209,14 @@ p1 <- plot_data_p1 %>%
   
   # --- Define the Scales for Each Mapped Aesthetic ---
   
-  scale_fill_manual(
+  scale_fill_manual( 
     name = "Unit Type",
-    values = c(treated = "deepskyblue3", control = "firebrick3")
+    values = c(control = "firebrick3", treated = "deepskyblue3")
+  ) +
+
+  scale_color_manual( 
+    name = "Unit Type",
+    values = c(control = "firebrick3", treated = "deepskyblue3")
   ) +
   
   scale_size(
@@ -219,7 +228,7 @@ p1 <- plot_data_p1 %>%
   
   scale_alpha_manual(
     name = "Unit Type", # Use the same name as `scale_fill_manual` to merge legends
-    values = c(treated = 0.8, control = 0.25)
+    values = c(treated = 0.9, control = 0.2)
   ) +
   
   # --- Final Touches ---
@@ -238,7 +247,9 @@ p1 <- plot_data_p1 %>%
     axis.line = element_line(color = "black", linewidth = 0.5),
     axis.text = element_text(colour = "black")
   ) +
-  labs(x = NULL, y = 'Average Treatment Effect')
+  labs(x = NULL, y = 'Average Treatment Effect') +
+  ylim(-200, 200)# + geom_hline(yintercept= -1.6)
+  # xlim(-10, 10)
 
 # Now you can print p1 and combine it with p2 using plot_grid as before.
 # print(p1)
@@ -260,7 +271,7 @@ p2 <- ggplot(plot_data_p2, aes(x = Specification, y = feature)) +
     axis.text.y = element_text(colour = "black", size = 8),
     strip.placement = "outside",
     strip.text.y.left = element_text(angle = 0, hjust = 1, face = "bold"),
-    panel.spacing = unit(1, "lines"),
+    panel.spacing = unit(.25, "lines"),
     legend.position = "bottom",
     legend.key.width = unit(1.5, "cm")
   ) +
@@ -274,7 +285,7 @@ final_plot <- plot_grid(
   ncol = 1,
   align = 'v',
   axis = "lr",
-  rel_heights = c(0.55, 0.45)
+  rel_heights = c(0.4, 0.6)
 )
 
 # Save plot if file path is provided

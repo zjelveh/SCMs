@@ -566,7 +566,7 @@ scdata <- function(df,
     B = B[-which(duplicated(rnB)),, drop=F]
   }
   rownames(B) = rnB[!duplicated(rnB)]
-  colnames(B) = gsub(' ', '_', colnames(B))
+  colnames(B) = gsub(' |-|\\.', '_', colnames(B))
   B = as.matrix(B)
 
 
@@ -588,8 +588,8 @@ scdata <- function(df,
   Y.names     <- stringr::str_remove(colnames(Y.donors), outcome.var)
   Y.names     <- stringr::str_remove(Y.names,".")
   colnames(Y.donors) <- paste(unit.tr, Y.names, sep = ".")
+  colnames(Y.donors) = gsub(' |-|\\.', '_', colnames(Y.donors))
   rownames(Y.donors) <- paste(unit.tr, as.character(aux[,'Time']), sep = ".")
-  colnames(Y.donors) = gsub(' ', '_', colnames(Y.donors))
   Y.donors    <- Y.donors[ , colnames(B)]  # Re-order according to B
 
   ## Create matrix with post-period outcomes for the donors
@@ -605,8 +605,8 @@ scdata <- function(df,
   Y.names.post     <- stringr::str_remove(colnames(Y.donors.post), outcome.var)
   Y.names.post    <- stringr::str_remove(Y.names.post,".")
   colnames(Y.donors.post) <- paste(unit.tr, Y.names.post, sep = ".")
+  colnames(Y.donors.post) = gsub(' |-|\\.', '_', colnames(Y.donors.post))
   rownames(Y.donors.post) <- paste(unit.tr, as.character(aux.post[,'Time']), sep = ".")
-  colnames(Y.donors.post) = gsub(' ', '_', colnames(Y.donors.post))
   Y.donors.post    <- Y.donors.post[ , colnames(B)]  # Re-order according to B
 
 
@@ -633,7 +633,7 @@ scdata <- function(df,
   P.names     <- stringr::str_remove(colnames(P), outcome.var)
   colnames(P) <- paste(unit.tr, P.names, sep = ".")
   colnames(P) = gsub('\\.\\.', '.', colnames(P))
-  colnames(P) = gsub(' ', '_', colnames(P))
+  colnames(P) = gsub(' |-|\\.', '_', colnames(P))
   P <- P[, colnames(B), drop = F]  # Re-order as the matrix B
 
   # If the outcome variable is within the specified features then we need to
