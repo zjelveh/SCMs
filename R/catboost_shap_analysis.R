@@ -247,7 +247,7 @@ auto_detect_spec_features <- function(data, treated_unit_name, outcome_filter = 
     if (is_spec_like || (!is.null(include_features) && col %in% include_features)) {
       candidate_cols <- c(candidate_cols, col)
     } else {
-      cat("  ", col, ": ✗ (not a specification feature - excluded)\n")
+      cat("  ", col, ": x (not a specification feature - excluded)\n")
     }
   }
   
@@ -279,7 +279,7 @@ auto_detect_spec_features <- function(data, treated_unit_name, outcome_filter = 
           n_unique <- unique_counts[[col]]
           cat("  ", col, " (FORCE INCLUDE): ", n_unique, " unique values")
           varying_features <- c(varying_features, col)  # Include regardless
-          cat(" ✓ (included)\n")
+          cat(" v (included)\n")
           
           # Show values for small sets
           if (n_unique <= 10) {

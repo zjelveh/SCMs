@@ -151,12 +151,13 @@ inference_sc <- function(
       return(NULL)
     })
     
-    # Now inference.results contains both taus and rmse
+    # Now inference.results contains taus, rmse, and abadie_significance
     result <- list(
       data = sc.pred$data,
       est.results = sc.pred$est.results,
       inference.results = inference.results$taus,
-      rmse = inference.results$rmse
+      rmse = inference.results$rmse,
+      abadie_significance = inference.results$abadie_significance
     )
   }
   

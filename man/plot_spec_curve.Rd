@@ -2,44 +2,113 @@
 % Please edit documentation in R/plot_spec_curve.R
 \name{plot_spec_curve}
 \alias{plot_spec_curve}
-\title{Plot Specification Curve for Synthetic Control Method Results}
+\title{Plot Specification Curve with Perfect SHAP Alignment}
 \usage{
 plot_spec_curve(
-  spec_curve_results,
-  outcomes,
+  long_data,
   name_treated_unit,
-  normalize_outcomes = FALSE,
+  outcomes,
+  normalize_outcomes = "none",
   rmse_threshold = Inf,
+  shap_values = NULL,
   file_path_save = NA,
   width = 6,
-  height = 10
+  height = 10,
+  show_pvalues = TRUE,
+  p_threshold = 0.05,
+  prefer_bootstrap_pvalues = FALSE,
+  crop_outliers = "none",
+  sort_by = "tau"
 )
 }
 \arguments{
-\item{spec_curve_results}{List. Results from the spec_curve function.}
-
-\item{outcomes}{Character vector. Names of the outcome variables to plot.}
+\item{long_data}{Data.table. Long format data from spec_curve(..., output_format = "long").}
 
 \item{name_treated_unit}{Character. Name of the treated unit.}
 
-\item{normalize_outcomes}{Logical. Whether to normalize outcomes. Default is FALSE.}
+\item{outcomes}{Character vector. Names of the outcome variables to plot.}
+
+\item{normalize_outcomes}{Character. Method for normalizing treatment effects for comparability.
+Options: "none" (default), "percent_of_mean", "percent_of_preperiod", "standardized", "rmspe_ratio".
+\itemize{
+\item "percent_of_mean": (tau / mean(pre-period treated)) * 100
+\item "percent_of_preperiod": (tau / final_preperiod_value) * 100
+\item "standardized": tau / sd(control_effects)
+\item "rmspe_ratio": post_RMSPE / pre_RMSPE (Abadie-style)
+}}
 
 \item{rmse_threshold}{Numeric. Threshold for root mean square error to filter results. Default is Inf.}
+
+\item{shap_values}{Data.table or NULL. SHAP values from run_xgboost_shap_analysis().
+Should contain spec_number column for perfect alignment. Default is NULL.}
 
 \item{file_path_save}{Character or NA. File path to save the plot. If NA, plot is not saved. Default is NA.}
 
 \item{width}{Numeric. Width of the saved plot in inches. Default is 6.}
 
 \item{height}{Numeric. Height of the saved plot in inches. Default is 10.}
+
+\item{show_pvalues}{Logical. Whether to include significance coloring for treatment effects.
+Uses Abadie p-values by default, or bootstrap p-values if available. Default is TRUE.}
+
+\item{p_threshold}{Numeric. P-value threshold for significance coloring. Default is 0.05.}
+
+\item{prefer_bootstrap_pvalues}{Logical. Whether to prefer bootstrap p-values over Abadie p-values
+when both are available. Default is FALSE (prefer Abadie).}
+
+\item{crop_outliers}{Character or Numeric. Method for cropping outliers in Panel A.
+Options: "none" (default), "percentile", "iqr", "mad", or numeric vector c(ymin, ymax).
+\itemize{
+\item "percentile": Crop to 5th-95th percentile of treated unit effects
+\item "iqr": Crop to Q1 - 1.5\emph{IQR to Q3 + 1.5}IQR
+\item "mad": Crop to median ± 3*MAD (robust outlier detection)
+\item c(ymin, ymax): Manual y-axis limits
+}}
+
+\item{sort_by}{Character. Method for sorting specifications on x-axis.
+Options: "tau" (default), "pvalue", "rmspe_ratio".
+\itemize{
+\item "tau": Sort by treatment effect magnitude (original behavior)
+\item "pvalue": Sort by statistical significance (most significant first)
+\item "rmspe_ratio": Sort by post/pre RMSPE ratio
+}}
 }
 \value{
 A ggplot object representing the specification curve.
 }
 \description{
-This function creates a specification curve plot based on the results from multiple Synthetic Control Method (SCM) estimations across different specifications.
+Creates specification curve plots directly from long format data,
+ensuring perfect alignment between SHAP values and specifications through
+shared spec_number identifiers.
+}
+\details{
+Plot Specification Curve Using Direct Long Format Data
 }
 \examples{
-# Example usage (replace with actual example when available)
-# plot <- plot_spec_curve(spec_curve_results = my_results, outcomes = c("gdp", "unemployment"),
-#                         name_treated_unit = "California", normalize_outcomes = TRUE)
+\dontrun{
+# New recommended workflow with perfect alignment
+
+# 1. Generate long format data
+spec_results_long <- spec_curve(
+  dataset = your_data,
+  outcomes = "num_homicide",
+  name_treated_unit = "PAPEP0000",
+  output_format = "long"
+)
+
+# 2. Run SHAP analysis with perfect alignment
+config <- create_catboost_config(
+  dataset_name = "homicide_study",
+  treated_unit_name = "PAPEP0000"
+)
+shap_results <- run_catboost_shap_analysis(spec_results_long, config)
+
+# 3. Plot with guaranteed perfect alignment
+plot <- plot_spec_curve(
+  long_data = spec_results_long,
+  name_treated_unit = "PAPEP0000",
+  outcomes = "num_homicide",
+  shap_values = shap_results$shapley
+)
+}
 }

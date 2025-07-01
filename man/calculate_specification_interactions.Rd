@@ -4,10 +4,10 @@
 \alias{calculate_specification_interactions}
 \title{Calculate Variance Explained by Specification Feature Interactions}
 \usage{
-calculate_specification_interactions(xgb_results, dataset_name)
+calculate_specification_interactions(catboost_results, dataset_name)
 }
 \arguments{
-\item{xgb_results}{List. Results from \code{run_xgboost_shap_analysis}.}
+\item{catboost_results}{List. Results from \code{run_catboost_shap_analysis}.}
 
 \item{dataset_name}{Character. Name for the dataset (for labeling).}
 }
@@ -30,6 +30,6 @@ Calculate Specification Interactions
 \examples{
 \dontrun{
 # Calculate specification interactions
-interactions <- calculate_specification_interactions(xgb_results, "homicide_study")
+interactions <- calculate_specification_interactions(catboost_results, "homicide_study")
 }
 }

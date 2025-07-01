@@ -4,7 +4,14 @@
 \alias{run_spec_curve_analysis}
 \title{Run Specification Curve Analysis with Multiple Configurations}
 \usage{
-run_spec_curve_analysis(dataset, outcomes = NULL, params, output_dir = NULL)
+run_spec_curve_analysis(
+  dataset,
+  outcomes = NULL,
+  params,
+  output_dir = NULL,
+  inference_type = "placebo",
+  inference_config = list()
+)
 }
 \arguments{
 \item{dataset}{Data frame containing the panel data for analysis.}
@@ -28,9 +35,24 @@ run_spec_curve_analysis(dataset, outcomes = NULL, params, output_dir = NULL)
 }}
 
 \item{output_dir}{Character. Directory to save results. If NULL, results are not saved.}
+
+\item{inference_type}{Character. Type of inference to perform: "placebo" (default), "bootstrap", or "all".
+\itemize{
+\item "placebo": Traditional placebo-based inference using control units
+\item "bootstrap": Bootstrap null hypothesis testing with unit-level resampling
+\item "all": Both placebo and bootstrap inference (for comparison)
+}}
+
+\item{inference_config}{List. Configuration for inference methods. Can include:
+\itemize{
+\item \code{bootstrap_n_replications} - Number of bootstrap replications (default: 1000)
+\item \code{bootstrap_cores} - Cores for bootstrap processing (default: 1)
+\item \code{placebo_cores} - Cores for placebo processing (default: 1)
+\item \code{verbose} - Verbose inference output (default: FALSE)
+}}
 }
 \value{
-List containing specification curve results for all parameter combinations.
+Data.table in long format containing specification curve results with inference measures.
 }
 \description{
 Performs specification curve analysis across multiple modeling choices
@@ -59,7 +81,30 @@ params <- list(
   constraints = list(list(name = "simplex"))
 )
 
-# Run analysis
-results <- run_spec_curve_analysis(dataset, params = params)
+# Run analysis with placebo inference (default)
+results_placebo <- run_spec_curve_analysis(dataset, params = params)
+
+# Run bootstrap inference only 
+results_bootstrap <- run_spec_curve_analysis(
+  dataset, 
+  params = params,
+  inference_type = "bootstrap",
+  inference_config = list(
+    bootstrap_n_replications = 1000,
+    bootstrap_cores = 4
+  )
+)
+
+# Run both inference methods for comparison
+results_both <- run_spec_curve_analysis(
+  dataset,
+  params = params, 
+  inference_type = "all",
+  inference_config = list(
+    bootstrap_n_replications = 500,  # Fewer for speed when running both
+    bootstrap_cores = 2,
+    placebo_cores = 1
+  )
+)
 }
 }

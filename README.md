@@ -12,7 +12,7 @@ A comprehensive R package for Synthetic Control Methods (SCM) featuring specific
 
 ### Advanced Analytics
 - **Specification Curve Analysis**: Systematic exploration of researcher degrees of freedom
-- **XGBoost + SHAP Analysis**: Machine learning approach to understand what drives variation in treatment effects
+- **CatBoost + SHAP Analysis**: Machine learning approach to understand what drives variation in treatment effects
 - **Advanced Visualizations**: Publication-ready plots including specification curves, SHAP distributions, and interaction heatmaps
 
 ### Data Processing Capabilities
@@ -102,7 +102,7 @@ plot_interaction_heatmap(catboost_results)
 - `plot_spec_curve()`: Specification curve visualization
 
 ### Machine Learning Analytics
-- `run_xgboost_shap_analysis()`: XGBoost modeling with SHAP values
+- `run_catboost_shap_analysis()`: CatBoost modeling with SHAP values
 - `plot_shapley_distributions()`: SHAP value visualizations
 - `calculate_specification_interactions()`: Feature interaction analysis
 
@@ -115,7 +115,7 @@ plot_interaction_heatmap(catboost_results)
 
 - **Core Analysis**: `CVXR`, `Matrix`, `optimx`
 - **Data Processing**: `data.table`, `dplyr`, `tidyr`
-- **Machine Learning**: `xgboost`, `fastshap`
+- **Machine Learning**: `catboost`
 - **Visualization**: `ggplot2`, `cowplot`
 - **Parallel Computing**: `foreach`, `doParallel`, `doSNOW`
 
@@ -127,7 +127,7 @@ plot_interaction_heatmap(catboost_results)
 - Comprehensive visualization of results
 - Statistical summaries and robustness checks
 
-### XGBoost + SHAP Integration
+### CatBoost + SHAP Integration
 - Leave-one-out cross-validation for robust model evaluation
 - SHAP values for interpretable machine learning
 - Feature importance analysis across specifications

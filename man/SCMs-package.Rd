@@ -9,7 +9,7 @@
 This package provides tools for implementing Synthetic Control Methods (SCM),
 performing inference, conducting specification curve analysis, and visualizing results.
 
-Comprehensive toolkit for Synthetic Control Methods (SCM) with advanced features including specification curve analysis, multiple inference procedures, and robust estimation techniques. Provides functions for data preparation, model estimation, statistical inference (including SCPI and placebo-based methods), and visualization of results. Supports multiple outcome models (OLS, Ridge, Lasso, Augmented Synthetic Control) and includes parallel processing capabilities for large-scale specification curve analysis.
+Comprehensive toolkit for Synthetic Control Methods (SCM) with advanced features including specification curve analysis, CatBoost+SHAP machine learning analysis, and multiple inference procedures. The package highlight is specification curves colored by SHAP values showing feature relevance to predicted treatment effects. Provides functions for data preparation, model estimation, statistical inference (including SCPI and placebo-based methods), and publication-ready visualizations. Supports multiple outcome models (OLS, Ridge, Lasso, Augmented Synthetic Control) and includes parallel processing capabilities for large-scale specification curve analysis.
 
 This and that
 }

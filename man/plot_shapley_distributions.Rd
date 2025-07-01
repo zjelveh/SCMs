@@ -4,10 +4,14 @@
 \alias{plot_shapley_distributions}
 \title{Visualize SHAP Value Distributions with Treated Unit Highlighted}
 \usage{
-plot_shapley_distributions(xgb_results, metric = "mean_abs_shap", ncol = 2)
+plot_shapley_distributions(
+  catboost_results,
+  metric = "mean_abs_shap",
+  ncol = 2
+)
 }
 \arguments{
-\item{xgb_results}{List. Results from \code{run_xgboost_shap_analysis}.}
+\item{catboost_results}{List. Results from \code{run_catboost_shap_analysis}.}
 
 \item{metric}{Character. Which SHAP metric to plot ("mean_shap", "sd_shap", or "mean_abs_shap").}
 
@@ -26,7 +30,7 @@ Plot Shapley Value Distributions
 \examples{
 \dontrun{
 # Plot mean absolute SHAP values
-p <- plot_shapley_distributions(xgb_results, metric = "mean_abs_shap")
+p <- plot_shapley_distributions(catboost_results, metric = "mean_abs_shap")
 print(p)
 }
 }

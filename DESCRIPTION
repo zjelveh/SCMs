@@ -1,6 +1,8 @@
 Package: SCMs
 Title: Synthetic Control Methods
 Version: 0.1
+Author: Zubin Jelveh <zjelveh@umd.edu>
+Maintainer: Zubin Jelveh <zjelveh@umd.edu>
 Authors@R: 
   c(person(given = "Zubin",
            family = "Jelveh",
@@ -39,7 +41,8 @@ Imports: CVXR        (>= 1.0-10),
          fastDummies,
          glmnet,
          devtools,
-         catboost
+         catboost,
+         ggnewscale
 Description: Comprehensive toolkit for Synthetic Control Methods (SCM) with advanced 
     features including specification curve analysis, CatBoost+SHAP machine learning 
     analysis, and multiple inference procedures. The package highlight is specification 

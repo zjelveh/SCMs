@@ -24,7 +24,11 @@ spec_curve(
   cores = 1,
   use_cache = FALSE,
   cache_dir = tempdir(),
-  verbose = TRUE
+  verbose = TRUE,
+  include_bootstrap_inference = FALSE,
+  bootstrap_n_replications = 1000,
+  bootstrap_cores = 1,
+  bootstrap_only = FALSE
 )
 }
 \arguments{
@@ -89,6 +93,19 @@ Useful for large specification spaces or when iterating on analysis.}
 Default is temporary directory from \code{tempdir()}.}
 
 \item{verbose}{Logical. Whether to display progress messages and warnings. Default is TRUE.}
+
+\item{include_bootstrap_inference}{Logical. Whether to include bootstrap-based significance testing
+in addition to placebo-based inference. Default is FALSE. Bootstrap inference enforces the null
+hypothesis by subtracting treatment effects and performs unit-level resampling.}
+
+\item{bootstrap_n_replications}{Integer. Number of bootstrap replications when
+\code{include_bootstrap_inference = TRUE}. Default is 1000.}
+
+\item{bootstrap_cores}{Integer. Number of cores for bootstrap processing when
+\code{include_bootstrap_inference = TRUE}. Default is 1.}
+
+\item{bootstrap_only}{Logical. If TRUE, skip placebo inference and run only bootstrap inference.
+Requires \code{include_bootstrap_inference = TRUE}. Default is FALSE.}
 }
 \value{
 A nested list structure containing:

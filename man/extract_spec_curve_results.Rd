@@ -7,7 +7,7 @@
 extract_spec_curve_results(results)
 }
 \arguments{
-\item{results}{List containing specification curve results from \code{run_spec_curve_analysis}.}
+\item{results}{List or data.table. Results from \code{spec_curve} in any supported format.}
 }
 \value{
 Data table containing compiled results with columns:
@@ -27,7 +27,8 @@ Data table containing compiled results with columns:
 }
 \description{
 Extracts treatment effects and RMSE data from specification curve
-results and compiles them into a single data frame for further analysis.
+results and ensures output is in long format. Handles both nested results (traditional)
+and long format data (new) for backward compatibility.
 }
 \details{
 Extract Results from Specification Curve Analysis
