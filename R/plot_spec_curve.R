@@ -3,9 +3,11 @@
 #' @title Plot Specification Curve with Perfect SHAP Alignment
 #' @description Creates specification curve plots directly from long format data,
 #' ensuring perfect alignment between SHAP values and specifications through 
-#' shared spec_number identifiers.
+#' shared full_spec_id identifiers.
 #'
-#' @param long_data Data.table. Long format data from spec_curve(..., output_format = "long").
+#' @param long_data Data.table or List. Long format data from spec_curve().
+#'   Can be either the results data.table directly, or the full structured results
+#'   (with results, abadie_inference, bootstrap_inference components).
 #' @param name_treated_unit Character. Name of the treated unit.
 #' @param outcomes Character vector. Names of the outcome variables to plot.
 #' @param normalize_outcomes Character. Method for normalizing treatment effects for comparability.
@@ -16,13 +18,16 @@
 #'   - "rmspe_ratio": post_RMSPE / pre_RMSPE (Abadie-style)
 #' @param rmse_threshold Numeric. Threshold for root mean square error to filter results. Default is Inf.
 #' @param shap_values Data.table or NULL. SHAP values from run_xgboost_shap_analysis().
-#'   Should contain spec_number column for perfect alignment. Default is NULL.
+#'   Should contain full_spec_id column for perfect alignment. Default is NULL.
 #' @param file_path_save Character or NA. File path to save the plot. If NA, plot is not saved. Default is NA.
 #' @param width Numeric. Width of the saved plot in inches. Default is 6.
 #' @param height Numeric. Height of the saved plot in inches. Default is 10.
 #' @param show_pvalues Logical. Whether to include significance coloring for treatment effects.
 #'   Uses Abadie p-values by default, or bootstrap p-values if available. Default is TRUE.
 #' @param p_threshold Numeric. P-value threshold for significance coloring. Default is 0.05.
+#' @param pvalue_style Character. Style for p-value visualization. Options: "continuous" (default) or "categorical".
+#'   - "continuous": Uses -log10(p-value) color scale with continuous gradation
+#'   - "categorical": Uses discrete significance categories (original behavior)
 #' @param prefer_bootstrap_pvalues Logical. Whether to prefer bootstrap p-values over Abadie p-values
 #'   when both are available. Default is FALSE (prefer Abadie).
 #' @param null_distribution Character. The distribution to plot as the null/comparison.
@@ -31,7 +36,7 @@
 #'   - "bootstrap": Use the bootstrapped null distribution for the treated unit.
 #' @param crop_outliers Character or Numeric. Method for cropping outliers in Panel A.
 #'   Options: "none" (default), "percentile", "iqr", "mad", or numeric vector c(ymin, ymax).
-#'   - "percentile": Crop to 5th-95th percentile of treated unit effects
+#'   - "percentile": Crop to 1st-99th percentile of treated unit effects
 #'   - "iqr": Crop to Q1 - 1.5*IQR to Q3 + 1.5*IQR  
 #'   - "mad": Crop to median ± 3*MAD (robust outlier detection)
 #'   - c(ymin, ymax): Manual y-axis limits
@@ -59,19 +64,20 @@
 #' # 2. Run SHAP analysis
 #' shap_results <- run_catboost_shap_analysis(spec_results_long, config)
 #' 
-#' # 3. Plot using placebo null (default)
+#' # 3. Plot using placebo null with continuous p-values (default)
 #' plot_placebo <- plot_spec_curve(
 #'   long_data = spec_results_long,
 #'   name_treated_unit = "TREATED_ID",
-#'   shap_values = shap_results$shapley
+#'   shap_values = shap_results$shapley,
+#'   pvalue_style = "continuous"
 #' )
 #' 
-#' # 4. Plot using bootstrap null
-#' plot_bootstrap <- plot_spec_curve(
+#' # 4. Plot using categorical p-values (original style)
+#' plot_categorical <- plot_spec_curve(
 #'   long_data = spec_results_long,
 #'   name_treated_unit = "TREATED_ID",
 #'   shap_values = shap_results$shapley,
-#'   null_distribution = "bootstrap"
+#'   pvalue_style = "categorical"
 #' )
 #' }
 plot_spec_curve <- function(
@@ -86,6 +92,7 @@ plot_spec_curve <- function(
     height = 10,
     show_pvalues = TRUE,
     p_threshold = 0.05,
+    pvalue_style = "continuous",
     prefer_bootstrap_pvalues = FALSE,
     null_distribution = "placebo",
     crop_outliers = "none",
@@ -94,13 +101,84 @@ plot_spec_curve <- function(
 
   # Libraries imported via NAMESPACE 
 
-  # Input validation
-  if (!data.table::is.data.table(long_data)) {
+  # Input validation and data extraction
+  if (is.list(long_data) && "results" %in% names(long_data)) {
+    # Handle structured results from spec_curve
+    main_data <- data.table::as.data.table(long_data$results)
+    
+    # Merge inference results using only full_spec_id (avoiding categorical column conflicts)
+    if (!is.null(long_data$abadie_inference$p_values)) {
+      abadie_pvals <- long_data$abadie_inference$p_values
+      main_data = merge(main_data, abadie_pvals[, .(full_spec_id, p_value)], 
+       by = "full_spec_id", all.x = TRUE)
+    }
+
+    # Merge post_pre_ratios using unit-level keys to avoid cartesian joins
+    if (!is.null(long_data$abadie_inference$post_pre_ratios)) {
+      ppr <- long_data$abadie_inference$post_pre_ratios
+      # Include unit_type to ensure unique merging (avoids cartesian joins)
+      merge_cols <- intersect(c("full_spec_id", "unit_name", "unit_type"), names(ppr))
+      if (length(merge_cols) >= 2) {  # Need at least full_spec_id + unit identifier
+        main_data = merge(main_data, ppr[, c(merge_cols, "post_pre_ratio"), with = FALSE], 
+         by = merge_cols, all.x = TRUE)
+      } else {
+        warning("Insufficient merge columns for post_pre_ratios - skipping merge")
+      }
+    }
+
+    if (!is.null(long_data$bootstrap_inference$p_values)) {
+      bootstrap_pvals <- long_data$bootstrap_inference$p_values
+      main_data = merge(main_data, bootstrap_pvals[, .(full_spec_id, p_value_two_tailed )], 
+       by = "full_spec_id", all.x = TRUE)
+    }
+    
+    # Add bootstrap iteration data for null distribution plotting
+    if (!is.null(long_data$bootstrap_inference$iteration_data)) {
+      bootstrap_iteration_data <- long_data$bootstrap_inference$iteration_data
+      
+      # Check if bootstrap iteration data exists and has data
+      if (length(bootstrap_iteration_data) > 0) {
+        # Combine all outcome models' bootstrap data
+        bootstrap_combined <- rbindlist(bootstrap_iteration_data, fill = TRUE)
+        
+        if (nrow(bootstrap_combined) > 0) {
+          # Add necessary columns to match main_data structure
+          if (!"rmse" %in% names(bootstrap_combined)) {
+            bootstrap_combined[, rmse := NA_real_]
+          }
+          
+          # Bootstrap data needs specification metadata - get unique spec metadata from main_data
+          spec_metadata <- unique(main_data[, .(full_spec_id, outcome, outcome_model, const, fw, feat, data_sample, num_pre_period_years)])
+          
+          # For each bootstrap row, we need to replicate it across all specifications for that outcome_model
+          bootstrap_expanded <- list()
+          for (i in 1:nrow(bootstrap_combined)) {
+            boot_row <- bootstrap_combined[i]
+            matching_specs <- spec_metadata[outcome_model == boot_row$outcome_model]
+            
+            if (nrow(matching_specs) > 0) {
+              # Replicate this bootstrap observation for each matching specification
+              expanded_rows <- boot_row[rep(1, nrow(matching_specs))]
+              expanded_rows <- cbind(expanded_rows, matching_specs)
+              bootstrap_expanded[[i]] <- expanded_rows
+            }
+          }
+          
+          if (length(bootstrap_expanded) > 0) {
+            bootstrap_final <- rbindlist(bootstrap_expanded, fill = TRUE)
+            main_data <- rbindlist(list(main_data, bootstrap_final), fill = TRUE)
+          }
+        }
+      }
+    }
+    
+    long_data <- main_data
+  } else if (!data.table::is.data.table(long_data)) {
     long_data <- data.table::as.data.table(long_data)
   }
   
   # Check required columns
-  required_cols <- c("unit_name", "tau", "post_period", "spec_number")
+  required_cols <- c("unit_name", "tau", "post_period", "full_spec_id")
   missing_cols <- setdiff(required_cols, names(long_data))
   if (length(missing_cols) > 0) {
     stop(paste("Missing required columns in long_data:", paste(missing_cols, collapse = ", ")))
@@ -108,12 +186,22 @@ plot_spec_curve <- function(
   
   # Check if p-value data is available
   has_abadie_pvalues <- "p_value" %in% names(long_data)
-  has_bootstrap_pvalues <- "bootstrap_p_value_two_tailed" %in% names(long_data)
+  has_bootstrap_pvalues <- "p_value_two_tailed" %in% names(long_data)
   has_pvalues <- has_abadie_pvalues || has_bootstrap_pvalues
   
   # Determine which p-values to use
-  use_bootstrap_pvalues <- has_bootstrap_pvalues && (prefer_bootstrap_pvalues || !has_abadie_pvalues)
-  p_value_column <- if (use_bootstrap_pvalues) "bootstrap_p_value_two_tailed" else "p_value"
+  # When using bootstrap null distribution, prefer bootstrap p-values
+  if (null_distribution == "bootstrap" && has_bootstrap_pvalues) {
+    use_bootstrap_pvalues <- TRUE
+  } else if (prefer_bootstrap_pvalues && has_bootstrap_pvalues) {
+    use_bootstrap_pvalues <- TRUE
+  } else if (!has_abadie_pvalues && has_bootstrap_pvalues) {
+    use_bootstrap_pvalues <- TRUE
+  } else {
+    use_bootstrap_pvalues <- FALSE
+  }
+  
+  p_value_column <- if (use_bootstrap_pvalues) "p_value_two_tailed" else "p_value"
   
   # Filter by outcomes
   if ("outcome" %in% names(long_data)) {
@@ -132,11 +220,27 @@ plot_spec_curve <- function(
   }
   
   # Calculate average effects for plotting (post-treatment period only)
-  average_effect_df <- sc_results_df[
-    post_period == TRUE,
-    .(tau = mean(tau, na.rm = TRUE), rmse = mean(rmse, na.rm = TRUE)),
-    by = c('unit_name', 'unit_type', 'spec_number', 'outcome', 'outcome_model', 'const', 'fw', 'feat', 'data_sample', 'num_pre_period_years')
-  ]
+  # Check if post_pre_ratio exists before trying to aggregate it
+  if ("post_pre_ratio" %in% names(sc_results_df)) {
+    average_effect_df <- sc_results_df[
+      post_period == TRUE,
+      .(tau = mean(tau, na.rm = TRUE), 
+       rmse = mean(rmse, na.rm = TRUE),
+       post_pre_ratio = mean(post_pre_ratio, na.rm = TRUE)),
+      by = c('unit_name', 'unit_type', 'full_spec_id', 'outcome', 
+      'outcome_model', 'const', 'fw', 'feat', 'data_sample', 
+      'num_pre_period_years')
+    ]
+  } else {
+    average_effect_df <- sc_results_df[
+      post_period == TRUE,
+      .(tau = mean(tau, na.rm = TRUE), 
+       rmse = mean(rmse, na.rm = TRUE)),
+      by = c('unit_name', 'unit_type', 'full_spec_id', 'outcome', 
+      'outcome_model', 'const', 'fw', 'feat', 'data_sample', 
+      'num_pre_period_years')
+    ]
+  }
   
   
   
@@ -169,16 +273,10 @@ plot_spec_curve <- function(
         average_effect_df[unit_name == name_treated_unit, tau := (tau / treated_rmse) * 100]
       }
       y_label <- "Treatment Effect (% of Outcome Scale)"
-      
     } else if (normalize_outcomes == "rmspe_ratio") {
       # Use post/pre RMSPE ratio if available
       if ("post_pre_ratio" %in% names(average_effect_df)) {
-        average_effect_df[unit_name == name_treated_unit, tau := post_pre_ratio]
-        # For comparison units, calculate their ratios too if possible
-        if ("post_rmspe" %in% names(average_effect_df) && "rmse" %in% names(average_effect_df)) {
-          average_effect_df[unit_type %in% c("control", "bootstrap") & !is.na(post_rmspe) & rmse > 0, 
-                           tau := post_rmspe / rmse]
-        }
+        average_effect_df[, tau := post_pre_ratio]
       }
       y_label <- "Post/Pre RMSPE Ratio"
     } else {
@@ -199,7 +297,7 @@ plot_spec_curve <- function(
       
     } else if (crop_outliers == "percentile") {
       # 5th to 95th percentile
-      y_limits <- quantile(treated_effects, c(0.05, 0.95), na.rm = TRUE)
+      y_limits <- quantile(treated_effects, c(0.01, 0.99), na.rm = TRUE)
       
     } else if (crop_outliers == "iqr") {
       # Interquartile range with 1.5*IQR extension
@@ -218,55 +316,80 @@ plot_spec_curve <- function(
 
   # --- 1. Data Preparation ---
 
-  # A. Prepare data for Panel A (Main Effects Plot)
+  # A. Prepare data for Panel A and create numbered specifications
   panel_a_data <- copy(average_effect_df)
+  
+  # Create specification numbering based on treated unit effects (sorted by normalized tau)
+  treated_specs <- panel_a_data[unit_name == name_treated_unit][order(tau)]
+  treated_specs[, Specification := 1:.N]
+  spec_mapping <- treated_specs[, .(full_spec_id, Specification)]
+  
+  # Apply specification numbering to all data
+  panel_a_data <- merge(panel_a_data, spec_mapping, by = "full_spec_id", all.x = TRUE)
   setnames(panel_a_data,
-           old = c("unit_name", "spec_number", "tau", "rmse"),
-           new = c("Unit Name", "Specification", "Estimate", "RMSE"))
+           old = c("unit_name", "tau", "rmse"),
+           new = c("Unit Name", "Estimate", "RMSE"))
 
   # Add p-values if requested
   if (has_pvalues && show_pvalues) {
     p_value_data <- unique(sc_results_df[unit_name == name_treated_unit & !is.na(get(p_value_column)),
-                                         .(spec_number, p_value = get(p_value_column))])
-    setnames(p_value_data, "spec_number", "Specification")
-    panel_a_data <- merge(panel_a_data, p_value_data, by = "Specification", all.x = TRUE)
+                                         .(full_spec_id, p_value = get(p_value_column))])
+    p_value_data <- merge(p_value_data, spec_mapping, by = "full_spec_id", all.x = TRUE)
+
+    panel_a_data <- merge(panel_a_data, p_value_data[, .(Specification, p_value)], by = "Specification", all.x = TRUE)
   }
 
   # B. Prepare data for Panel B (SHAP & Specification Details)
+  if ("post_pre_ratio" %in% names(average_effect_df)) {
+    average_effect_df[, post_pre_ratio := NULL]
+  }
   panel_b_data <- melt(average_effect_df[unit_name == name_treated_unit],
-                       id.vars = c('unit_name', 'spec_number', 'tau', 'rmse', 'unit_type'),
+                       id.vars = c('unit_name', 'full_spec_id', 'tau', 'rmse', 'unit_type'),
                        variable.name = 'feature_group', value.name = 'feature')
+
+  # Apply the same specification numbering
+  panel_b_data <- merge(panel_b_data, spec_mapping, by = "full_spec_id", all.x = TRUE)
 
   # Merge SHAP values if provided
   if (!is.null(shap_values)) {
-    panel_b_data <- merge(panel_b_data, shap_values,
-                          by.x = c('unit_name', 'spec_number', 'feature_group', 'feature'),
-                          by.y = c('unit', 'spec_number', 'feature_group', 'feature'),
-                          all.x = TRUE)
+    # Validate SHAP data structure
+    required_shap_cols <- c('unit', 'full_spec_id', 'feature_group', 'feature', 'shapley_value')
+    missing_shap_cols <- setdiff(required_shap_cols, names(shap_values))
+    if (length(missing_shap_cols) > 0) {
+      warning(paste("Missing SHAP columns:", paste(missing_shap_cols, collapse = ", "), 
+                   "- SHAP values will not be displayed"))
+    } else {
+      panel_b_data <- merge(panel_b_data, shap_values,
+                            by.x = c('unit_name', 'full_spec_id', 'feature_group', 'feature'),
+                            by.y = c('unit', 'full_spec_id', 'feature_group', 'feature'),
+                            all.x = TRUE)
+    }
   }
   
-  setnames(panel_b_data, c('tau', 'unit_name', 'rmse', 'spec_number'),
-           c('Estimate', 'Unit Name', 'RMSE', 'Specification'))
+  setnames(panel_b_data, c('tau', 'unit_name', 'rmse'),
+           c('Estimate', 'Unit Name', 'RMSE'))
 
-  # C. Re-sort specifications if requested (affects both panels)
+  # C. Re-sort specifications if requested (default is by tau, which is already done)
   if (sort_by != "tau") {
-    sort_data <- copy(panel_a_data[unit_type == "treated"])
+    # Create new ordering based on sort_by parameter
+    treated_data <- panel_a_data[unit_type == "treated"]
 
-    if (sort_by == "pvalue" && "p_value" %in% names(sort_data)) {
-      sort_data <- sort_data[order(p_value)]
-    } else if (sort_by == "rmspe_ratio" && "post_pre_ratio" %in% names(sort_data)) {
-      sort_data <- sort_data[order(post_pre_ratio)]
+    if (sort_by == "pvalue" && "p_value" %in% names(treated_data)) {
+      treated_data <- treated_data[order(p_value)]
+    } else if (sort_by == "rmspe_ratio" && "post_pre_ratio" %in% names(treated_data)) {
+      treated_data <- treated_data[order(post_pre_ratio)]
     }
 
-    sort_data[, new_spec_number := 1:.N]
-    spec_reorder <- sort_data[, .(old_spec = Specification, new_spec_number)]
+    # Create new specification mapping
+    treated_data[, new_specification := 1:.N]
+    spec_reorder <- treated_data[, .(old_spec = Specification, new_specification)]
 
     # Apply new ordering to both panel datasets
     panel_a_data <- merge(panel_a_data, spec_reorder, by.x = "Specification", by.y = "old_spec", all.x = TRUE)
-    panel_a_data[, Specification := new_spec_number][, new_spec_number := NULL]
+    panel_a_data[, Specification := new_specification][, new_specification := NULL]
     
     panel_b_data <- merge(panel_b_data, spec_reorder, by.x = "Specification", by.y = "old_spec", all.x = TRUE)
-    panel_b_data[, Specification := new_spec_number][, new_spec_number := NULL]
+    panel_b_data[, Specification := new_specification][, new_specification := NULL]
   }
 
   # D. Finalize Panel A data
@@ -324,28 +447,60 @@ Method', feature := "OLS Weights"]
     treated_data <- plot_data_p1[unit_type == "treated"]
     control_data <- plot_data_p1[unit_type %in% c("control", "bootstrap")]
     
-    treated_data[, significance_category := fcase(
-      p_value < 0.01, "Highly Significant (p < 0.01)",
-      p_value < 0.05, "Significant (p < 0.05)", 
-      p_value < 0.10, "Marginally Significant (p < 0.10)",
-      p_value >= 0.10, "Not Significant (p >= 0.10)",
-      default = "Unknown"
-    )]
-    
-    p1 <- ggplot() +
-      geom_point(data = control_data, aes(x = Specification, y = Estimate, size = fit_quality),
-                 color = "gray60", alpha = 0.3, shape = 19) +
-      geom_point(data = treated_data, aes(x = Specification, y = Estimate, color = significance_category, size = fit_quality),
-                 alpha = 0.8, shape = 19) +
-      geom_hline(yintercept = 0, alpha = 0.5, linetype = 'dashed') +
-      scale_color_manual(
-        name = "Statistical Significance",
-        values = c("Highly Significant (p < 0.01)" = "#08519c", "Significant (p < 0.05)" = "#3182bd",
-                   "Marginally Significant (p < 0.10)" = "#fd8d3c", "Not Significant (p >= 0.10)" = "#d94701",
-                   "Unknown" = "#999999"),
-        breaks = c("Highly Significant (p < 0.01)", "Significant (p < 0.05)",
-                   "Marginally Significant (p < 0.10)", "Not Significant (p >= 0.10)")
-      )
+    if (pvalue_style == "continuous") {
+      # Continuous p-value coloring with significance boundary
+      treated_data[, is_significant := p_value < p_threshold]
+      
+      p1 <- ggplot() +
+        geom_point(data = control_data, aes(x = Specification, y = Estimate, size = fit_quality),
+                   color = "gray60", alpha = 0.3, shape = 19) +
+        # Add significance boundary line for treated effects
+        geom_point(data = treated_data[is_significant == TRUE], 
+                   aes(x = Specification, y = Estimate, size = fit_quality),
+                   color = "black", alpha = 0.9, shape = 21, stroke = 1.2) +
+        geom_point(data = treated_data, aes(x = Specification, y = Estimate, 
+                                           color = -log10(pmax(p_value, 1e-10)), size = fit_quality),
+                   alpha = 0.8, shape = 19) +
+        geom_hline(yintercept = 0, alpha = 0.5, linetype = 'dashed') +
+        scale_color_gradient2(
+          name = "-log10(p-value)",
+          low = "#d73027",      # Red for high p-values (non-significant)
+          mid = "#fee08b",      # Yellow for moderate p-values  
+          high = "#1a9850",     # Green for low p-values (significant)
+          midpoint = -log10(p_threshold),  # Threshold at p=0.05
+          breaks = c(0, -log10(c(0.5, 0.1, 0.05, 0.01, 0.001))),
+          labels = c("1.0", "0.5", "0.1", "0.05", "0.01", "0.001"),
+          guide = guide_colorbar(
+            title.position = "top",
+            barwidth = unit(4, "cm"),
+            barheight = unit(0.5, "cm")
+          )
+        )
+    } else {
+      # Categorical p-value coloring (original behavior)
+      treated_data[, significance_category := fcase(
+        p_value < 0.01, "Highly Significant (p < 0.01)",
+        p_value < 0.05, "Significant (p < 0.05)", 
+        p_value < 0.10, "Marginally Significant (p < 0.10)",
+        p_value >= 0.10, "Not Significant (p >= 0.10)",
+        default = "Unknown"
+      )]
+      
+      p1 <- ggplot() +
+        geom_point(data = control_data, aes(x = Specification, y = Estimate, size = fit_quality),
+                   color = "gray60", alpha = 0.3, shape = 19) +
+        geom_point(data = treated_data, aes(x = Specification, y = Estimate, color = significance_category, size = fit_quality),
+                   alpha = 0.8, shape = 19) +
+        geom_hline(yintercept = 0, alpha = 0.5, linetype = 'dashed') +
+        scale_color_manual(
+          name = "Statistical Significance",
+          values = c("Highly Significant (p < 0.01)" = "#08519c", "Significant (p < 0.05)" = "#3182bd",
+                     "Marginally Significant (p < 0.10)" = "#fd8d3c", "Not Significant (p >= 0.10)" = "#d94701",
+                     "Unknown" = "#999999"),
+          breaks = c("Highly Significant (p < 0.01)", "Significant (p < 0.05)",
+                     "Marginally Significant (p < 0.10)", "Not Significant (p >= 0.10)")
+        )
+    }
   } else {
     p1 <- ggplot(plot_data_p1, aes(x = Specification, y = Estimate, fill = unit_type,
                                  size = fit_quality, color = unit_type, alpha = unit_type)) +

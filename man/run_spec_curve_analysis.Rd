@@ -52,7 +52,12 @@ run_spec_curve_analysis(
 }}
 }
 \value{
-Data.table in long format containing specification curve results with inference measures.
+List structure containing:
+\itemize{
+\item \code{results} - Data.table in long format with all specification results
+\item \code{abadie_inference} - Abadie placebo inference results (if inference_type includes "placebo")
+\item \code{bootstrap_inference} - Bootstrap inference results (if inference_type includes "bootstrap")
+}
 }
 \description{
 Performs specification curve analysis across multiple modeling choices

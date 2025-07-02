@@ -6,10 +6,10 @@
 #'
 #' @param taus_result Data.table containing treatment effects for all units
 #' @param rmse_result Data.table containing RMSE values for all units
-#' @param rmspe_threshold Numeric. Threshold for filtering poor pre-treatment fits (default: 2)
+#' @param rmspe_threshold Numeric. Threshold for filtering poor pre-treatment fits (default: 0)
 #'
 #' @return List containing Abadie significance measures
-calculate_abadie_significance <- function(taus_result, rmse_result, rmspe_threshold = 2) {
+calculate_abadie_significance <- function(taus_result, rmse_result, rmspe_threshold = 0) {
   
   if (nrow(taus_result) == 0 || nrow(rmse_result) == 0) {
     return(list(
@@ -18,35 +18,37 @@ calculate_abadie_significance <- function(taus_result, rmse_result, rmspe_thresh
       filtered_results = data.table()
     ))
   }
+
   
   # Ensure inputs are data.tables for efficient operations
   if (!is.data.table(taus_result)) setDT(taus_result)
   if (!is.data.table(rmse_result)) setDT(rmse_result)
-  
-  # Calculate post-treatment RMSPE for each unit and outcome model
+
+  # Calculate post-period RMSPE by outcome model
   post_rmspe <- taus_result[post_period == TRUE, .(
     post_rmspe = sqrt(mean(tau^2))
-  ), by = .(unit_name, outcome_model, unit_type)]
+  ), by = .(unit_name, unit_type, outcome_model)]
   
-  # Merge with pre-treatment RMSE
-  rmspe_combined <- merge(rmse_result, post_rmspe, 
-                         by = c("unit_name", "outcome_model", "unit_type"))
+  # Merge pre-RMSE with post-RMSPE by outcome model
+  rmspe_combined <- merge(rmse_result, post_rmspe, by = c("unit_name", "unit_type", "outcome_model"))
   
   # Calculate post/pre RMSPE ratios
   rmspe_combined[, post_pre_ratio := post_rmspe / pre_rmse]
   
-  # Calculate rank-based p-values using vectorized operations
-  # Get treated unit ratios
+  # Get treated unit ratios for each outcome model
   treated_ratios <- rmspe_combined[unit_type == "treated", .(outcome_model, treated_ratio = post_pre_ratio)]
   
   if (nrow(treated_ratios) > 0) {
-    # Calculate ranks and p-values for all outcome models at once
+    # Calculate ranks and p-values - group by outcome model
     p_values_result <- rmspe_combined[unit_type == "control", {
       if (.N > 0) {
         treated_val <- treated_ratios[outcome_model == .BY$outcome_model, treated_ratio]
         if (length(treated_val) > 0) {
-          rank_val <- sum(post_pre_ratio >= treated_val, na.rm = TRUE) + 1
+          # Rank-based p-value calculation (consistent with bootstrap approach)
+          sorted_control_ratios <- sort(post_pre_ratio)
+          rank_val <- findInterval(treated_val, sorted_control_ratios, rightmost.closed = TRUE) + 1
           total_val <- .N + 1
+          
           list(
             treated_ratio = treated_val,
             rank = rank_val,
@@ -65,47 +67,49 @@ calculate_abadie_significance <- function(taus_result, rmse_result, rmspe_thresh
   }
   
   # Apply RMSPE filtering using vectorized operations
-  # Get treated unit pre-RMSE values for thresholding
+  # Get treated unit pre-RMSE values for thresholding by outcome model
   treated_pre_rmse <- rmspe_combined[unit_type == "treated", .(outcome_model, treated_pre_rmse = pre_rmse)]
   
   if (nrow(treated_pre_rmse) > 0) {
-    # Calculate filtered p-values for all outcome models efficiently
+    # Calculate filtered p-values - group by outcome model
     filtered_result <- rmspe_combined[, {
-      treated_rmse <- treated_pre_rmse[outcome_model == .BY$outcome_model, treated_pre_rmse]
-      if (length(treated_rmse) > 0) {
-        threshold_val <- rmspe_threshold * treated_rmse
-        
-        # Filter data: keep treated + controls with good pre-treatment fit
-        filtered_data <- .SD[unit_type == "treated" | (unit_type == "control" & pre_rmse <= threshold_val)]
-        
-        # Calculate filtered p-value if we have both treated and control units
-        if (nrow(filtered_data[unit_type == "treated"]) > 0 && nrow(filtered_data[unit_type == "control"]) > 0) {
-          treated_ratio_val <- filtered_data[unit_type == "treated", post_pre_ratio]
-          control_ratios_val <- filtered_data[unit_type == "control", post_pre_ratio]
+        treated_rmse <- treated_pre_rmse[outcome_model == .BY$outcome_model, treated_pre_rmse]
+        if (length(treated_rmse) > 0) {
+          threshold_val <- rmspe_threshold * treated_rmse
           
-          rank_filtered_val <- sum(control_ratios_val >= treated_ratio_val, na.rm = TRUE) + 1
-          total_filtered_val <- length(control_ratios_val) + 1
-          units_excluded_val <- nrow(.SD[unit_type == "control"]) - length(control_ratios_val)
-          
-          list(
-            treated_ratio = treated_ratio_val,
-            rank_filtered = rank_filtered_val,
-            total_units_filtered = total_filtered_val,
-            p_value_filtered = rank_filtered_val / total_filtered_val,
-            rmspe_threshold = rmspe_threshold,
-            units_excluded = units_excluded_val
-          )
+          # Filter data: keep treated + controls with good pre-treatment fit
+          filtered_data <- .SD[unit_type == "treated" | (unit_type == "control" & pre_rmse <= threshold_val)]
+        
+          # Calculate filtered p-value if we have both treated and control units
+          if (nrow(filtered_data[unit_type == "treated"]) > 0 && nrow(filtered_data[unit_type == "control"]) > 0) {
+            treated_ratio_val <- filtered_data[unit_type == "treated", post_pre_ratio]
+            control_ratios_val <- filtered_data[unit_type == "control", post_pre_ratio]
+            
+            # Use rank-based approach consistent with unfiltered calculation
+            sorted_control_ratios <- sort(control_ratios_val)
+            rank_filtered_val <- findInterval(treated_ratio_val, sorted_control_ratios, rightmost.closed = TRUE) + 1
+            total_filtered_val <- length(control_ratios_val) + 1
+            units_excluded_val <- nrow(.SD[unit_type == "control"]) - length(control_ratios_val)
+            
+            list(
+              treated_ratio = treated_ratio_val,
+              rank_filtered = rank_filtered_val,
+              total_units_filtered = total_filtered_val,
+              p_value_filtered = rank_filtered_val / total_filtered_val,
+              rmspe_threshold = rmspe_threshold,
+              units_excluded = units_excluded_val
+            )
+          } else {
+            list(treated_ratio = NA_real_, rank_filtered = NA_integer_, 
+                 total_units_filtered = NA_integer_, p_value_filtered = NA_real_,
+                 rmspe_threshold = rmspe_threshold, units_excluded = NA_integer_)
+          }
         } else {
           list(treated_ratio = NA_real_, rank_filtered = NA_integer_, 
                total_units_filtered = NA_integer_, p_value_filtered = NA_real_,
                rmspe_threshold = rmspe_threshold, units_excluded = NA_integer_)
         }
-      } else {
-        list(treated_ratio = NA_real_, rank_filtered = NA_integer_, 
-             total_units_filtered = NA_integer_, p_value_filtered = NA_real_,
-             rmspe_threshold = rmspe_threshold, units_excluded = NA_integer_)
-      }
-    }, by = outcome_model]
+      }, by = outcome_model]
   } else {
     filtered_result <- data.table()
   }
@@ -116,6 +120,7 @@ calculate_abadie_significance <- function(taus_result, rmse_result, rmspe_thresh
     filtered_results = filtered_result
   ))
 }
+
 
 inference_placebo <- function(
     sc.pred,
@@ -191,7 +196,6 @@ inference_placebo <- function(
     if (is.null(sc.pred$treated_period)) {
       stop("sc.pred$treated_period is NULL")
     }
-    
     # Store RMSE for treated unit
     treated_rmse_list[[oc]] = data.table(
       unit_name = sc.pred$name_treated_unit,
@@ -210,7 +214,7 @@ inference_placebo <- function(
       outcome_model = oc
     )
   }
-  
+
   # Iterate over all control units
   for(cu in control_units){
     # Estimate synthetic control for each control unit
@@ -238,7 +242,7 @@ inference_placebo <- function(
     if (is.null(est_sc)) {
       next
     }
-    
+
     # Calculate treatment effects for each outcome model
     for(oc in names(est_sc$est.results$outcome_model)){
       sc_post = est_sc$est.results$outcome_model[[oc]]$Y.post.fit        
@@ -270,11 +274,11 @@ inference_placebo <- function(
       )
     }
   }
-  
+ 
   # Combine treated and control results
   all_taus = c(treated_taus_list, control_taus_list)
   all_rmse = c(treated_rmse_list, control_rmse_list)
-  
+
   # Handle empty lists safely
   if (length(all_taus) == 0) {
     taus_result <- data.table()
@@ -287,10 +291,10 @@ inference_placebo <- function(
   } else {
     rmse_result <- rbindlist(all_rmse)
   }
-  
+
   # Calculate Abadie-style significance measures
   abadie_results <- calculate_abadie_significance(taus_result, rmse_result)
-  
+
   # Return both treatment effects, RMSE values, and Abadie significance measures
   return(list(
     taus = taus_result,

@@ -61,7 +61,7 @@ prepare_catboost_data <- function(sc_data, config) {
     stop("Column 'tau' not found in the filtered data. Cannot calculate average tau.", call. = FALSE)
   }
   
-  # Cache column names for efficiency
+  # Store column names for efficiency
   data_cols <- names(data_filtered)
   
   # Check if spec_features exist
@@ -147,7 +147,7 @@ prepare_catboost_data <- function(sc_data, config) {
 #'
 #' @title Create Configuration for Direct Long Format Analysis
 #' @description Creates configuration for CatBoost analysis that works directly
-#' with long format data from spec_curve(..., output_format = "long").
+#' with long format data from spec_curve().
 #'
 #' @param dataset_name Character. Name of the dataset for identification.
 #' @param treated_unit_name Character. Name of the treated unit.
@@ -175,165 +175,7 @@ create_catboost_config <- function(dataset_name,
   return(config)
 }
 
-#' Auto-detect Features with Variation
-#'
-#' @title Automatically Detect Specification Features with Variation
-#' @description Analyzes the data to identify SPECIFICATION features that have more 
-#' than one unique value within the treated unit, suitable for SHAP analysis.
-#' Automatically excludes performance metrics (rmse, r_squared, etc.) and focuses
-#' only on features that define how the synthetic control was constructed.
-#'
-#' @param data Data.table. Long format specification curve data.
-#' @param treated_unit_name Character. Name of the treated unit.
-#' @param outcome_filter Character. Optional outcome filter.
-#' @param include_features Character vector. Features to always include if they exist.
-#' @param exclude_features Character vector. Features to always exclude.
-#' @param min_unique_values Integer. Minimum unique values required.
-#'
-#' @return Character vector of feature names with variation.
-#' @export
-auto_detect_spec_features <- function(data, treated_unit_name, outcome_filter = NULL,
-                                     include_features = NULL, exclude_features = NULL,
-                                     min_unique_values = 2) {
-  cat("=== AUTO-DETECTING SPECIFICATION FEATURES ===\n")
-  
-  if (!data.table::is.data.table(data)) {
-    data <- data.table::as.data.table(data)
-  }
-  
-  # Filter to treated unit and post period
-  filtered_data <- data[unit_name == treated_unit_name & post_period == TRUE]
-  
-  # Apply outcome filter if specified
-  if (!is.null(outcome_filter) && "outcome" %in% names(filtered_data)) {
-    filtered_data <- filtered_data[outcome == outcome_filter]
-  }
-  
-  cat("Analyzing data for", treated_unit_name, ":\n")
-  cat("  Total observations:", nrow(filtered_data), "\n")
-  
-  if (nrow(filtered_data) == 0) {
-    cat("ERROR: No data found for treated unit!\n")
-    return(character(0))
-  }
-  
-  # Base exclusions - columns that should never be features
-  # Include performance metrics and other non-specification columns
-  base_exclude_cols <- c("unit_name", "unit_type", "post_period", "period", "year", 
-                        "tau", "spec_number", "spec_combination", "treated_unit", "outcome",
-                        "rmse", "pre_rmse", "post_rmse", "mse", "mae", "r_squared", 
-                        "correlation", "bias", "variance", "fitted", "residuals",
-                        "weight", "weights", "treated", "control", "synth_weight")
-  
-  # Define known specification feature patterns (common spec curve features)
-  spec_feature_patterns <- c("outcome_model", "const", "fw", "feat", "data_sample",
-                            "model", "method", "estimator", "sample", "controls",
-                            "fixed_effects", "cluster", "robust", "weights_method")
-  
-  # Combine with user-specified exclusions
-  all_exclude_cols <- unique(c(base_exclude_cols, exclude_features))
-  
-  # Only consider columns that are likely specification features
-  all_candidate_cols <- setdiff(names(filtered_data), all_exclude_cols)
-  
-  # Filter to only spec-like features (unless force-included)
-  candidate_cols <- c()
-  for (col in all_candidate_cols) {
-    # Include if it matches known spec patterns or is force-included
-    is_spec_like <- any(sapply(spec_feature_patterns, function(pattern) {
-      grepl(pattern, col, ignore.case = TRUE)
-    }))
-    
-    if (is_spec_like || (!is.null(include_features) && col %in% include_features)) {
-      candidate_cols <- c(candidate_cols, col)
-    } else {
-      cat("  ", col, ": x (not a specification feature - excluded)\n")
-    }
-  }
-  
-  cat("Configuration:\n")
-  cat("  Minimum unique values required:", min_unique_values, "\n")
-  if (!is.null(include_features)) {
-    cat("  Force include (if present):", paste(include_features, collapse = ", "), "\n")
-  }
-  if (!is.null(exclude_features)) {
-    cat("  Force exclude:", paste(exclude_features, collapse = ", "), "\n")
-  }
-  cat("Candidate feature columns:", paste(candidate_cols, collapse = ", "), "\n")
-  
-  # Check variation in each candidate column (vectorized approach)
-  data_cols <- names(filtered_data)
-  
-  # Vectorized uniqueness calculation for all candidate columns
-  available_candidates <- intersect(candidate_cols, data_cols)
-  if (length(available_candidates) > 0) {
-    # Calculate unique counts for all columns at once
-    unique_counts <- filtered_data[, lapply(.SD, function(x) length(unique(x))), .SDcols = available_candidates]
-    
-    # Process force-include features
-    varying_features <- character(0)
-    if (!is.null(include_features)) {
-      available_include <- intersect(include_features, data_cols)
-      for (col in include_features) {
-        if (col %in% data_cols) {
-          n_unique <- unique_counts[[col]]
-          cat("  ", col, " (FORCE INCLUDE): ", n_unique, " unique values")
-          varying_features <- c(varying_features, col)  # Include regardless
-          cat(" v (included)\n")
-          
-          # Show values for small sets
-          if (n_unique <= 10) {
-            unique_vals <- unique(filtered_data[[col]])
-            cat("    Values:", paste(unique_vals, collapse = ", "), "\n")
-          }
-        } else {
-          cat("  ", col, " (FORCE INCLUDE): NOT FOUND in data\n")
-        }
-      }
-    }
-    
-    # Process regular candidate columns (vectorized filtering)
-    regular_candidates <- setdiff(available_candidates, include_features)
-    if (length(regular_candidates) > 0) {
-      # Vectorized check for sufficient variation
-      sufficient_variation <- unlist(unique_counts[regular_candidates]) >= min_unique_values
-      valid_features <- regular_candidates[sufficient_variation]
-      invalid_features <- regular_candidates[!sufficient_variation]
-      
-      # Add valid features
-      varying_features <- c(varying_features, valid_features)
-      
-      # Report results
-      for (col in regular_candidates) {
-        n_unique <- unique_counts[[col]]
-        cat("  ", col, ": ", n_unique, " unique values")
-        
-        if (col %in% valid_features) {
-          cat(" ✓ (has variation)\n")
-        } else {
-          cat(" ✗ (insufficient variation - excluded)\n")
-        }
-        
-        # Show values for small sets
-        if (n_unique <= 10) {
-          unique_vals <- unique(filtered_data[[col]])
-          cat("    Values:", paste(unique_vals, collapse = ", "), "\n")
-        }
-      }
-    }
-  } else {
-    varying_features <- character(0)
-  }
-  
-  cat("\nAuto-detected features with variation:", paste(varying_features, collapse = ", "), "\n")
-  cat("Total features selected:", length(varying_features), "\n")
-  
-  if (length(varying_features) == 0) {
-    cat("WARNING: No features with variation found!\n")
-  }
-  
-  return(varying_features)
-}
+
 
 #' Run CatBoost SHAP Analysis on Long Format Data
 #'
@@ -388,8 +230,10 @@ run_catboost_shap_analysis <- function(long_data, config) {
   }
   
   # Aggregate to specification level (already done in long format, but ensure consistency)
-  grouping_vars <- c("unit_name", "spec_number", "spec_combination", config$spec_features)
+  # Include spec features needed for CatBoost analysis
+  grouping_vars <- c("unit_name", "full_spec_id", config$spec_features)
   available_grouping_vars <- intersect(grouping_vars, names(data_filtered))
+  
   
   avg_tau_data <- data_filtered[, .(avg_tau = mean(tau, na.rm = TRUE)), by = available_grouping_vars]
   
@@ -401,8 +245,6 @@ run_catboost_shap_analysis <- function(long_data, config) {
   }
   
   cat("Prepared", nrow(avg_tau_data), "specification-unit observations\n")
-  cat("Specification number range:", min(avg_tau_data$spec_number, na.rm = TRUE), 
-      "to", max(avg_tau_data$spec_number, na.rm = TRUE), "\n")
   
   # Process units
   if(config$treated_unit_only) {
@@ -472,7 +314,8 @@ run_catboost_shap_analysis <- function(long_data, config) {
 #' @return List containing results, shapley values, and predictions.
 #'
 #' @keywords internal
-analyze_unit_catboost <- function(unit_data, unit, config, all_factor_levels = NULL, categorical_features = NULL) {
+analyze_unit_catboost <- function(unit_data, unit, config, 
+      all_factor_levels = NULL, categorical_features = NULL) {
   cat(paste("Processing unit:", unit), "\n")
   
   outcome_col_name <- "avg_tau"
@@ -485,8 +328,11 @@ analyze_unit_catboost <- function(unit_data, unit, config, all_factor_levels = N
   }
   
   # Check for complete cases
-  check_cols <- c(spec_features, outcome_col_name)
+  # check_cols <- c(spec_features, outcome_col_name)
+  check_cols <- c('full_spec_id', outcome_col_name)
+
   unit_data_complete <- na.omit(unit_data, cols = check_cols)
+
   n_specs <- nrow(unit_data_complete)
   
   if (n_specs < min_specs_required) {
@@ -499,7 +345,6 @@ analyze_unit_catboost <- function(unit_data, unit, config, all_factor_levels = N
     cat("Skipping", unit, "- no variation in avg_tau\n")
     return(list(results = NULL, shapley = NULL, predictions = NULL))
   }
-  
   # Check for single-level factors that would cause contrasts error
   features_to_use <- spec_features
   for (feature in spec_features) {
@@ -718,8 +563,8 @@ analyze_unit_catboost <- function(unit_data, unit, config, all_factor_levels = N
     is_treated = ifelse(unit == config$treated_unit_name, config$treated_unit_name, "Other")
   )
   
-  # Add specification metadata (including spec_number!)
-  available_cols <- intersect(c("spec_number", "spec_combination", config$spec_features), names(unit_data_complete))
+  # Add specification metadata - full_spec_id uniquely identifies each specification
+  available_cols <- intersect(c("full_spec_id"), names(unit_data_complete))
   if (length(available_cols) > 0) {
     spec_metadata <- unit_data_complete[, ..available_cols]
     predictions_dt <- cbind(predictions_dt, spec_metadata)
@@ -757,12 +602,12 @@ analyze_unit_catboost <- function(unit_data, unit, config, all_factor_levels = N
     shap_dt <- data.table::as.data.table(shap_values)
     shap_dt[, unit := unit]
     shap_dt[, is_treated := ifelse(unit == config$treated_unit_name, config$treated_unit_name, "Other")]
-    shap_dt[, spec_number := unit_data_complete$spec_number]
+    shap_dt[, full_spec_id := unit_data_complete$full_spec_id]
     
     # SIMPLE: Melt with actual feature names as measure.vars
     shap_long <- data.table::melt(
       shap_dt, 
-      id.vars = c("unit", "is_treated", "spec_number"), 
+      id.vars = c("unit", "is_treated", "full_spec_id"), 
       measure.vars = colnames(X_data),
       variable.name = "feature_group", 
       value.name = "shapley_value"
@@ -771,18 +616,18 @@ analyze_unit_catboost <- function(unit_data, unit, config, all_factor_levels = N
     # Convert feature_group to character
     shap_long[, feature_group := as.character(feature_group)]
     
-    # CRITICAL FIX: Map to actual categorical levels using spec_number for proper alignment
+    # CRITICAL FIX: Map to actual categorical levels using full_spec_id for proper alignment
     # For each row, look up what the actual categorical level was for that spec and feature group
     shap_long[, feature := ""]  # Initialize
     
-    # Create a lookup table for feature values by spec_number
-    feature_lookup <- unit_data_complete[, c("spec_number", colnames(X_data)), with = FALSE]
+    # Create a lookup table for feature values by full_spec_id
+    feature_lookup <- unit_data_complete[, c("full_spec_id", colnames(X_data)), with = FALSE]
     
     for (feat_group in colnames(X_data)) {
       if (feat_group %in% names(unit_data_complete)) {
-        # For each SHAP row with this feature_group, look up the actual feature value by spec_number
+        # For each SHAP row with this feature_group, look up the actual feature value by full_spec_id
         shap_long[feature_group == feat_group, 
-                  feature := as.character(feature_lookup[match(spec_number, feature_lookup$spec_number), get(feat_group)])]
+                  feature := as.character(feature_lookup[match(full_spec_id, feature_lookup$full_spec_id), get(feat_group)])]
       }
     }
     
@@ -843,7 +688,6 @@ analyze_unit_catboost <- function(unit_data, unit, config, all_factor_levels = N
   }
   
   cat("Completed analysis for", unit, "\n")
-  cat("  - SHAP data includes spec_number for alignment\n")
   cat("  - Feature groups properly identified and labeled\n")
   cat("  - Categorical features:", paste(categorical_features, collapse = ", "), "\n")
   

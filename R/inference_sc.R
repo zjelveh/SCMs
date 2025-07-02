@@ -57,7 +57,7 @@ inference_sc <- function(
     e.bounds     = NULL,
     verbose      = TRUE
 ){
-
+  
   # Check if sc.pred structure is valid
   if (is.null(sc.pred)) {
     return(NULL)
@@ -150,8 +150,8 @@ inference_sc <- function(
     }, error = function(e) {
       return(NULL)
     })
-    
-    # Now inference.results contains taus, rmse, and abadie_significance
+
+    # inference.results contains taus, rmse, and abadie_significance
     result <- list(
       data = sc.pred$data,
       est.results = sc.pred$est.results,

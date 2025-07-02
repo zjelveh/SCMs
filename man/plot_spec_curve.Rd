@@ -17,6 +17,7 @@ plot_spec_curve(
   show_pvalues = TRUE,
   p_threshold = 0.05,
   prefer_bootstrap_pvalues = FALSE,
+  null_distribution = "placebo",
   crop_outliers = "none",
   sort_by = "tau"
 )
@@ -56,10 +57,17 @@ Uses Abadie p-values by default, or bootstrap p-values if available. Default is 
 \item{prefer_bootstrap_pvalues}{Logical. Whether to prefer bootstrap p-values over Abadie p-values
 when both are available. Default is FALSE (prefer Abadie).}
 
+\item{null_distribution}{Character. The distribution to plot as the null/comparison.
+Options: "placebo" (default) or "bootstrap".
+\itemize{
+\item "placebo": Use placebo effects from control units as the null distribution.
+\item "bootstrap": Use the bootstrapped null distribution for the treated unit.
+}}
+
 \item{crop_outliers}{Character or Numeric. Method for cropping outliers in Panel A.
 Options: "none" (default), "percentile", "iqr", "mad", or numeric vector c(ymin, ymax).
 \itemize{
-\item "percentile": Crop to 5th-95th percentile of treated unit effects
+\item "percentile": Crop to 1st-99th percentile of treated unit effects
 \item "iqr": Crop to Q1 - 1.5\emph{IQR to Q3 + 1.5}IQR
 \item "mad": Crop to median ± 3*MAD (robust outlier detection)
 \item c(ymin, ymax): Manual y-axis limits
@@ -88,27 +96,29 @@ Plot Specification Curve Using Direct Long Format Data
 \dontrun{
 # New recommended workflow with perfect alignment
 
-# 1. Generate long format data
-spec_results_long <- spec_curve(
-  dataset = your_data,
-  outcomes = "num_homicide",
-  name_treated_unit = "PAPEP0000",
-  output_format = "long"
+# 1. Generate long format data with bootstrap inference
+spec_results_long <- run_spec_curve_analysis(
+  dataset, 
+  params = params,
+  inference_type = "bootstrap"
 )
 
-# 2. Run SHAP analysis with perfect alignment
-config <- create_catboost_config(
-  dataset_name = "homicide_study",
-  treated_unit_name = "PAPEP0000"
-)
+# 2. Run SHAP analysis
 shap_results <- run_catboost_shap_analysis(spec_results_long, config)
 
-# 3. Plot with guaranteed perfect alignment
-plot <- plot_spec_curve(
+# 3. Plot using placebo null (default)
+plot_placebo <- plot_spec_curve(
   long_data = spec_results_long,
-  name_treated_unit = "PAPEP0000",
-  outcomes = "num_homicide",
+  name_treated_unit = "TREATED_ID",
   shap_values = shap_results$shapley
+)
+
+# 4. Plot using bootstrap null
+plot_bootstrap <- plot_spec_curve(
+  long_data = spec_results_long,
+  name_treated_unit = "TREATED_ID",
+  shap_values = shap_results$shapley,
+  null_distribution = "bootstrap"
 )
 }
 }

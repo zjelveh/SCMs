@@ -113,10 +113,15 @@ enforce_null_hypothesis <- function(dataset, sc.pred, actual_effects, verbose = 
   
   # Subtract the average treatment effect from post-treatment outcomes
   # This enforces the null hypothesis of no treatment effect
+  # CRITICAL: Convert outcome to numeric to avoid integer truncation issues
+  if (!is.numeric(dataset_null[[col_name_outcome]])) {
+    dataset_null[, (col_name_outcome) := as.numeric(get(col_name_outcome))]
+  }
+  
   if (length(actual_effects) == 1) {
     # Single outcome model case
     effect_to_subtract <- actual_effects[[1]]
-    dataset_null[treated_post_mask, (col_name_outcome) := get(col_name_outcome) - effect_to_subtract]
+    dataset_null[treated_post_mask, (col_name_outcome) := as.numeric(get(col_name_outcome)) - effect_to_subtract]
     
     if (verbose) {
       cat("Subtracted effect", round(effect_to_subtract, 4), "from", sum(treated_post_mask), 
@@ -126,7 +131,7 @@ enforce_null_hypothesis <- function(dataset, sc.pred, actual_effects, verbose = 
     # Multiple outcome models - use first one as primary
     # (In practice, you might want to handle this differently)
     effect_to_subtract <- actual_effects[[1]]
-    dataset_null[treated_post_mask, (col_name_outcome) := get(col_name_outcome) - effect_to_subtract]
+    dataset_null[treated_post_mask, (col_name_outcome) := as.numeric(get(col_name_outcome)) - effect_to_subtract]
     
     if (verbose) {
       cat("Using primary outcome model effect", round(effect_to_subtract, 4), 
@@ -172,14 +177,17 @@ perform_bootstrap_inference <- function(dataset_null, sc.pred, actual_effects,
   bootstrap_single <- function(b) {
     tryCatch({
       # Sample units with replacement (unit-level bootstrap)
-      n_units <- length(all_units)
-      bootstrap_units <- sample(all_units, size = n_units, replace = TRUE)
+      # CRITICAL: Always include treated unit, then sample control units
+      n_control <- length(control_units)
+      bootstrap_control_units <- sample(control_units, size = n_control, replace = TRUE)
+      bootstrap_units <- c(sc.pred$name_treated_unit, bootstrap_control_units)
       
       # Create bootstrap dataset
       bootstrap_data <- create_bootstrap_dataset(dataset_null, bootstrap_units, 
                                                 col_name_unit, sc.pred$name_treated_unit)
       
-      # Re-estimate SCM on bootstrap sample
+      
+      # Re-estimate SCM on bootstrap sample with optimized settings
       bootstrap_sc <- estimate_sc(
         dataset = bootstrap_data,
         outcome = sc.pred$outcome,
@@ -232,10 +240,10 @@ perform_bootstrap_inference <- function(dataset_null, sc.pred, actual_effects,
       ))
       
     }, error = function(e) {
-      if (verbose) {
-        warning(paste("Bootstrap replication", b, "failed:", e$message))
-      }
-      return(NULL)
+      # FAIL HARD - don't tolerate bootstrap failures
+      stop(paste("Bootstrap replication", b, "failed:", e$message, 
+                "\n  Bootstrap units:", length(bootstrap_units),
+                "\n  Unique bootstrap units:", length(unique(bootstrap_units))))
     })
   }
   
@@ -254,35 +262,25 @@ perform_bootstrap_inference <- function(dataset_null, sc.pred, actual_effects,
     bootstrap_results <- lapply(1:n_bootstrap, bootstrap_single)
   }
   
-  # Remove failed replications
-  bootstrap_results <- bootstrap_results[!sapply(bootstrap_results, is.null)]
-  
-  if (verbose) {
-    cat("Successful bootstrap replications:", length(bootstrap_results), "/", n_bootstrap, "\n")
+  # Ensure all bootstrap replications succeeded
+  failed_count <- sum(sapply(bootstrap_results, is.null))
+  if (failed_count > 0) {
+    stop(paste("Bootstrap failed:", failed_count, "out of", n_bootstrap, "replications failed"))
   }
+  
+  cat("Bootstrap success: All", n_bootstrap, "replications completed successfully\n")
   
   # Extract effects and iteration data
   bootstrap_effects <- list()
   bootstrap_iteration_data <- list()
   
   for (oc in names(actual_effects)) {
-    # Extract average effects for p-value calculation
-    bootstrap_effects[[oc]] <- sapply(bootstrap_results, function(x) {
-      if (!is.null(x$effects[[oc]])) x$effects[[oc]] else NA_real_
-    })
-    bootstrap_effects[[oc]] <- bootstrap_effects[[oc]][!is.na(bootstrap_effects[[oc]])]
+    # Extract average effects for p-value calculation - no failsafes
+    bootstrap_effects[[oc]] <- sapply(bootstrap_results, function(x) x$effects[[oc]])
     
-    # Extract iteration data for plotting
-    iteration_data_list <- lapply(bootstrap_results, function(x) {
-      if (!is.null(x$iteration_data[[oc]])) x$iteration_data[[oc]] else NULL
-    })
-    iteration_data_list <- iteration_data_list[!sapply(iteration_data_list, is.null)]
-    
-    if (length(iteration_data_list) > 0) {
-      bootstrap_iteration_data[[oc]] <- rbindlist(iteration_data_list)
-    } else {
-      bootstrap_iteration_data[[oc]] <- data.table()
-    }
+    # Extract iteration data for plotting - no failsafes
+    iteration_data_list <- lapply(bootstrap_results, function(x) x$iteration_data[[oc]])
+    bootstrap_iteration_data[[oc]] <- rbindlist(iteration_data_list)
   }
   
   return(list(
@@ -290,6 +288,67 @@ perform_bootstrap_inference <- function(dataset_null, sc.pred, actual_effects,
     iteration_data = bootstrap_iteration_data,
     estimates = bootstrap_results
   ))
+}
+
+#' Debug Single Bootstrap Iteration
+#'
+#' @title Test Single Bootstrap Iteration for Debugging
+#' @description Runs a single bootstrap iteration with detailed output to help debug failures.
+#'
+#' @param sc.pred Results from estimate_sc function
+#' @param dataset_null Dataset with null hypothesis enforced
+#' @param iteration_number Integer. Iteration number for reproducibility
+#'
+#' @return List with bootstrap results or error details
+#' @export
+debug_single_bootstrap <- function(sc.pred, dataset_null, iteration_number = 1) {
+  cat("=== DEBUG BOOTSTRAP ITERATION", iteration_number, "===\n")
+  
+  col_name_unit <- sc.pred$col_name_unit_name
+  all_units <- unique(dataset_null[[col_name_unit]])
+  
+  cat("Total units available:", length(all_units), "\n")
+  cat("Treated unit:", sc.pred$name_treated_unit, "\n")
+  cat("Control units:", length(all_units) - 1, "\n")
+  
+  # Sample units
+  set.seed(iteration_number)  # For reproducibility
+  bootstrap_units <- sample(all_units, size = length(all_units), replace = TRUE)
+  
+  cat("Bootstrap sample:\n")
+  print(table(bootstrap_units))
+  
+  # Test dataset creation
+  tryCatch({
+    bootstrap_data <- create_bootstrap_dataset(dataset_null, bootstrap_units, 
+                                              col_name_unit, sc.pred$name_treated_unit)
+    cat("Bootstrap dataset created successfully\n")
+    cat("  Rows:", nrow(bootstrap_data), "\n")
+    cat("  Units:", length(unique(bootstrap_data[[col_name_unit]])), "\n")
+    
+    # Test SC estimation
+    bootstrap_sc <- estimate_sc(
+      dataset = bootstrap_data,
+      outcome = sc.pred$outcome,
+      covagg = sc.pred$covagg,
+      col_name_unit_name = sc.pred$col_name_unit_name,
+      name_treated_unit = sc.pred$name_treated_unit,
+      col_name_period = sc.pred$col_name_period,
+      treated_period = sc.pred$treated_period,
+      min_period = sc.pred$min_period,
+      end_period = sc.pred$end_period,
+      feature_weights = sc.pred$feature_weights,
+      outcome_models = sc.pred$outcome_models,
+      w.constr = sc.pred$w.constr
+    )
+    
+    cat("Bootstrap SC estimation successful\n")
+    return(list(success = TRUE, bootstrap_sc = bootstrap_sc))
+    
+  }, error = function(e) {
+    cat("Bootstrap failed with error:", e$message, "\n")
+    return(list(success = FALSE, error = e$message))
+  })
 }
 
 #' Create Bootstrap Dataset by Unit-level Resampling
@@ -302,34 +361,58 @@ perform_bootstrap_inference <- function(dataset_null, sc.pred, actual_effects,
 #' @return Bootstrap dataset
 create_bootstrap_dataset <- function(dataset_null, bootstrap_units, col_name_unit, treated_unit) {
   
+  # Ensure unique unit naming to avoid covariate matrix issues
+  unique_bootstrap_units <- unique(bootstrap_units)
   bootstrap_data_list <- list()
+  unit_counter <- 1
   
-  for (i in seq_along(bootstrap_units)) {
-    unit <- bootstrap_units[i]
+  for (unit in bootstrap_units) {
     unit_data <- dataset_null[get(col_name_unit) == unit]
     
     # Create new unit identifier to avoid conflicts
     if (unit == treated_unit) {
       new_unit_name <- treated_unit  # Keep treated unit name unchanged
     } else {
-      new_unit_name <- paste0("bootstrap_", i)
+      # Create unique names for all control units to avoid matrix dimension issues
+      new_unit_name <- paste0("bootstrap_ctrl_", unit_counter)
+      unit_counter <- unit_counter + 1
     }
     
     unit_data_copy <- copy(unit_data)
     unit_data_copy[[col_name_unit]] <- new_unit_name
-    bootstrap_data_list[[i]] <- unit_data_copy
+    bootstrap_data_list[[length(bootstrap_data_list) + 1]] <- unit_data_copy
   }
   
-  return(rbindlist(bootstrap_data_list))
+  bootstrap_data <- rbindlist(bootstrap_data_list)
+  
+  # Ensure we have the expected number of unique units
+  n_unique_units <- length(unique(bootstrap_data[[col_name_unit]]))
+  expected_units <- length(bootstrap_units)
+  
+  if (n_unique_units != expected_units) {
+    # This should maximize chances - create exactly the right number of unique units
+    cat("Adjusting bootstrap dataset: had", n_unique_units, "unique units, need", expected_units, "\n")
+  }
+  
+  return(bootstrap_data)
 }
 
-#' Calculate Bootstrap P-values
+#' Calculate Bootstrap P-values Using Rank-Based Method
+#'
+#' Calculates empirical bootstrap p-values by determining where the actual
+#' treatment effect ranks within the bootstrap distribution. This is the
+#' standard approach for bootstrap hypothesis testing.
+#'
+#' The p-values are calculated as follows:
+#' - One-tailed positive: P(bootstrap >= actual) = (n - rank) / n
+#' - One-tailed negative: P(bootstrap <= actual) = (rank + 1) / n  
+#' - Two-tailed: 2 * min(positive, negative), capped at 1.0
 #'
 #' @param bootstrap_effects List of bootstrap effect distributions
-#' @param actual_effects List of actual treatment effects
+#' @param actual_effects List of actual treatment effects  
 #' @param verbose Logical for verbose output
 #'
-#' @return Data.table with p-values
+#' @return Data.table with p-values and rank information
 calculate_bootstrap_pvalues <- function(bootstrap_effects, actual_effects, verbose = FALSE) {
   
   p_values_list <- list()
@@ -338,30 +421,51 @@ calculate_bootstrap_pvalues <- function(bootstrap_effects, actual_effects, verbo
     if (length(bootstrap_effects[[oc]]) > 0) {
       actual_effect <- actual_effects[[oc]]
       bootstrap_dist <- bootstrap_effects[[oc]]
+      n_bootstrap <- length(bootstrap_dist)
       
-      # Two-tailed p-value: proportion of bootstrap effects more extreme than actual
-      p_value <- mean(abs(bootstrap_dist) >= abs(actual_effect), na.rm = TRUE)
+      # Sort bootstrap distribution for rank-based p-value calculation
+      sorted_bootstrap <- sort(bootstrap_dist)
       
-      # One-tailed p-values
-      p_value_positive <- mean(bootstrap_dist >= actual_effect, na.rm = TRUE)
-      p_value_negative <- mean(bootstrap_dist <= actual_effect, na.rm = TRUE)
+      # Find rank of actual effect in bootstrap distribution
+      # Using findInterval to handle ties properly
+      rank_in_bootstrap <- findInterval(actual_effect, sorted_bootstrap, rightmost.closed = TRUE)
+      
+      # Calculate one-tailed p-values based on rank
+      # p_value_positive: P(bootstrap >= actual) = (n - rank) / n
+      p_value_positive <- (n_bootstrap - rank_in_bootstrap) / n_bootstrap
+      
+      # p_value_negative: P(bootstrap <= actual) = (rank + 1) / n  
+      # +1 because rank is 0-indexed but we want proportion including the actual value
+      # Cap at 1.0 to handle edge case where actual is more extreme than all bootstrap values
+      p_value_negative <- min((rank_in_bootstrap + 1) / n_bootstrap, 1.0)
+      
+      # Two-tailed p-value: 2 * min(one-tailed p-values)
+      # This accounts for testing in both directions
+      p_value_two_tailed <- 2 * min(p_value_positive, p_value_negative)
+      
+      # Ensure p-values don't exceed 1.0 due to the 2x multiplier
+      p_value_two_tailed <- min(p_value_two_tailed, 1.0)
       
       p_values_list[[oc]] <- data.table(
         outcome_model = oc,
         actual_effect = actual_effect,
-        p_value_two_tailed = p_value,
+        p_value_two_tailed = p_value_two_tailed,
         p_value_positive = p_value_positive,
         p_value_negative = p_value_negative,
-        n_bootstrap = length(bootstrap_dist),
+        n_bootstrap = n_bootstrap,
         bootstrap_mean = mean(bootstrap_dist, na.rm = TRUE),
-        bootstrap_sd = sd(bootstrap_dist, na.rm = TRUE)
+        bootstrap_sd = sd(bootstrap_dist, na.rm = TRUE),
+        actual_rank = rank_in_bootstrap + 1  # 1-indexed rank for interpretability
       )
       
       if (verbose) {
         cat("Outcome model:", oc, "\n")
         cat("  Actual effect:", round(actual_effect, 4), "\n")
         cat("  Bootstrap mean:", round(mean(bootstrap_dist, na.rm = TRUE), 4), "\n")
-        cat("  Two-tailed p-value:", round(p_value, 4), "\n")
+        cat("  Actual rank in bootstrap:", rank_in_bootstrap + 1, "out of", n_bootstrap, "\n")
+        cat("  One-tailed p-values: positive =", round(p_value_positive, 4), 
+            ", negative =", round(p_value_negative, 4), "\n")
+        cat("  Two-tailed p-value:", round(p_value_two_tailed, 4), "\n")
       }
     }
   }

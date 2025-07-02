@@ -22,13 +22,9 @@ spec_curve(
   constraints = list(list(name = "ols"), list(name = "simplex"), list(name = "lasso"),
     list(name = "ridge"), list(name = "L1-L2")),
   cores = 1,
-  use_cache = FALSE,
-  cache_dir = tempdir(),
   verbose = TRUE,
-  include_bootstrap_inference = FALSE,
-  bootstrap_n_replications = 1000,
-  bootstrap_cores = 1,
-  bootstrap_only = FALSE
+  inference_type = "placebo",
+  inference_config = list()
 )
 }
 \arguments{
@@ -86,39 +82,40 @@ with constraint parameters (e.g., \code{list(name = "simplex")}, \code{list(name
 \item{cores}{Integer. Number of CPU cores for parallel processing. Default is 1 (sequential).
 Higher values significantly speed up computation but require more memory.}
 
-\item{use_cache}{Logical. Whether to cache intermediate results to avoid recomputation. Default is FALSE.
-Useful for large specification spaces or when iterating on analysis.}
-
-\item{cache_dir}{Character. Directory path for storing cache files when \code{use_cache = TRUE}.
-Default is temporary directory from \code{tempdir()}.}
-
 \item{verbose}{Logical. Whether to display progress messages and warnings. Default is TRUE.}
 
-\item{include_bootstrap_inference}{Logical. Whether to include bootstrap-based significance testing
-in addition to placebo-based inference. Default is FALSE. Bootstrap inference enforces the null
-hypothesis by subtracting treatment effects and performs unit-level resampling.}
+\item{inference_type}{Character. Type of inference to perform:
+\itemize{
+\item \code{"placebo"} - Abadie-style placebo inference only (default)
+\item \code{"bootstrap"} - Bootstrap null hypothesis inference only
+\item \code{"all"} - Both placebo and bootstrap inference
+}}
 
-\item{bootstrap_n_replications}{Integer. Number of bootstrap replications when
-\code{include_bootstrap_inference = TRUE}. Default is 1000.}
-
-\item{bootstrap_cores}{Integer. Number of cores for bootstrap processing when
-\code{include_bootstrap_inference = TRUE}. Default is 1.}
-
-\item{bootstrap_only}{Logical. If TRUE, skip placebo inference and run only bootstrap inference.
-Requires \code{include_bootstrap_inference = TRUE}. Default is FALSE.}
+\item{inference_config}{List. Configuration settings for inference methods:
+\itemize{
+\item \code{bootstrap_n_replications} - Number of bootstrap replications (default: 1000)
+\item \code{bootstrap_cores} - Number of cores for bootstrap processing (default: 1)
+}}
 }
 \value{
-A nested list structure containing:
+A list structure containing:
 \itemize{
-\item \code{results} - List of estimation results for each specification
-\item \code{specifications} - Data frame describing each specification combination
-\item \code{summary_stats} - Summary statistics across all specifications
-\item \code{failed_runs} - Information about any failed estimations
-\item \code{metadata} - Information about the analysis (timing, parameters, etc.)
+\item \code{results} - Data.table in long format with all specification results (treatment effects, unit data, RMSE)
+\item \code{abadie_inference} - List containing Abadie placebo inference results:
+\itemize{
+\item \code{p_values} - Specification-level p-values and significance tests
+\item \code{post_pre_ratios} - Unit-level post/pre RMSPE ratios for ranking
+\item \code{filtered_results} - Filtered significance results (if available)
+}
+\item \code{bootstrap_inference} - List containing bootstrap inference results:
+\itemize{
+\item \code{p_values} - Specification-level bootstrap p-values and statistics
+}
 }
 
-Each element in \code{results} contains the full output from \code{scest()} and \code{inference_sc()}
-for that specification, allowing detailed post-hoc analysis.
+The \code{results} data.table contains treatment effects (tau), unit information, and specification
+metadata for all units (treated, control placebo, bootstrap iterations) across all specifications.
+Inference results are separated to avoid duplication and provide cleaner access to statistical tests.
 }
 \description{
 This function performs comprehensive specification curve analysis for Synthetic Control Methods
@@ -132,7 +129,6 @@ for each combination. This implementation includes:
 \itemize{
 \item \strong{Parallel Processing}: Distributes computations across multiple cores for efficiency
 \item \strong{Error Handling}: Gracefully handles failed estimations and continues processing
-\item \strong{Caching System}: Optionally stores results to disk using digest-based keys
 \item \strong{Progress Tracking}: Provides real-time updates on estimation progress
 \item \strong{Memory Management}: Efficiently handles large specification spaces
 }
@@ -166,7 +162,7 @@ results <- spec_curve(
   cores = 4
 )
 
-# Multi-outcome analysis with caching
+# Multi-outcome analysis
 results_multi <- spec_curve(
   dataset = policy_data,
   outcomes = c("unemployment", "gdp", "investment"),
@@ -180,8 +176,6 @@ results_multi <- spec_curve(
   min_period = 1995,
   end_period = 2015,
   col_name_period = "year",  
-  use_cache = TRUE,
-  cache_dir = "./cache",
   cores = 8
 )
 
