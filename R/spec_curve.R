@@ -662,37 +662,45 @@ spec_curve <- function(
           # Create Abadie results for this specification
           abadie_spec_results <- list()
           
-          # Add p-values (specification-level)
-          if (!is.null(abadie_data$p_values) && nrow(abadie_data$p_values) > 0) {
-            p_values_data <- copy(abadie_data$p_values)
-            # Only add essential merge key and inference type - no redundant spec metadata
-            p_values_data[, `:=`(
-              full_spec_id = paste(res$spec_number, outcome_model, sep = "_"),
-              inference_type = "abadie_pvalue"
-            )]
-            abadie_spec_results[["p_values"]] <- p_values_data
-          }
+          # Process each test statistic type
+          test_stats <- c("rmse_ratio", "treatment_effect", "normalized_te")
           
-          # Add post/pre ratios (unit-level)
-          if (!is.null(abadie_data$post_pre_ratios) && nrow(abadie_data$post_pre_ratios) > 0) {
-            ratio_data <- copy(abadie_data$post_pre_ratios)
-            # Only add essential merge key and inference type - no redundant spec metadata
-            ratio_data[, `:=`(
-              full_spec_id = paste(res$spec_number, outcome_model, sep = "_"),
-              inference_type = "abadie_ratio"
-            )]
-            abadie_spec_results[["post_pre_ratios"]] <- ratio_data
-          }
-          
-          # Add filtered results (specification-level)
-          if (!is.null(abadie_data$filtered_results) && nrow(abadie_data$filtered_results) > 0) {
-            filtered_data <- copy(abadie_data$filtered_results)
-            # Only add essential merge key and inference type - no redundant spec metadata
-            filtered_data[, `:=`(
-              full_spec_id = paste(res$spec_number, outcome_model, sep = "_"),
-              inference_type = "abadie_filtered"
-            )]
-            abadie_spec_results[["filtered_results"]] <- filtered_data
+          for (test_stat in test_stats) {
+            if (!is.null(abadie_data[[test_stat]])) {
+              test_stat_data <- abadie_data[[test_stat]]
+              
+              # Add p-values for this test statistic
+              if (!is.null(test_stat_data$p_values) && nrow(test_stat_data$p_values) > 0) {
+                p_values_data <- copy(test_stat_data$p_values)
+                p_values_data[, `:=`(
+                  full_spec_id = paste(res$spec_number, outcome_model, sep = "_"),
+                  inference_type = paste0("abadie_pvalue_", test_stat)
+                )]
+                abadie_spec_results[[paste0("p_values_", test_stat)]] <- p_values_data
+              }
+              
+              # Add test statistics for this test statistic type
+              if (!is.null(test_stat_data$test_statistics) && nrow(test_stat_data$test_statistics) > 0) {
+                test_stats_data <- copy(test_stat_data$test_statistics)
+                test_stats_data[, `:=`(
+                  full_spec_id = paste(res$spec_number, outcome_model, sep = "_"),
+                  inference_type = paste0("abadie_teststat_", test_stat)
+                )]
+                abadie_spec_results[[paste0("test_statistics_", test_stat)]] <- test_stats_data
+              }
+              
+              # Add filtered results (only for rmse_ratio)
+              if (test_stat == "rmse_ratio" && 
+                  !is.null(test_stat_data$filtered_results) && 
+                  nrow(test_stat_data$filtered_results) > 0) {
+                filtered_data <- copy(test_stat_data$filtered_results)
+                filtered_data[, `:=`(
+                  full_spec_id = paste(res$spec_number, outcome_model, sep = "_"),
+                  inference_type = "abadie_filtered_rmse_ratio"
+                )]
+                abadie_spec_results[["filtered_results"]] <- filtered_data
+              }
+            }
           }
           
           abadie_results_list[[length(abadie_results_list) + 1]] <- abadie_spec_results
@@ -736,29 +744,41 @@ spec_curve <- function(
     if (length(abadie_results_list) > 0) {
       abadie_combined <- list()
       
-      # Combine p-values across specifications
-      abadie_p_values <- list()
-      abadie_ratios <- list()
-      abadie_filtered <- list()
+      # Initialize lists for each test statistic type
+      test_stats <- c("rmse_ratio", "treatment_effect", "normalized_te")
       
+      for (test_stat in test_stats) {
+        p_values_key <- paste0("p_values_", test_stat)
+        test_stats_key <- paste0("test_statistics_", test_stat)
+        
+        p_values_list <- list()
+        test_stats_list <- list()
+        
+        for (spec_results in abadie_results_list) {
+          if (p_values_key %in% names(spec_results)) {
+            p_values_list[[length(p_values_list) + 1]] <- spec_results[[p_values_key]]
+          }
+          if (test_stats_key %in% names(spec_results)) {
+            test_stats_list[[length(test_stats_list) + 1]] <- spec_results[[test_stats_key]]
+          }
+        }
+        
+        if (length(p_values_list) > 0) {
+          abadie_combined[[p_values_key]] <- data.table::rbindlist(p_values_list, fill = TRUE)
+        }
+        if (length(test_stats_list) > 0) {
+          abadie_combined[[test_stats_key]] <- data.table::rbindlist(test_stats_list, fill = TRUE)
+        }
+      }
+      
+      # Handle filtered results (only for rmse_ratio)
+      abadie_filtered <- list()
       for (spec_results in abadie_results_list) {
-        if ("p_values" %in% names(spec_results)) {
-          abadie_p_values[[length(abadie_p_values) + 1]] <- spec_results$p_values
-        }
-        if ("post_pre_ratios" %in% names(spec_results)) {
-          abadie_ratios[[length(abadie_ratios) + 1]] <- spec_results$post_pre_ratios
-        }
         if ("filtered_results" %in% names(spec_results)) {
           abadie_filtered[[length(abadie_filtered) + 1]] <- spec_results$filtered_results
         }
       }
       
-      if (length(abadie_p_values) > 0) {
-        abadie_combined$p_values <- data.table::rbindlist(abadie_p_values, fill = TRUE)
-      }
-      if (length(abadie_ratios) > 0) {
-        abadie_combined$post_pre_ratios <- data.table::rbindlist(abadie_ratios, fill = TRUE)
-      }
       if (length(abadie_filtered) > 0) {
         abadie_combined$filtered_results <- data.table::rbindlist(abadie_filtered, fill = TRUE)
       }

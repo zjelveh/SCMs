@@ -30,6 +30,9 @@
 #'   - "categorical": Uses discrete significance categories (original behavior)
 #' @param prefer_bootstrap_pvalues Logical. Whether to prefer bootstrap p-values over Abadie p-values
 #'   when both are available. Default is FALSE (prefer Abadie).
+#' @param test_statistic Character. Which test statistic p-values to use for coloring.
+#'   Options: "rmse_ratio" (default), "treatment_effect", "normalized_te".
+#'   Only applies to Abadie placebo inference which provides multiple test statistics.
 #' @param null_distribution Character. The distribution to plot as the null/comparison.
 #'   Options: "placebo" (default) or "bootstrap".
 #'   - "placebo": Use placebo effects from control units as the null distribution.
@@ -64,19 +67,30 @@
 #' # 2. Run SHAP analysis
 #' shap_results <- run_catboost_shap_analysis(spec_results_long, config)
 #' 
-#' # 3. Plot using placebo null with continuous p-values (default)
-#' plot_placebo <- plot_spec_curve(
+#' # 3. Plot using placebo null with continuous p-values (default - RMSE ratio)
+#' plot_rmse_ratio <- plot_spec_curve(
 #'   long_data = spec_results_long,
 #'   name_treated_unit = "TREATED_ID",
 #'   shap_values = shap_results$shapley,
+#'   test_statistic = "rmse_ratio",
 #'   pvalue_style = "continuous"
 #' )
 #' 
-#' # 4. Plot using categorical p-values (original style)
-#' plot_categorical <- plot_spec_curve(
+#' # 4. Plot using treatment effect test statistic p-values
+#' plot_treatment_effect <- plot_spec_curve(
 #'   long_data = spec_results_long,
 #'   name_treated_unit = "TREATED_ID",
 #'   shap_values = shap_results$shapley,
+#'   test_statistic = "treatment_effect",
+#'   pvalue_style = "continuous"
+#' )
+#' 
+#' # 5. Plot using normalized treatment effect test statistic p-values
+#' plot_normalized_te <- plot_spec_curve(
+#'   long_data = spec_results_long,
+#'   name_treated_unit = "TREATED_ID",
+#'   shap_values = shap_results$shapley,
+#'   test_statistic = "normalized_te",
 #'   pvalue_style = "categorical"
 #' )
 #' }
@@ -94,6 +108,7 @@ plot_spec_curve <- function(
     p_threshold = 0.05,
     pvalue_style = "continuous",
     prefer_bootstrap_pvalues = FALSE,
+    test_statistic = "rmse_ratio",
     null_distribution = "placebo",
     crop_outliers = "none",
     sort_by = "tau"
@@ -101,28 +116,52 @@ plot_spec_curve <- function(
 
   # Libraries imported via NAMESPACE 
 
+  # Input validation
+  valid_test_statistics <- c("rmse_ratio", "treatment_effect", "normalized_te")
+  if (!test_statistic %in% valid_test_statistics) {
+    stop("test_statistic must be one of: ", paste(valid_test_statistics, collapse = ", "))
+  }
+
   # Input validation and data extraction
   if (is.list(long_data) && "results" %in% names(long_data)) {
     # Handle structured results from spec_curve
     main_data <- data.table::as.data.table(long_data$results)
     
-    # Merge inference results using only full_spec_id (avoiding categorical column conflicts)
-    if (!is.null(long_data$abadie_inference$p_values)) {
-      abadie_pvals <- long_data$abadie_inference$p_values
+    # Merge inference results for the specified test statistic
+    p_values_key <- paste0("p_values_", test_statistic)
+    test_stats_key <- paste0("test_statistics_", test_statistic)
+    
+    if (!is.null(long_data$abadie_inference[[p_values_key]])) {
+      abadie_pvals <- long_data$abadie_inference[[p_values_key]]
       main_data = merge(main_data, abadie_pvals[, .(full_spec_id, p_value)], 
        by = "full_spec_id", all.x = TRUE)
     }
 
-    # Merge post_pre_ratios using unit-level keys to avoid cartesian joins
-    if (!is.null(long_data$abadie_inference$post_pre_ratios)) {
-      ppr <- long_data$abadie_inference$post_pre_ratios
+    # Merge test statistics values using unit-level keys to avoid cartesian joins
+    if (!is.null(long_data$abadie_inference[[test_stats_key]])) {
+      test_stats_data <- long_data$abadie_inference[[test_stats_key]]
       # Include unit_type to ensure unique merging (avoids cartesian joins)
-      merge_cols <- intersect(c("full_spec_id", "unit_name", "unit_type"), names(ppr))
+      merge_cols <- intersect(c("full_spec_id", "unit_name", "unit_type"), names(test_stats_data))
       if (length(merge_cols) >= 2) {  # Need at least full_spec_id + unit identifier
-        main_data = merge(main_data, ppr[, c(merge_cols, "post_pre_ratio"), with = FALSE], 
-         by = merge_cols, all.x = TRUE)
+        # Get the appropriate column name for the test statistic value
+        if ("test_statistic_value" %in% names(test_stats_data)) {
+          value_col <- "test_statistic_value"
+        } else if ("post_pre_ratio" %in% names(test_stats_data)) {
+          value_col <- "post_pre_ratio"
+        } else {
+          value_col <- NULL
+        }
+        
+        if (!is.null(value_col)) {
+          main_data = merge(main_data, test_stats_data[, c(merge_cols, value_col), with = FALSE], 
+           by = merge_cols, all.x = TRUE)
+          # Rename to standardized column name for backward compatibility
+          if (value_col == "test_statistic_value" && test_statistic == "rmse_ratio") {
+            setnames(main_data, "test_statistic_value", "post_pre_ratio")
+          }
+        }
       } else {
-        warning("Insufficient merge columns for post_pre_ratios - skipping merge")
+        warning("Insufficient merge columns for test statistics - skipping merge")
       }
     }
 
@@ -429,15 +468,6 @@ Method', feature := "OLS Weights"]
   groups_to_keep <- feature_counts[n_unique > 1, feature_group]
   plot_data_p2 <- panel_b_data[feature_group %in% groups_to_keep]
 
-  # F. Create Fit Quality Score
-  all_rmse_data <- plot_data_p1[!is.na(RMSE), RMSE]
-  if (length(all_rmse_data) > 0) {
-    max_rmse <- max(all_rmse_data, na.rm = TRUE)
-    min_rmse <- min(all_rmse_data, na.rm = TRUE)
-    plot_data_p1[, fit_quality := max_rmse - RMSE + min_rmse]
-  } else {
-    plot_data_p1[, fit_quality := 1]
-  }
 
   # --- 2. Create the Final Plots ---
   data.table::setorder(plot_data_p1, -unit_type)
@@ -452,15 +482,15 @@ Method', feature := "OLS Weights"]
       treated_data[, is_significant := p_value < p_threshold]
       
       p1 <- ggplot() +
-        geom_point(data = control_data, aes(x = Specification, y = Estimate, size = fit_quality),
-                   color = "gray60", alpha = 0.3, shape = 19) +
+        geom_point(data = control_data, aes(x = Specification, y = Estimate),
+                   color = "gray60", alpha = 0.3, shape = 19, size = 2) +
         # Add significance boundary line for treated effects
         geom_point(data = treated_data[is_significant == TRUE], 
-                   aes(x = Specification, y = Estimate, size = fit_quality),
-                   color = "black", alpha = 0.9, shape = 21, stroke = 1.2) +
+                   aes(x = Specification, y = Estimate),
+                   color = "black", alpha = 0.9, shape = 21, stroke = 1.2, size = 2) +
         geom_point(data = treated_data, aes(x = Specification, y = Estimate, 
-                                           color = -log10(pmax(p_value, 1e-10)), size = fit_quality),
-                   alpha = 0.8, shape = 19) +
+                                           color = -log10(pmax(p_value, 1e-10))),
+                   alpha = 0.8, shape = 19, size = 2) +
         geom_hline(yintercept = 0, alpha = 0.5, linetype = 'dashed') +
         scale_color_gradient2(
           name = "-log10(p-value)",
@@ -479,32 +509,43 @@ Method', feature := "OLS Weights"]
     } else {
       # Categorical p-value coloring (original behavior)
       treated_data[, significance_category := fcase(
-        p_value < 0.01, "Highly Significant (p < 0.01)",
-        p_value < 0.05, "Significant (p < 0.05)", 
-        p_value < 0.10, "Marginally Significant (p < 0.10)",
-        p_value >= 0.10, "Not Significant (p >= 0.10)",
+        # p_value < 0.01, "p < 0.01)",
+        # p_value < 0.05, "Significant (p < 0.05)", 
+        # p_value < 0.10, "Marginally Significant (p < 0.10)",
+        # p_value >= 0.10, "Not Significant (p >= 0.10)",
+        # default = "Unknown"
+        p_value < 0.01, "p < 0.01",
+        p_value < 0.05, "p < 0.05", 
+        p_value < 0.10, "p < 0.10",
+        p_value >= 0.10, "p >= 0.10",
         default = "Unknown"
       )]
       
       p1 <- ggplot() +
-        geom_point(data = control_data, aes(x = Specification, y = Estimate, size = fit_quality),
-                   color = "gray60", alpha = 0.3, shape = 19) +
-        geom_point(data = treated_data, aes(x = Specification, y = Estimate, color = significance_category, size = fit_quality),
-                   alpha = 0.8, shape = 19) +
+        geom_point(data = control_data, aes(x = Specification, y = Estimate),
+                   color = "gray60", alpha = 0.3, shape = 19, size = 2) +
+        geom_point(data = treated_data, aes(x = Specification, y = Estimate, color = significance_category),
+                   alpha = 0.8, shape = 19, size = 2) +
         geom_hline(yintercept = 0, alpha = 0.5, linetype = 'dashed') +
         scale_color_manual(
-          name = "Statistical Significance",
-          values = c("Highly Significant (p < 0.01)" = "#08519c", "Significant (p < 0.05)" = "#3182bd",
-                     "Marginally Significant (p < 0.10)" = "#fd8d3c", "Not Significant (p >= 0.10)" = "#d94701",
+          name = "p-value",
+          values = c("p < 0.01" = "#08519c", "p < 0.05" = "#3182bd",
+                     "p < 0.10" = "#fd8d3c", "p >= 0.10" = "#d94701",
                      "Unknown" = "#999999"),
-          breaks = c("Highly Significant (p < 0.01)", "Significant (p < 0.05)",
-                     "Marginally Significant (p < 0.10)", "Not Significant (p >= 0.10)")
+          breaks = c("p < 0.01", "p < 0.05",
+                     "p < 0.10", "p >= 0.10")
+          # name = "Statistical Significance",
+          # values = c("p < 0.01)" = "#08519c", "Significant (p < 0.05)" = "#3182bd",
+          #            "Marginally Significant (p < 0.10)" = "#fd8d3c", "Not Significant (p >= 0.10)" = "#d94701",
+          #            "Unknown" = "#999999"),
+          # breaks = c("p < 0.01)", "Significant (p < 0.05)",
+          #            "Marginally Significant (p < 0.10)", "Not Significant (p >= 0.10)")
         )
     }
   } else {
     p1 <- ggplot(plot_data_p1, aes(x = Specification, y = Estimate, fill = unit_type,
-                                 size = fit_quality, color = unit_type, alpha = unit_type)) +
-      geom_point(shape = 21) +
+                                 color = unit_type, alpha = unit_type)) +
+      geom_point(shape = 21, size = 2) +
       geom_hline(yintercept = 0, alpha = 0.5, linetype = 'dashed') +
       scale_fill_manual(name = "Unit Type", values = c(control = "gray60", treated = "#1f78b4", bootstrap = "gray60")) +
       scale_color_manual(name = "Unit Type", values = c(control = "gray60", treated = "#1f78b4", bootstrap = "gray60")) +
@@ -514,29 +555,13 @@ Method', feature := "OLS Weights"]
 # Add common elements to both plot types
 p1 <- p1 +
   
-  scale_size_continuous(
-    name = "Pre-period Fit Quality",
-    range = c(0.5, 4),
-    breaks = function(x) {
-      # Create 4 evenly spaced breaks for the legend
-      seq(min(x), max(x), length.out = 4)
-    },
-    labels = c("Poor", "Fair", "Good", "Excellent"),
-    guide = guide_legend(
-      title.position = "top",
-      override.aes = list(color = "black", alpha = 1, shape = 19),
-      nrow = 1
-    )
-  ) +
-  
   guides(
-    size = guide_legend(title.position = "top"),
     color = guide_legend(title.position = "top", override.aes = list(size = 4))
   ) +
   
   theme_minimal() +
   theme(
-    legend.position = "right",
+    legend.position = "left",
     legend.box = "vertical",
     axis.line = element_line(color = "black", linewidth = 0.5),
     axis.text = element_text(colour = "black")

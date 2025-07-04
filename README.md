@@ -36,57 +36,104 @@ devtools::install(dependencies = TRUE)
 
 ```r
 library(SCMs)
+library(data.table)
 
-# Load and prepare data
-data <- create_scm_dataset(your_data, 
-                          unit_col = "unit_id", 
-                          time_col = "year",
-                          outcome_col = "outcome")
+# Load the included German reunification dataset
+dataset <- fread(system.file("scpi_germany.csv", package = "SCMs"))
 
-# Run synthetic control estimation  
-results <- scest(data, treated_unit = "TREATED_ID", treated_period = 2015)
+# Basic synthetic control estimation
+results <- scest(
+  dataset, 
+  treated_unit = "West Germany",
+  treated_period = 1991,
+  outcome = "gdp",
+  unit_col = "country",
+  time_col = "year"
+)
 
 # View results
 summary(results)
 plot(results)
+
+# Run placebo inference with multiple test statistics
+inference_results <- inference_sc(results, dataset, inference_type = "placebo")
+
+# View p-values for different test statistics
+print(inference_results$abadie_significance)
 ```
 
 ### Specification Curve Analysis
 
 ```r
-# Create analysis configuration
-config <- create_analysis_config("study_name", custom_params = list(
-  name_treated_unit = "TREATED_ID",
-  treated_period = 2015,
-  min_period = 2010,
-  end_period = 2020,
-  cores = 4
-))
+# Define specification parameters for German reunification analysis
+params <- list(
+  cores = 4,
+  outcomes = "gdp",
+  col_name_unit_name = "country",
+  name_treated_unit = "West Germany",
+  covagg = list(
+    parsimonious = list(
+      label = 'GDP + Trade Average',
+      gdp_avg = list(var = "gdp", average = "full_pre"),
+      trade_avg = list(var = 'trade', average = 'full_pre')
+    ),
+    gdp_only = list(
+      label = 'GDP Only',
+      gdp_each = list(var = "gdp", each_period = TRUE)
+    )
+  ),
+  treated_period = 1991,  # German reunification
+  min_period = 1960,
+  end_period = 2003,
+  col_name_period = "year",
+  feature_weights = c("uniform", "optimize"),
+  outcome_models = c("none", "augsynth", "lasso"),
+  constraints = list(
+    list(name = "simplex"),
+    list(name = "lasso")
+  ),
+  inference_type = 'placebo'
+)
 
 # Run comprehensive specification curve analysis
-spec_results <- run_spec_curve_analysis(config)
+spec_results <- run_spec_curve_analysis(dataset = dataset, params = params)
 
-# Visualize results
-plot_spec_curve(spec_results)
+# Visualize results with different test statistics
+plot_spec_curve(
+  long_data = spec_results,
+  name_treated_unit = 'West Germany',
+  outcomes = 'gdp',
+  test_statistic = 'treatment_effect'  # or 'rmse_ratio', 'normalized_te'
+)
 ```
 
 ### CatBoost + SHAP Analysis
 
 ```r
-# Configure CatBoost analysis
+# Configure CatBoost analysis for interpretability
 catboost_config <- create_catboost_config(
-  dataset_name = "my_study",
-  
-  treated_unit_name = "TREATED_ID",
-  outcome_filter = "outcome_variable"
+  dataset_name = "german_reunification_analysis",
+  treated_unit_name = "West Germany",
+  outcome_filter = "gdp",
+  spec_features = c('feat', 'outcome_model', 'const', 'data_sample', 'fw'),
+  treated_unit_only = TRUE
 )
 
 # Run CatBoost + SHAP analysis
-catboost_results <- run_catboost_shap_analysis(catboost_config)
+shap_results <- run_catboost_shap_analysis(spec_results$results, catboost_config)
+
+# Create specification curve with SHAP coloring
+plot_spec_curve(
+  long_data = spec_results,
+  name_treated_unit = 'West Germany',
+  outcomes = 'gdp',
+  shap_values = shap_results$shapley,  # Color points by SHAP values
+  test_statistic = 'treatment_effect'
+)
 
 # Create advanced visualizations
-plot_shapley_distributions(catboost_results)
-plot_interaction_heatmap(catboost_results)
+plot_shapley_distributions(shap_results)
+plot_interaction_heatmap(shap_results)
 ```
 
 ## Package Structure
@@ -140,7 +187,16 @@ plot_interaction_heatmap(catboost_results)
 
 ## Examples
 
-See `examples/complete_pipeline_example.R` for a comprehensive workflow demonstration combining all package features.
+The package includes complete working examples:
+
+- **Quick Start**: `inst/examples/quick_start_example.R` - Basic usage with German data
+- **Complete Pipeline**: `inst/examples/german_reunification_example.R` - Full workflow demonstration combining all package features
+
+Both examples use the included `scpi_germany.csv` dataset and demonstrate:
+- Basic synthetic control estimation
+- Multiple test statistics (RMSE ratio, treatment effect, normalized treatment effect)  
+- Specification curve analysis with SHAP interpretability
+- Advanced visualizations
 
 ## Citation
 

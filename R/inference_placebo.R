@@ -1,78 +1,126 @@
 #' Calculate Abadie-style Significance Measures
 #'
-#' @title Calculate Post/Pre RMSPE Ratios and Rank-based P-values
+#' @title Calculate Multiple Test Statistics and Rank-based P-values
 #' @description Calculates significance measures following Abadie et al. (2010) German reunification paper.
-#' Includes post/pre RMSPE ratios, rank-based p-values, and filtering for poor pre-treatment fits.
+#' Computes post/pre RMSPE ratios, treatment effects, normalized treatment effects, and their rank-based two-sided p-values.
 #'
 #' @param taus_result Data.table containing treatment effects for all units
 #' @param rmse_result Data.table containing RMSE values for all units
 #' @param rmspe_threshold Numeric. Threshold for filtering poor pre-treatment fits (default: 0)
 #'
-#' @return List containing Abadie significance measures
+#' @return List containing Abadie significance measures for all test statistics
 calculate_abadie_significance <- function(taus_result, rmse_result, rmspe_threshold = 0) {
   
   if (nrow(taus_result) == 0 || nrow(rmse_result) == 0) {
     return(list(
-      post_pre_ratios = data.table(),
-      p_values = data.table(),
-      filtered_results = data.table()
+      rmse_ratio = list(test_statistics = data.table(), p_values = data.table(), filtered_results = data.table()),
+      treatment_effect = list(test_statistics = data.table(), p_values = data.table()),
+      normalized_te = list(test_statistics = data.table(), p_values = data.table())
     ))
   }
 
-  
   # Ensure inputs are data.tables for efficient operations
   if (!is.data.table(taus_result)) setDT(taus_result)
   if (!is.data.table(rmse_result)) setDT(rmse_result)
 
-  # Calculate post-period RMSPE by outcome model
+  # Calculate all test statistics
+  
+  # 1. RMSE Ratio (post/pre RMSPE)
   post_rmspe <- taus_result[post_period == TRUE, .(
     post_rmspe = sqrt(mean(tau^2))
   ), by = .(unit_name, unit_type, outcome_model)]
   
-  # Merge pre-RMSE with post-RMSPE by outcome model
-  rmspe_combined <- merge(rmse_result, post_rmspe, by = c("unit_name", "unit_type", "outcome_model"))
+  rmse_ratio_stats <- merge(rmse_result, post_rmspe, by = c("unit_name", "unit_type", "outcome_model"))
+  rmse_ratio_stats[, test_statistic_value := post_rmspe / pre_rmse]
   
-  # Calculate post/pre RMSPE ratios
-  rmspe_combined[, post_pre_ratio := post_rmspe / pre_rmse]
+  # 2. Treatment Effect (average post-period treatment effect)
+  te_stats <- taus_result[post_period == TRUE, .(
+    test_statistic_value = mean(tau)
+  ), by = .(unit_name, unit_type, outcome_model)]
   
-  # Get treated unit ratios for each outcome model
-  treated_ratios <- rmspe_combined[unit_type == "treated", .(outcome_model, treated_ratio = post_pre_ratio)]
+  # 3. Normalized Treatment Effect (TE / pre-period SD)
+  te_post <- taus_result[post_period == TRUE, .(
+    avg_treatment_effect = mean(tau)
+  ), by = .(unit_name, unit_type, outcome_model)]
   
-  if (nrow(treated_ratios) > 0) {
-    # Calculate ranks and p-values - group by outcome model
-    p_values_result <- rmspe_combined[unit_type == "control", {
-      if (.N > 0) {
-        treated_val <- treated_ratios[outcome_model == .BY$outcome_model, treated_ratio]
-        if (length(treated_val) > 0) {
-          # Rank-based p-value calculation (consistent with bootstrap approach)
-          sorted_control_ratios <- sort(post_pre_ratio)
-          rank_val <- findInterval(treated_val, sorted_control_ratios, rightmost.closed = TRUE) + 1
-          total_val <- .N + 1
-          
-          list(
-            treated_ratio = treated_val,
-            rank = rank_val,
-            total_units = total_val,
-            p_value = rank_val / total_val
-          )
+  pre_sd <- taus_result[post_period == FALSE, .(
+    pre_sd = sd(tau)
+  ), by = .(unit_name, unit_type, outcome_model)]
+  
+  normalized_te_stats <- merge(te_post, pre_sd, by = c("unit_name", "unit_type", "outcome_model"))
+  normalized_te_stats[, test_statistic_value := avg_treatment_effect / pre_sd]
+  
+  # Function to calculate p-values for a given test statistic
+  calculate_pvalues <- function(test_stat_data, test_type = "treatment_effect") {
+    treated_ratios <- test_stat_data[unit_type == "treated", .(outcome_model, treated_ratio = test_statistic_value)]
+    
+    if (nrow(treated_ratios) > 0) {
+      p_values_result <- test_stat_data[unit_type == "control", {
+        if (.N > 0) {
+          treated_val <- treated_ratios[outcome_model == .BY$outcome_model, treated_ratio]
+          if (length(treated_val) > 0) {
+            control_vals <- test_statistic_value
+            
+            if (test_type == "rmse_ratio") {
+              # For RMSE ratios: one-sided test (is treated unit an outlier in upper tail?)
+              # Traditional Abadie approach - testing if treated unit is unusually volatile
+              rank_val <- sum(control_vals >= treated_val) + 1
+              total_val <- length(control_vals) + 1
+              p_value_one_sided <- rank_val / total_val
+              p_value_two_sided <- NA  # Keep as one-sided for RMSE ratios
+              
+            } else {
+              # For treatment effects: standard two-sided test
+              total_val <- length(control_vals) + 1
+              
+              # Count control units as extreme or more extreme in the same direction
+              if (treated_val >= 0) {
+                same_direction_extreme <- sum(control_vals >= treated_val)
+              } else {
+                same_direction_extreme <- sum(control_vals <= treated_val)  
+              }
+              
+              # One-sided p-value
+              p_value_one_sided <- (same_direction_extreme + 1) / total_val
+              
+              # Two-sided: double the one-sided p-value, capped at 1
+              p_value_two_sided <- min(2 * p_value_one_sided, 1.0)
+              
+              rank_val <- same_direction_extreme + 1
+            }
+            
+            list(
+              treated_ratio = treated_val,
+              rank = rank_val,
+              total_units = total_val,
+              p_value_one_sided = p_value_one_sided,
+              p_value = p_value_two_sided
+            )
+          } else {
+            list(treated_ratio = NA_real_, rank = NA_integer_, total_units = NA_integer_, 
+                 p_value_one_sided = NA_real_, p_value = NA_real_)
+          }
         } else {
-          list(treated_ratio = NA_real_, rank = NA_integer_, total_units = NA_integer_, p_value = NA_real_)
+          list(treated_ratio = NA_real_, rank = NA_integer_, total_units = NA_integer_, 
+               p_value_one_sided = NA_real_, p_value = NA_real_)
         }
-      } else {
-        list(treated_ratio = NA_real_, rank = NA_integer_, total_units = NA_integer_, p_value = NA_real_)
-      }
-    }, by = outcome_model]
-  } else {
-    p_values_result <- data.table()
+      }, by = outcome_model]
+    } else {
+      p_values_result <- data.table()
+    }
+    return(p_values_result)
   }
   
-  # Apply RMSPE filtering using vectorized operations
-  # Get treated unit pre-RMSE values for thresholding by outcome model
-  treated_pre_rmse <- rmspe_combined[unit_type == "treated", .(outcome_model, treated_pre_rmse = pre_rmse)]
+  # Calculate p-values for all test statistics with appropriate test types
+  rmse_ratio_pvalues <- calculate_pvalues(rmse_ratio_stats, "rmse_ratio")
+  te_pvalues <- calculate_pvalues(te_stats, "treatment_effect")
+  normalized_te_pvalues <- calculate_pvalues(normalized_te_stats, "treatment_effect")
+  
+  # Calculate filtered results for RMSE ratio (only applicable for this test statistic)
+  treated_pre_rmse <- rmse_ratio_stats[unit_type == "treated", .(outcome_model, treated_pre_rmse = pre_rmse)]
   
   if (nrow(treated_pre_rmse) > 0) {
-    # Calculate filtered p-values - group by outcome model
-    filtered_result <- rmspe_combined[, {
+    filtered_result <- rmse_ratio_stats[, {
         treated_rmse <- treated_pre_rmse[outcome_model == .BY$outcome_model, treated_pre_rmse]
         if (length(treated_rmse) > 0) {
           threshold_val <- rmspe_threshold * treated_rmse
@@ -82,32 +130,35 @@ calculate_abadie_significance <- function(taus_result, rmse_result, rmspe_thresh
         
           # Calculate filtered p-value if we have both treated and control units
           if (nrow(filtered_data[unit_type == "treated"]) > 0 && nrow(filtered_data[unit_type == "control"]) > 0) {
-            treated_ratio_val <- filtered_data[unit_type == "treated", post_pre_ratio]
-            control_ratios_val <- filtered_data[unit_type == "control", post_pre_ratio]
+            treated_ratio_val <- filtered_data[unit_type == "treated", test_statistic_value]
+            control_ratios_val <- filtered_data[unit_type == "control", test_statistic_value]
             
-            # Use rank-based approach consistent with unfiltered calculation
-            sorted_control_ratios <- sort(control_ratios_val)
-            rank_filtered_val <- findInterval(treated_ratio_val, sorted_control_ratios, rightmost.closed = TRUE) + 1
+            # For filtered RMSE ratios: use one-sided test (consistent with unfiltered)
+            rank_filtered_val <- sum(control_ratios_val >= treated_ratio_val) + 1
             total_filtered_val <- length(control_ratios_val) + 1
             units_excluded_val <- nrow(.SD[unit_type == "control"]) - length(control_ratios_val)
+            
+            p_value_filtered_one_sided <- rank_filtered_val / total_filtered_val
+            p_value_filtered_two_sided <- p_value_filtered_one_sided  # Keep as one-sided
             
             list(
               treated_ratio = treated_ratio_val,
               rank_filtered = rank_filtered_val,
               total_units_filtered = total_filtered_val,
-              p_value_filtered = rank_filtered_val / total_filtered_val,
+              p_value_filtered_one_sided = p_value_filtered_one_sided,
+              p_value_filtered = p_value_filtered_two_sided,
               rmspe_threshold = rmspe_threshold,
               units_excluded = units_excluded_val
             )
           } else {
             list(treated_ratio = NA_real_, rank_filtered = NA_integer_, 
-                 total_units_filtered = NA_integer_, p_value_filtered = NA_real_,
-                 rmspe_threshold = rmspe_threshold, units_excluded = NA_integer_)
+                 total_units_filtered = NA_integer_, p_value_filtered_one_sided = NA_real_,
+                 p_value_filtered = NA_real_, rmspe_threshold = rmspe_threshold, units_excluded = NA_integer_)
           }
         } else {
           list(treated_ratio = NA_real_, rank_filtered = NA_integer_, 
-               total_units_filtered = NA_integer_, p_value_filtered = NA_real_,
-               rmspe_threshold = rmspe_threshold, units_excluded = NA_integer_)
+               total_units_filtered = NA_integer_, p_value_filtered_one_sided = NA_real_,
+               p_value_filtered = NA_real_, rmspe_threshold = rmspe_threshold, units_excluded = NA_integer_)
         }
       }, by = outcome_model]
   } else {
@@ -115,13 +166,48 @@ calculate_abadie_significance <- function(taus_result, rmse_result, rmspe_thresh
   }
   
   return(list(
-    post_pre_ratios = rmspe_combined,
-    p_values = p_values_result,
-    filtered_results = filtered_result
+    rmse_ratio = list(
+      test_statistics = rmse_ratio_stats,
+      p_values = rmse_ratio_pvalues,
+      filtered_results = filtered_result
+    ),
+    treatment_effect = list(
+      test_statistics = te_stats,
+      p_values = te_pvalues
+    ),
+    normalized_te = list(
+      test_statistics = normalized_te_stats,
+      p_values = normalized_te_pvalues
+    )
   ))
 }
 
 
+#' Placebo Inference for Synthetic Control Method
+#'
+#' @title Perform placebo inference with multiple test statistics
+#' @description Performs placebo inference by estimating synthetic control for each control unit
+#' and computing three test statistics: post/pre RMSE ratio, treatment effect, and normalized treatment effect.
+#' Returns two-sided p-values for all test statistics.
+#'
+#' @param sc.pred List. Results from synthetic control estimation
+#' @param dataset Data.frame. Original dataset used for estimation
+#' @param cores Numeric. Number of cores for parallel processing
+#' @param verbose Logical. Whether to print progress information
+#'
+#' @return List containing:
+#' \itemize{
+#'   \item taus: Treatment effects for all units
+#'   \item rmse: RMSE values for all units
+#'   \item abadie_significance: List with three elements:
+#'     \itemize{
+#'       \item rmse_ratio: Post/pre RMSE ratio test statistic and p-values
+#'       \item treatment_effect: Treatment effect test statistic and p-values
+#'       \item normalized_te: Normalized treatment effect test statistic and p-values
+#'     }
+#' }
+#'
+#' @export
 inference_placebo <- function(
     sc.pred,
     dataset,
