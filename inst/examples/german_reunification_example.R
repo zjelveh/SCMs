@@ -72,7 +72,6 @@ params <- list(
   # Specification curve dimensions
   feature_weights = c("uniform", "optimize"),
   donor_sample = c("all", "most_similar"),
-  num_pre_period_years = c(15, 20, 30),  # Different pre-period lengths
   outcome_models = c("none", "augsynth", "lasso", "ridge", "ols"),
   constraints = list(
     list(name = "simplex"),
@@ -93,7 +92,6 @@ cat("Specification space size:",
     length(params$covagg) *
     length(params$feature_weights) *
     length(params$donor_sample) *
-    length(params$num_pre_period_years) *
     length(params$outcome_models) *
     length(params$constraints), "specifications\n\n")
 
@@ -124,7 +122,7 @@ cb_config <- create_catboost_config(
   dataset_name = "german_reunification_analysis",
   treated_unit_name = "West Germany",
   outcome_filter = "gdp",
-  spec_features = c('feat', 'outcome_model', 'const', 'data_sample', 'fw', 'num_pre_period_years'),
+  spec_features = c('feat', 'outcome_model', 'const', 'data_sample', 'fw'),
   treated_unit_only = TRUE
 )
 

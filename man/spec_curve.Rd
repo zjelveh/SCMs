@@ -2,7 +2,7 @@
 % Please edit documentation in R/spec_curve.R
 \name{spec_curve}
 \alias{spec_curve}
-\title{Generate Specification Curve for Synthetic Control Method}
+\title{\strong{CORE ENGINE} - Specification Curve Computation}
 \usage{
 spec_curve(
   dataset,
@@ -15,7 +15,6 @@ spec_curve(
   end_period,
   col_name_period,
   feature_weights = c("uniform", "optimize"),
-  num_pre_period_years = NA,
   outcome_models = c("none", "augsynth", "ridge", "lasso", "ols"),
   donor_sample = c("all", "most_similar"),
   sim_function = most_similar,
@@ -47,70 +46,67 @@ spec_curve(
 \item{col_name_period}{Character. Name of column containing time period identifiers.}
 
 \item{feature_weights}{Character vector of feature weighting methods:
-\itemize{
-\item \code{"uniform"} - Equal weights for all pre-treatment periods
-\item \code{"optimize"} - Data-driven optimization of feature weights
-}
-Default is \code{c('uniform', 'optimize')}.}
-
-\item{num_pre_period_years}{Numeric or NA. Number of pre-treatment periods to include in estimation.
-If NA, uses all available pre-treatment periods. Default is NA.}
+  \itemize{
+    \item \code{"uniform"} - Equal weights for all pre-treatment periods
+    \item \code{"optimize"} - Data-driven optimization of feature weights  
+  }
+  Default is \code{c('uniform', 'optimize')}.}
 
 \item{outcome_models}{Character vector of outcome modeling approaches:
-\itemize{
-\item \code{"none"} - Standard synthetic control (no outcome model)
-\item \code{"augsynth"} - Augmented synthetic control method
-\item \code{"ridge"} - Ridge regression outcome model
-\item \code{"lasso"} - Lasso regression outcome model
-\item \code{"ols"} - OLS regression outcome model
-}
-Default is \code{c('none', 'augsynth', 'ridge', 'lasso', 'ols')}.}
+  \itemize{
+    \item \code{"none"} - Standard synthetic control (no outcome model)
+    \item \code{"augsynth"} - Augmented synthetic control method
+    \item \code{"ridge"} - Ridge regression outcome model
+    \item \code{"lasso"} - Lasso regression outcome model  
+    \item \code{"ols"} - OLS regression outcome model
+  }
+  Default is \code{c('none', 'augsynth', 'ridge', 'lasso', 'ols')}.}
 
 \item{donor_sample}{Character vector specifying donor pool selection:
-\itemize{
-\item \code{"all"} - Use all available control units
-\item \code{"most_similar"} - Use only most similar control units
-}
-Default is \code{c('all', 'most_similar')}.}
+  \itemize{
+    \item \code{"all"} - Use all available control units
+    \item \code{"most_similar"} - Use only most similar control units
+  }
+  Default is \code{c('all', 'most_similar')}.}
 
 \item{sim_function}{Function to determine similarity for donor selection when \code{donor_sample} includes "most_similar".
-Default uses built-in similarity function.}
+  Default uses built-in similarity function.}
 
 \item{constraints}{List of constraint specifications for weight optimization. Each element should be a list
-with constraint parameters (e.g., \code{list(name = "simplex")}, \code{list(name = "lasso", Q = 0.1)}).}
+  with constraint parameters (e.g., \code{list(name = "simplex")}, \code{list(name = "lasso", Q = 0.1)}).}
 
 \item{cores}{Integer. Number of CPU cores for parallel processing. Default is 1 (sequential).
-Higher values significantly speed up computation but require more memory.}
+  Higher values significantly speed up computation but require more memory.}
 
 \item{verbose}{Logical. Whether to display progress messages and warnings. Default is TRUE.}
 
 \item{inference_type}{Character. Type of inference to perform:
-\itemize{
-\item \code{"placebo"} - Abadie-style placebo inference only (default)
-\item \code{"bootstrap"} - Bootstrap null hypothesis inference only
-\item \code{"all"} - Both placebo and bootstrap inference
-}}
+  \itemize{
+    \item \code{"placebo"} - Abadie-style placebo inference only (default)
+    \item \code{"bootstrap"} - Bootstrap null hypothesis inference only
+    \item \code{"all"} - Both placebo and bootstrap inference
+  }}
 
 \item{inference_config}{List. Configuration settings for inference methods:
-\itemize{
-\item \code{bootstrap_n_replications} - Number of bootstrap replications (default: 1000)
-\item \code{bootstrap_cores} - Number of cores for bootstrap processing (default: 1)
-}}
+  \itemize{
+    \item \code{bootstrap_n_replications} - Number of bootstrap replications (default: 1000)
+    \item \code{bootstrap_cores} - Number of cores for bootstrap processing (default: 1)
+  }}
 }
 \value{
 A list structure containing:
 \itemize{
-\item \code{results} - Data.table in long format with all specification results (treatment effects, unit data, RMSE)
-\item \code{abadie_inference} - List containing Abadie placebo inference results:
-\itemize{
-\item \code{p_values} - Specification-level p-values and significance tests
-\item \code{post_pre_ratios} - Unit-level post/pre RMSPE ratios for ranking
-\item \code{filtered_results} - Filtered significance results (if available)
-}
-\item \code{bootstrap_inference} - List containing bootstrap inference results:
-\itemize{
-\item \code{p_values} - Specification-level bootstrap p-values and statistics
-}
+  \item \code{results} - Data.table in long format with all specification results (treatment effects, unit data, RMSE)
+  \item \code{abadie_inference} - List containing Abadie placebo inference results:
+    \itemize{
+      \item \code{p_values} - Specification-level p-values and significance tests
+      \item \code{post_pre_ratios} - Unit-level post/pre RMSPE ratios for ranking
+      \item \code{filtered_results} - Filtered significance results (if available)
+    }
+  \item \code{bootstrap_inference} - List containing bootstrap inference results:
+    \itemize{
+      \item \code{p_values} - Specification-level bootstrap p-values and statistics
+    }
 }
 
 The \code{results} data.table contains treatment effects (tau), unit information, and specification
@@ -118,65 +114,67 @@ metadata for all units (treated, control placebo, bootstrap iterations) across a
 Inference results are separated to avoid duplication and provide cleaner access to statistical tests.
 }
 \description{
-This function performs comprehensive specification curve analysis for Synthetic Control Methods
-by systematically varying multiple modeling choices and estimating treatment effects across
-all combinations. This approach helps assess the robustness of results to modeling assumptions
-and identifies the sensitivity of estimates to researcher degrees of freedom.
+\strong{INTERNAL COMPUTATIONAL CORE} - This function performs the core computation
+for specification curve analysis by systematically varying modeling choices and estimating
+treatment effects across all combinations. Called internally by \code{run_spec_curve_analysis()}.
+For user-facing specification curve analysis, use \code{run_spec_curve_analysis()} instead.
 }
 \details{
+Generate Specification Curve (Core Computational Engine)
+
 The function creates a Cartesian product of all specification choices and estimates synthetic controls
 for each combination. This implementation includes:
 \itemize{
-\item \strong{Parallel Processing}: Distributes computations across multiple cores for efficiency
-\item \strong{Error Handling}: Gracefully handles failed estimations and continues processing
-\item \strong{Progress Tracking}: Provides real-time updates on estimation progress
-\item \strong{Memory Management}: Efficiently handles large specification spaces
+  \item \strong{Parallel Processing}: Distributes computations across multiple cores for efficiency
+  \item \strong{Error Handling}: Gracefully handles failed estimations and continues processing
+  \item \strong{Progress Tracking}: Provides real-time updates on estimation progress
+  \item \strong{Memory Management}: Efficiently handles large specification spaces
 }
 
 The resulting specification curve can reveal:
 \itemize{
-\item Sensitivity of treatment effect estimates to modeling choices
-\item Distribution of effect sizes across specifications
-\item Identification of modeling choices that drive results
-\item Assessment of overall robustness of findings
+  \item Sensitivity of treatment effect estimates to modeling choices
+  \item Distribution of effect sizes across specifications  
+  \item Identification of modeling choices that drive results
+  \item Assessment of overall robustness of findings
 }
 }
 \examples{
 \dontrun{
 # Basic specification curve analysis
 results <- spec_curve(
-  dataset = state_panel,
-  outcomes = "gdp_per_capita",
-  col_name_unit_name = "state", 
-  name_treated_unit = "California",
-  covagg = list(c("population", "income")),
-  treated_period = 2000,
-  min_period = 1990, 
-  end_period = 2010,
-  col_name_period = "year",
-  constraints = list(
-    list(name = "simplex"),
-    list(name = "lasso", Q = 0.1),
-    list(name = "ridge", Q = 0.1)
-  ),
-  cores = 4
+  dataset = state_panel,
+  outcomes = "gdp_per_capita",
+  col_name_unit_name = "state", 
+  name_treated_unit = "California",
+  covagg = list(c("population", "income")),
+  treated_period = 2000,
+  min_period = 1990, 
+  end_period = 2010,
+  col_name_period = "year",
+  constraints = list(
+    list(name = "simplex"),
+    list(name = "lasso", Q = 0.1),
+    list(name = "ridge", Q = 0.1)
+  ),
+  cores = 4
 )
 
 # Multi-outcome analysis
 results_multi <- spec_curve(
-  dataset = policy_data,
-  outcomes = c("unemployment", "gdp", "investment"),
-  col_name_unit_name = "country",
-  name_treated_unit = "Germany", 
-  covagg = list(
-    c("population", "gdp_lag"),
-    c("population", "gdp_lag", "trade_openness")
-  ),
-  treated_period = 2005,
-  min_period = 1995,
-  end_period = 2015,
-  col_name_period = "year",  
-  cores = 8
+  dataset = policy_data,
+  outcomes = c("unemployment", "gdp", "investment"),
+  col_name_unit_name = "country",
+  name_treated_unit = "Germany", 
+  covagg = list(
+    c("population", "gdp_lag"),
+    c("population", "gdp_lag", "trade_openness")
+  ),
+  treated_period = 2005,
+  min_period = 1995,
+  end_period = 2015,
+  col_name_period = "year",  
+  cores = 8
 )
 
 # Plot results
@@ -185,9 +183,9 @@ plot_spec_curve(results)
 }
 \references{
 \itemize{
-\item Simonsohn, U., Simmons, J. P., & Nelson, L. D. (2020). Specification curve analysis.
-\emph{Nature Human Behaviour}, 4(11), 1208-1214.
-\item Huntington-Klein, N. et al. (2021). The influence of hidden researcher decisions in applied microeconomics.
-\emph{Economic Inquiry}, 59(3), 944-960.
+  \item Simonsohn, U., Simmons, J. P., & Nelson, L. D. (2020). Specification curve analysis.
+        \emph{Nature Human Behaviour}, 4(11), 1208-1214.
+  \item Huntington-Klein, N. et al. (2021). The influence of hidden researcher decisions in applied microeconomics.
+        \emph{Economic Inquiry}, 59(3), 944-960.
 }
 }

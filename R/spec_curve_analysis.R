@@ -143,7 +143,6 @@ run_spec_curve_analysis <- function(dataset, params, cores = 1, output_dir = NUL
 #'     \item \code{fw} - Feature weighting method
 #'     \item \code{data_sample} - Donor sample method
 #'     \item \code{feat} - Feature specification
-#'     \item \code{num_pre_period_years} - Number of pre-treatment periods
 #'     \item \code{spec_number} - Specification number
 #'     \item \code{full_spec_id} - Full specification identifier
 #'   }

@@ -182,7 +182,6 @@ create_analysis_config <- function(analysis_type = c("homicide", "ois"), custom_
       min_period = 2015,
       end_period = 2022,
       col_name_period = "year",
-      num_pre_period_years = c(5),
       feature_weights = c("uniform", "optimize"),
       donor_sample = c("all", "most_similar"),
       outcome_models = c("none", "augsynth", "lasso", "ridge", "ols"),

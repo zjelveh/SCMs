@@ -187,7 +187,7 @@ plot_spec_curve <- function(
           }
           
           # Bootstrap data needs specification metadata - get unique spec metadata from main_data
-          spec_metadata <- unique(main_data[, .(full_spec_id, outcome, outcome_model, const, fw, feat, data_sample, num_pre_period_years)])
+          spec_metadata <- unique(main_data[, .(full_spec_id, outcome, outcome_model, const, fw, feat, data_sample)])
           
           # For each bootstrap row, we need to replicate it across all specifications for that outcome_model
           bootstrap_expanded <- list()
@@ -267,8 +267,7 @@ plot_spec_curve <- function(
        rmse = mean(rmse, na.rm = TRUE),
        post_pre_ratio = mean(post_pre_ratio, na.rm = TRUE)),
       by = c('unit_name', 'unit_type', 'full_spec_id', 'outcome', 
-      'outcome_model', 'const', 'fw', 'feat', 'data_sample', 
-      'num_pre_period_years')
+      'outcome_model', 'const', 'fw', 'feat', 'data_sample')
     ]
   } else {
     average_effect_df <- sc_results_df[
@@ -276,8 +275,7 @@ plot_spec_curve <- function(
       .(tau = mean(tau, na.rm = TRUE), 
        rmse = mean(rmse, na.rm = TRUE)),
       by = c('unit_name', 'unit_type', 'full_spec_id', 'outcome', 
-      'outcome_model', 'const', 'fw', 'feat', 'data_sample', 
-      'num_pre_period_years')
+      'outcome_model', 'const', 'fw', 'feat', 'data_sample')
     ]
   }
   
@@ -455,7 +453,6 @@ plot_spec_curve <- function(
   panel_b_data[feature_group== 'fw', feature_group:= 'V Weights']
   panel_b_data[feature_group== 'feat', feature_group:= 'Features']
   panel_b_data[feature_group== 'data_sample', feature_group:='Donor Pool']
-  panel_b_data[feature_group== 'num_pre_period_years', feature_group:='Pre Length']
   panel_b_data[feature == 'simplex' & feature_group=='Weight\nMethod', feature := "Original"]
   panel_b_data[feature == 'lasso' & feature_group=='Weight\nMethod', feature := "Original + Penalty Lasso"]
   panel_b_data[feature == 'ridge' & feature_group=='Weight

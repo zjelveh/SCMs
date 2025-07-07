@@ -20,7 +20,6 @@ load_catboost_data <- function(config) {
   
   # Clean up data
   if("unit_type" %in% names(sc_data)) sc_data[, unit_type := NULL]
-  if("num_pre_period_years" %in% names(sc_data)) sc_data[, num_pre_period_years := NULL]
   
   # Ensure we have a year column
   if(!"year" %in% names(sc_data)) {
@@ -71,7 +70,7 @@ prepare_catboost_data <- function(sc_data, config) {
   }
   
   # Include ALL specification metadata for proper alignment
-  all_spec_cols <- c("outcome", "outcome_model", "const", "fw", "feat", "data_sample", "num_pre_period_years")
+  all_spec_cols <- c("outcome", "outcome_model", "const", "fw", "feat", "data_sample")
   available_all_spec_cols <- intersect(all_spec_cols, data_cols)
   
   # Group by unit and ALL specification dimensions (not just features)

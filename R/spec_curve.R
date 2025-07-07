@@ -1,9 +1,10 @@
-#' Generate Specification Curve for Synthetic Control Method
+#' Generate Specification Curve (Core Computational Engine)
 #'
-#' This function performs comprehensive specification curve analysis for Synthetic Control Methods
-#' by systematically varying multiple modeling choices and estimating treatment effects across
-#' all combinations. This approach helps assess the robustness of results to modeling assumptions
-#' and identifies the sensitivity of estimates to researcher degrees of freedom.
+#' @title **CORE ENGINE** - Specification Curve Computation
+#' @description **INTERNAL COMPUTATIONAL CORE** - This function performs the core computation
+#' for specification curve analysis by systematically varying modeling choices and estimating 
+#' treatment effects across all combinations. Called internally by `run_spec_curve_analysis()`.
+#' For user-facing specification curve analysis, use `run_spec_curve_analysis()` instead.
 #'
 #' @param dataset Data frame containing panel data in long format with units, time periods, and outcomes.
 #' @param outcomes Character vector of outcome variable names to analyze. Multiple outcomes will be processed separately.
@@ -20,8 +21,6 @@
 #'     \item \code{"optimize"} - Data-driven optimization of feature weights  
 #'   }
 #'   Default is \code{c('uniform', 'optimize')}.
-#' @param num_pre_period_years Numeric or NA. Number of pre-treatment periods to include in estimation.
-#'   If NA, uses all available pre-treatment periods. Default is NA.
 #' @param outcome_models Character vector of outcome modeling approaches:
 #'   \itemize{
 #'     \item \code{"none"} - Standard synthetic control (no outcome model)
@@ -154,7 +153,6 @@ spec_curve <- function(
     end_period, 
     col_name_period,
     feature_weights = c('uniform', 'optimize'),
-    num_pre_period_years = NA,
     outcome_models = c('none', 'augsynth', 'ridge', 'lasso', 'ols'),
     donor_sample = c('all', 'most_similar'),
     sim_function = most_similar,
@@ -221,8 +219,7 @@ spec_curve <- function(
       constraint = lapply(constraints, function(x) x$name),
       feature_weight = feature_weights,
       covariate_agg = seq_along(covagg),
-      donor = donor_sample,
-      pre_period = if(all(is.na(num_pre_period_years))) NA else num_pre_period_years
+      donor = donor_sample
     )
     
     # Create all combinations
@@ -232,14 +229,13 @@ spec_curve <- function(
       feature_weight = param_list$feature_weight,
       covariate_agg = param_list$covariate_agg,
       donor = param_list$donor,
-      pre_period = if(all(is.na(param_list$pre_period))) 1 else param_list$pre_period,
       stringsAsFactors = FALSE
     )
   }
   
   # Function to process a single specification
   process_spec <- function(
-    outc, const_idx, fw, ca_idx, ds, ny, spec_number,
+    outc, const_idx, fw, ca_idx, ds, spec_number,
     constraints, covagg, donor_samples, dataset, 
     min_period, treated_period, end_period,
     col_name_unit_name, name_treated_unit, col_name_period,
@@ -280,11 +276,8 @@ spec_curve <- function(
       feature_names <- paste(spec_parts, collapse = "_")
     } 
     
-    # Adjust min_period if needed
+    # Use the provided min_period directly
     local_min_period <- min_period
-    if (!is.na(ny)) {
-      local_min_period <- treated_period - ny
-    }
     
     # Select donor sample (avoid unnecessary copy for 'all')
     if (ds == 'all') {
@@ -295,8 +288,7 @@ spec_curve <- function(
     
     # Create specification identifier for logging
     spec_name <- paste(outc, const$name, fw, feature_names, ds, 
-                       if(is.na(ny)) paste0('n_pp_years_', treated_period-min_period) 
-                       else paste0('n_pp_years_', ny), sep = "-")
+                       paste0('n_pp_years_', treated_period-min_period), sep = "-")
     
     if (verbose) message(sprintf("Processing: %s", spec_name))
     
@@ -494,8 +486,7 @@ spec_curve <- function(
       fw = fw,
       feature_names = feature_names,
       ds = ds,
-      pre_period_label = if(is.na(ny)) paste0('n_pp_years_', treated_period-min_period) 
-      else paste0('n_pp_years_', ny),
+      pre_period_label = paste0('n_pp_years_', treated_period-min_period),
       result = result
     ))
   }
@@ -563,7 +554,6 @@ spec_curve <- function(
         fw = p$feature_weight, 
         ca_idx = p$covariate_agg,
         ds = p$donor, 
-        ny = if(p$pre_period == 1 && all(is.na(num_pre_period_years))) NA else p$pre_period,
         spec_number = p$spec_number,
         constraints = constraints,
         covagg = covagg,
@@ -590,7 +580,6 @@ spec_curve <- function(
         fw = p$feature_weight, 
         ca_idx = p$covariate_agg,
         ds = p$donor, 
-        ny = if(p$pre_period == 1 && all(is.na(num_pre_period_years))) NA else p$pre_period,
         spec_number = p$spec_number,
         constraints = constraints,
         covagg = covagg,
@@ -646,7 +635,6 @@ spec_curve <- function(
         combined$fw <- res$fw
         combined$data_sample <- res$ds
         combined$feat <- res$feature_names
-        combined$num_pre_period_years <- res$pre_period_label
         combined$spec_number <- res$spec_number
         combined$rmse <- combined$pre_rmse
 
