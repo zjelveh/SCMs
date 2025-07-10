@@ -2,7 +2,7 @@
 % Please edit documentation in R/inference_bootstrap.R
 \name{calculate_bootstrap_pvalues}
 \alias{calculate_bootstrap_pvalues}
-\title{Calculate Bootstrap P-values}
+\title{Calculate Bootstrap P-values Using Rank-Based Method}
 \usage{
 calculate_bootstrap_pvalues(bootstrap_effects, actual_effects, verbose = FALSE)
 }
@@ -14,8 +14,18 @@ calculate_bootstrap_pvalues(bootstrap_effects, actual_effects, verbose = FALSE)
 \item{verbose}{Logical for verbose output}
 }
 \value{
-Data.table with p-values
+Data.table with p-values and rank information
 }
 \description{
-Calculate Bootstrap P-values
+Calculates empirical bootstrap p-values by determining where the actual
+treatment effect ranks within the bootstrap distribution. This is the
+standard approach for bootstrap hypothesis testing.
+}
+\details{
+The p-values are calculated as follows:
+\itemize{
+\item One-tailed positive: P(bootstrap >= actual) = (n - rank) / n
+\item One-tailed negative: P(bootstrap <= actual) = (rank + 1) / n
+\item Two-tailed: 2 * min(positive, negative), capped at 1.0
+}
 }

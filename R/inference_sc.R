@@ -63,6 +63,7 @@ inference_sc <- function(
     return(NULL)
   }
   
+  
   if (is.null(sc.pred$data) || is.null(sc.pred$data$specs)) {
     return(NULL)
   }
@@ -89,6 +90,7 @@ inference_sc <- function(
   if (!col_name_unit %in% names(dataset)) {
     return(NULL)
   }
+  
   
   # Start by defining class.type based on sc.pred
   if (!is.null(sc.pred$data$specs) && !is.null(sc.pred$data$specs$class.type)) {

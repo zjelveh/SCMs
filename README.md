@@ -39,7 +39,7 @@ library(SCMs)
 library(data.table)
 
 # Load the included German reunification dataset
-dataset <- fread(system.file("scpi_germany.csv", package = "SCMs"))
+dataset <- fread(system.file("extdata/scpi_germany.csv", package = "SCMs"))
 
 # Basic synthetic control estimation
 results <- scest(
@@ -79,7 +79,7 @@ params <- list(
     ),
     gdp_only = list(
       label = 'GDP Only',
-      gdp_each = list(var = "gdp", each_period = TRUE)
+      gdp_each = list(var = "gdp", each = TRUE)
     )
   ),
   treated_period = 1991,  # German reunification

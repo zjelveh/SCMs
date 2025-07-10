@@ -2,14 +2,23 @@
 % Please edit documentation in R/covariate_processing.R
 \name{process_covariates}
 \alias{process_covariates}
-\title{Process Covariate Aggregations for Synthetic Control}
+\title{\strong{PRIMARY INTERFACE} - Flexible Covariate Processing}
 \usage{
 process_covariates(data, covagg, period.pre, id.var, time.var)
 }
 \arguments{
 \item{data}{Data frame or data.table in long format}
 
-\item{covagg}{List of covariate aggregation specifications}
+\item{covagg}{List of covariate aggregation specifications with new flexible format:
+\itemize{
+\item \code{var} - Required: variable name
+\item \code{periods} - Optional: specific periods (vector or range)
+\item \code{last} - Optional: last N periods
+\item \code{first} - Optional: first M periods
+\item \code{each} - Optional: create individual variables (default: FALSE)
+\item \code{agg_fun} - Optional: aggregation function (default: mean)
+\item \code{label} - Optional: custom variable name
+}}
 
 \item{period.pre}{Vector of pre-treatment periods}
 
@@ -21,6 +30,29 @@ process_covariates(data, covagg, period.pre, id.var, time.var)
 List of processed covariate matrices
 }
 \description{
-Process Covariate Aggregations for Synthetic Control
+Processes covariate aggregation specifications using a modular 4-pattern system:
+\itemize{
+\item \strong{Pattern 1}: Aggregate over arbitrary periods → Single variable
+\item \strong{Pattern 2}: Aggregate over last N / first M periods → Single variable
+\item \strong{Pattern 3}: Each period for specified periods → Multiple variables
+\item \strong{Pattern 4}: Each period for last N / first M periods → Multiple variables
 }
-\keyword{internal}
+}
+\details{
+Process Covariate Aggregations for Synthetic Control (Version 2)
+}
+\examples{
+\dontrun{
+# Pattern 1: Aggregate over arbitrary periods
+covagg1 = list(gdp_custom = list(var = "gdp", periods = c(1980, 1985, 1990)))
+
+# Pattern 2: Aggregate over last N periods
+covagg2 = list(gdp_last10 = list(var = "gdp", last = 10, agg_fun = median))
+
+# Pattern 3: Each period for specified periods
+covagg3 = list(gdp_each = list(var = "gdp", periods = c(1980, 1985), each = TRUE))
+
+# Pattern 4: Each period for last N periods
+covagg4 = list(gdp_each_last = list(var = "gdp", last = 5, each = TRUE))
+}
+}

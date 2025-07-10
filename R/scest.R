@@ -150,9 +150,44 @@ scest <- function(data,
     }
   } else if(feature_weights=='optimize'){
     # Optimize feature weights
+    
+    # Validate matrix B dimensions before optimization
+    if (is.null(B) || !is.matrix(B)) {
+      stop("Matrix B is NULL or not a matrix during optimization")
+    }
+    
+    if (nrow(B) <= 0 || is.na(nrow(B)) || !is.finite(nrow(B))) {
+      stop(paste("Invalid nrow(B) value:", nrow(B), "- matrix B has invalid dimensions"))
+    }
+    
+    if (ncol(B) <= 0 || is.na(ncol(B)) || !is.finite(ncol(B))) {
+      stop(paste("Invalid ncol(B) value:", ncol(B), "- matrix B has invalid dimensions"))
+    }
 
     require(optimx)
     SV1 = rep(1/nrow(B), nrow(B))
+    
+    # Validate matrices A and B before optimization
+    if (is.null(A) || !is.matrix(A)) {
+      stop("Matrix A is NULL or not a matrix during optimization")
+    }
+    
+    if (nrow(A) != nrow(B)) {
+      stop(paste("Matrix dimension mismatch: A has", nrow(A), "rows but B has", nrow(B), "rows"))
+    }
+    
+    if (is.null(Z0) || !is.matrix(Z0)) {
+      stop("Matrix Z0 is NULL or not a matrix during optimization")
+    }
+    
+    if (is.null(Z1) || !is.matrix(Z1)) {
+      stop("Matrix Z1 is NULL or not a matrix during optimization")
+    }
+    
+    # Validate starting values
+    if (any(is.na(SV1)) || any(!is.finite(SV1))) {
+      stop("Starting values SV1 contain NA or non-finite values")
+    }
 
     Margin.ipop = 0.05
     Sigf.ipop = 5
@@ -181,7 +216,6 @@ scest <- function(data,
     )
 
     # get minimum
-    # if(verbose==TRUE){print(rgV.optim.1)}
     rgV.optim <- collect.optimx(rgV.optim.1, "min")
 
     solution.v   <- abs(rgV.optim$par)/sum(abs(rgV.optim$par))
@@ -196,7 +230,7 @@ scest <- function(data,
 
  # Handle NA values in V
   if (mean(is.na(diag(V)) > 0)) {
-    V <- diag(rep(1/length(nrow(B)), (nrow(B))))
+    V <- diag(rep(1/nrow(B), nrow(B)))
   }
   rownames(V) <- rownames(Z)
   colnames(V) <- rownames(V)

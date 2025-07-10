@@ -2,34 +2,46 @@
 % Please edit documentation in R/visualization_advanced.R
 \name{calculate_specification_interactions}
 \alias{calculate_specification_interactions}
-\title{Calculate Variance Explained by Specification Feature Interactions}
+\title{Calculate SHAP-Based Specification Feature Interactions}
 \usage{
-calculate_specification_interactions(catboost_results, dataset_name)
+calculate_specification_interactions(
+  catboost_results,
+  dataset_name,
+  include_shap_interactions = TRUE,
+  top_n = 10,
+  shap_method = "shapviz"
+)
 }
 \arguments{
 \item{catboost_results}{List. Results from \code{run_catboost_shap_analysis}.}
 
 \item{dataset_name}{Character. Name for the dataset (for labeling).}
+
+\item{include_shap_interactions}{Logical. Whether to compute SHAP interactions (default TRUE).}
+
+\item{top_n}{Integer. Number of top interactions to return (default 10).}
+
+\item{shap_method}{Character. SHAP method to use: "shapviz" (default) or "catboost".}
 }
 \value{
 List containing:
 \itemize{
-\item \code{individual_summary} - Variance explained by individual features
-\item \code{interaction_summary} - Variance explained by feature pairs
-\item \code{detailed_effects} - Detailed effects for each feature combination
+\item \code{shap_interactions} - SHAP interaction values and rankings
 \item \code{dataset} - Dataset name
 }
 }
 \description{
-Computes how much variance in treatment effects is explained
-by individual specification features and their pairwise interactions.
+Computes feature interactions using TreeSHAP interaction values
+from CatBoost model, providing true main effects and interaction effects.
 }
 \details{
-Calculate Specification Interactions
+Calculate SHAP-Based Specification Feature Interactions
 }
 \examples{
 \dontrun{
-# Calculate specification interactions
+# Calculate SHAP interactions
 interactions <- calculate_specification_interactions(catboost_results, "homicide_study")
+# Calculate with more interactions
+interactions <- calculate_specification_interactions(catboost_results, "homicide_study", top_n = 20)
 }
 }

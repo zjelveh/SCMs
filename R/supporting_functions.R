@@ -1579,8 +1579,6 @@ local.geom.2step <- function(w, r, rho.vec, rho.max, w.constr, Q, I) {
 #     }
 #   }
 #
-#   cat(toprint)
-#   cat("\n")
 # }
 
 
@@ -1736,7 +1734,28 @@ collect.optimx <-
 
 
 
+#' Format Results for Specification Curve Analysis
+#'
+#' Sorts and formats results data frame for specification curve analysis.
+#' Adds specification numbering and color coding for visualization.
+#'
+#' @param df A data frame containing specification curve results
+#' @param var A variable name (quoted or unquoted) to sort by
+#' @param group Optional grouping variable name (quoted or unquoted)
+#' @param null Null hypothesis value (default: 0)
+#' @param desc Logical indicating descending sort order (default: FALSE)
+#'
+#' @return A formatted data frame with added 'specifications' and 'color' columns
 #' @export
+#'
+#' @examples
+#' \dontrun{
+#' # Format results sorted by effect size
+#' formatted_df <- format_results(df, effect_size)
+#' 
+#' # Format results with grouping
+#' formatted_df <- format_results(df, effect_size, group = model_type)
+#' }
 format_results <- function(df, var, group, null = 0, desc = FALSE) {
   
   if(is.null(group)) {

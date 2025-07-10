@@ -14,21 +14,18 @@
 #' @param anticipation Numeric. Number of pre-treatment periods to exclude due to anticipation effects. Default is 0.
 #' @param constant Logical. Whether to include a constant term in the synthetic control weights. Default is FALSE.
 #' @param verbose Logical. Whether to print diagnostic messages and warnings. Default is TRUE.
-#' @param covagg List. Flexible specification for covariate aggregation. Can use either:
+#' @param covagg List. Flexible specification for covariate aggregation.
+#'   Each element is a list with \code{var} and aggregation type:
 #'   \itemize{
-#'     \item \strong{New flexible format}: Each element is a list with \code{var} and aggregation type:
-#'       \itemize{
-#'         \item \code{list(var = "gdp", each_period = TRUE)} - Separate variable for each period
-#'         \item \code{list(var = "trade", average = "full_pre")} - Average over full pre-period  
-#'         \item \code{list(var = "schooling", every_n = 5)} - Every N periods
-#'         \item \code{list(var = "invest", periods = c(1980, 1985))} - Specific periods
-#'         \item \code{list(var = "gdp", first = 3)} - First N periods
-#'         \item \code{list(var = "industry", last = 2)} - Last N periods
-#'         \item \code{list(var = "trade", rolling = 3)} - Rolling N-period averages
-#'         \item \code{list(var = "gdp", growth = "period_over_period")} - Growth rates
-#'         \item \code{list(var = "gdp", volatility = "sd")} - Volatility measures
-#'       }
-#'     \item \strong{Legacy format}: List of variable names (for backward compatibility)
+#'     \item \code{list(var = "gdp", each = TRUE)} - Separate variable for each period
+#'     \item \code{list(var = "trade", average = "full_pre")} - Average over full pre-period  
+#'     \item \code{list(var = "schooling", every_n = 5)} - Every N periods
+#'     \item \code{list(var = "invest", periods = c(1980, 1985))} - Specific periods
+#'     \item \code{list(var = "gdp", first = 3)} - First N periods
+#'     \item \code{list(var = "industry", last = 2)} - Last N periods
+#'     \item \code{list(var = "trade", rolling = 3)} - Rolling N-period averages
+#'     \item \code{list(var = "gdp", growth = "period_over_period")} - Growth rates
+#'     \item \code{list(var = "gdp", volatility = "sd")} - Volatility measures
 #'   }
 #'   Default is empty list.
 #' @param cointegrated.data Logical. Whether to treat the data as cointegrated (affects some computations). Default is FALSE.
@@ -90,7 +87,7 @@
 #'                        unit.tr = "West Germany",
 #'                        unit.co = c("USA", "UK", "France"),
 #'                        covagg = list(
-#'                          gdp_each = list(var = "gdp", each_period = TRUE),
+#'                          gdp_each = list(var = "gdp", each = TRUE),
 #'                          investment_avg = list(var = "investment", average = "full_pre"),
 #'                          schooling_5yr = list(var = "schooling", every_n = 5),
 #'                          trade_final = list(var = "trade", periods = 1990)
@@ -111,6 +108,7 @@ scdata <- function(df,
                    verbose = TRUE,
                    covagg = list(),
                    cointegrated.data = FALSE) {
+                   
 
   ############################################################################
   ############################################################################
@@ -169,52 +167,17 @@ scdata <- function(df,
     stop("Outcome variable (outcome.var) must be numeric!")
   }
 
-  # Handle covariate aggregation - support both old and new format
-  using_new_format <- FALSE
+  # Handle covariate aggregation
   if (length(covagg) > 0) {
-    # Check if using new flexible format
-    if (any(sapply(covagg, function(x) is.list(x) && "var" %in% names(x)))) {
-      # NEW FORMAT: Convert to old format for now (temporary solution)
-      using_new_format <- TRUE
-      
-      # For now, convert new format to old format by extracting variable names
-      # This is a temporary solution until we fully integrate the new system
-      features <- c()
-      for (cov_name in names(covagg)) {
-        cov_spec <- covagg[[cov_name]]
-        
-        # Skip non-list elements (like label) and only process actual covariate specs
-        if (is.list(cov_spec) && !is.null(cov_spec$var)) {
-          if (!is.null(cov_spec$each_period) && cov_spec$each_period) {
-            # For each_period, we'll use every_period in old format
-            features <- c(features, cov_spec$var)
-          } else {
-            # For other aggregations, just include the variable
-            features <- c(features, cov_spec$var)
-          }
-        }
+    # Extract features for downstream processing
+    features = c()
+    for (cov_name in names(covagg)) {
+      cov_spec <- covagg[[cov_name]]
+      if (is.list(cov_spec) && !is.null(cov_spec$var)) {
+        features = c(features, cov_spec$var)
       }
-      features <- unique(features)
-      
-      # Convert to old format temporarily
-      if (any(sapply(covagg, function(x) is.list(x) && !is.null(x$each_period) && x$each_period))) {
-        # If any variable uses each_period, use every_period in old format
-        covagg <- list(every_period = features)
-      } else {
-        # Otherwise, use mean aggregation (supported by OLD FORMAT)
-        covagg <- list(mean = features)
-      }
-      
-    } else {
-      # OLD FORMAT: Backward compatibility
-      features = c()
-      for(item in names(covagg)){
-        for(feat in covagg[[item]]){
-          features = c(features, feat)
-        }
-      }
-      features = unique(features)
     }
+    features = unique(features)
   } else {
     features <- c()
   }
@@ -238,11 +201,11 @@ scdata <- function(df,
   period.post <- sort(period.post, decreasing = FALSE)
 
   # replace space and period with underscore to avoid issues below
-  unit.tr = gsub(' |\\.', '_', unit.tr)
-  unit.co = gsub(' |\\.', '_', unit.co)
+  unit.tr = gsub(' +|\\.+|-+', '_', unit.tr)
+  unit.co = gsub(' +|\\.+|-+', '_', unit.co)
 
   if(is.character(data[, id.var])){
-    data[, id.var] = gsub(' +|\\.+', '_', data[, id.var] )
+    data[, id.var] = gsub(' +|\\.+|-+', '_', data[, id.var] )
   }
 
   # Create ID and time variables
@@ -318,9 +281,11 @@ scdata <- function(df,
   ### Data preparation
 
   # Make the panel balanced
+
+  setnames(data, names(data), gsub('\\.|-+| +' , '_', names(data)))
   data.bal <- as.data.frame(tidyr::complete(data, .data[["ID"]],.data[["Time"]]))
-
-
+  
+  
   # Identify rows corresponding to treatment unit
   rows.tr.pre <- which(data.bal[, "ID"] %in% c(unit.tr) &
                          data.bal[, "Time"] %in% period.pre)
@@ -343,83 +308,74 @@ scdata <- function(df,
   A_list = list()
 
   data.bal.tr = data.bal[rows.tr.pre, ]
-  for(cov_agg in names(covagg)){
-    if(cov_agg=='every_other_period'){
-      feature_names = covagg[[cov_agg]]
-      feature_names = c(outcome.var, feature_names[feature_names!=outcome.var])
-      n_features = length(feature_names)
-
-      years = (period.pre[period.pre%%2==0])
-      idx2 = length(A_list) + 1
-      A <- as.matrix(c(as.matrix(data.bal.tr[data.bal.tr[, "Time"] %in% years,
-                                             feature_names]))) # Stack features
-      colnames(A) <- unit.tr
-      rownames(A) <- paste(rep(unit.tr, n_features * length(years)),
-                           rep(feature_names, each=length(years)),
-                           rep(years, n_features) , sep='.')
-      A_list[[idx2]] = data.frame(A)
-    }
-
-    if(cov_agg=='every_period'){
-      feature_names = covagg[[cov_agg]]
-      feature_names = c(outcome.var, feature_names[feature_names!=outcome.var])
-      n_features = length(feature_names)
-
-      years = (period.pre)
-      idx2 = length(A_list) + 1
-      A <- as.matrix(c(as.matrix(data.bal.tr[data.bal.tr[, "Time"] %in% years,
-                                             feature_names]))) # Stack features
-      colnames(A) <- unit.tr
-      rownames(A) <- paste(rep(unit.tr, n_features * length(years)),
-                           rep(feature_names, each=length(years)),
-                           rep(years, n_features) , sep='.')
-      A_list[[idx2]] = data.frame(A)
-    }
-
-    if(cov_agg=='mean'){
-      feature_names = covagg[[cov_agg]]
-      feature_names = c(outcome.var, feature_names[feature_names!=outcome.var])
-      n_features = length(feature_names)
-
-      years = (period.pre)
-      idx2 = length(A_list) + 1
-
-      # Handle case where feature_names might be a single column
-      subset_data <- data.bal.tr[data.bal.tr[, "Time"] %in% years, feature_names, drop = FALSE]
-      if (ncol(subset_data) == 1) {
-        A <- as.matrix(mean(subset_data[, 1]))
-      } else {
-        A <- as.matrix(colMeans(subset_data))
+  
+  # Process covariate specifications
+  if (length(covagg) > 0) {
+    
+    for (cov_name in names(covagg)) {
+      cov_spec <- covagg[[cov_name]]
+      
+      # Skip non-list elements (like label)
+      if (!is.list(cov_spec) || is.null(cov_spec$var)) {
+        next
       }
-      A <- as.matrix(c(A)) # Stack features
-      colnames(A) <- unit.tr
-      rownames(A) <- paste(rep(unit.tr, n_features),
-                           feature_names,
-                           rep(paste0(min_period, '.', max_period) , n_features) , sep='.')
-      A_list[[idx2]] = data.frame(A)
+      
+      
+      var_name <- cov_spec$var
+      var_name = gsub('\\.+| +|-+', '_', var_name)
+      # Determine periods to use
+      if (!is.null(cov_spec$periods)) {
+        periods_to_use <- cov_spec$periods
+      } else {
+        periods_to_use <- period.pre
+      }
+      
+      # Check if each=TRUE (create separate feature for each period)
+      if (!is.null(cov_spec$each) && cov_spec$each) {
+        
+        # Create separate feature for each period
+        for (period in periods_to_use) {
+          if (period %in% period.pre) {
+            idx2 = length(A_list) + 1
+            
+            # Extract data for this specific period and variable
+            period_data <- data.bal.tr[data.bal.tr[, "Time"] == period, c(outcome.var, var_name)]
+            if (nrow(period_data) > 0) {
+              A <- as.matrix(period_data[[var_name]])
+              colnames(A) <- unit.tr
+              rownames(A) <- paste(unit.tr, cov_name, period, sep='.')
+              A_list[[idx2]] = data.frame(A)
+            }
+          }
+        }
+        
+      } else {
+        # Default: aggregate using mean (or custom aggfunc if specified)
+        aggfunc <- if (!is.null(cov_spec$aggfunc)) cov_spec$aggfunc else "mean"
+
+        # Filter data for the specified periods
+        period_data <- data.bal.tr[data.bal.tr[, "Time"] %in% periods_to_use, c(outcome.var, var_name)]
+        
+        if (nrow(period_data) > 0) {
+          idx2 = length(A_list) + 1
+          
+          # Apply aggregation function
+          if (aggfunc == "mean") {
+            agg_value <- mean(period_data[[var_name]], na.rm = TRUE)
+          } else {
+            # Add support for other aggregation functions as needed
+            agg_value <- mean(period_data[[var_name]], na.rm = TRUE)
+          }
+          
+          A <- as.matrix(agg_value)
+          colnames(A) <- unit.tr
+          rownames(A) <- paste(unit.tr, cov_name, aggfunc, sep='.')
+          A_list[[idx2]] = data.frame(A)
+        }
+      }
     }
-
-
-    if(cov_agg=='last_period'){
-      feature_names = covagg[[cov_agg]]
-      feature_names = c(outcome.var, feature_names[feature_names!=outcome.var])
-      n_features = length(feature_names)
-
-      years = max_period
-
-      idx2 = length(A_list) + 1
-      A <- as.matrix(c(as.matrix(data.bal.tr[data.bal.tr[, "Time"] %in% years,
-                                             feature_names]))) # Stack features
-      colnames(A) <- unit.tr
-      rownames(A) <- paste(rep(unit.tr, n_features),
-                           rep(feature_names, each=1),
-                           rep(max_period, n_features) , sep='.')
-      A_list[[idx2]] = data.frame(A)
-    }
-
-
   }
-
+  
   ### Estimation Data
   # Actual Pre-treatment Series
 
@@ -432,119 +388,105 @@ scdata <- function(df,
   feature.vec = c()
   time.vec = c()
 
-  for(cov_agg in names(covagg)){
-    if(cov_agg=='every_other_period'){
-      feature_names = covagg[[cov_agg]]
-      feature_names = c(outcome.var, feature_names[feature_names!=outcome.var])
-      n_features = length(feature_names)
+  # Process covariate specifications for B matrix
+  if (length(covagg) > 0) {
 
-      years = (period.pre[period.pre%%2==0])
-      temp = data.bal.co[data.bal.co[, "Time"] %in% years,
-                         c('ID', 'Time', feature_names)]
-      temp = data.table::melt(data.table(temp), id.vars=c('ID', 'Time'))
+    for (cov_name in names(covagg)) {
+      cov_spec <- covagg[[cov_name]]
 
-      B = data.frame(data.table::dcast(temp, variable+Time~ID))
+      # Skip non-list elements (like label)
+      if (!is.list(cov_spec) || is.null(cov_spec$var)) {
+        next
+      }
+      
+      
+      var_name <- cov_spec$var
 
-      rownames(B) = paste(rep(unit.tr, nrow(B)), B$variable, B$Time, sep='.')
-
-      idxes = which(colnames(B) %in% c('variable', 'Time'))
-
-      feature.vec = c(feature.vec, as.character(B$variable))
-
-      time.vec = c(time.vec, as.numeric(B$Time))
-
-      B = B[, -idxes]
-      colnames(B) = paste(unit.tr, colnames(B), sep='.')
-      idx2 = length(B_list) + 1
-      B_list[[idx2]] = B
-    }
-
-    if(cov_agg=='every_period'){
-      feature_names = covagg[[cov_agg]]
-      feature_names = c(outcome.var, feature_names[feature_names!=outcome.var])
-      n_features = length(feature_names)
-
-      years = period.pre
-      temp = data.bal.co[data.bal.co[, "Time"] %in% years,
-                         c('ID', 'Time', feature_names)]
-
-      temp = data.table::melt(data.table(temp), id.vars=c('ID', 'Time'))
-      B = data.frame(data.table::dcast(temp, variable+Time~ID))
-
-
-
-      rownames(B) = paste(rep(unit.tr, nrow(B)),
-                          B$variable,
-                          B$Time, sep='.')
-
-      idxes = which(colnames(B) %in% c('variable', 'Time'))
-      feature.vec = c(feature.vec, as.character(B$variable))
-      time.vec = c(time.vec, as.numeric(B$Time))
-
-      B = B[, -idxes]
-      colnames(B) = paste(unit.tr, colnames(B), sep='.')
-      idx2 = length(B_list) + 1
-      B_list[[idx2]] = B
-    }
-
-
-    if(cov_agg=='mean'){
-      feature_names = covagg[[cov_agg]]
-      feature_names = c(outcome.var, feature_names[feature_names!=outcome.var])
-      n_features = length(feature_names)
-
-      years = period.pre
-      temp = data.bal.co[data.bal.co[, "Time"] %in% years,
-                         c('ID', 'Time', feature_names)]
-
-      temp = data.table::melt(data.table(temp), id.vars=c('ID', 'Time'))
-      temp = temp[, .(value=mean(value)), by=c('ID', 'variable')]
-      B = data.frame(data.table::dcast(temp, variable~ID))
-
-
-      rownames(B) = paste(rep(unit.tr, nrow(B)),
-                          B$variable,
-                          rep(paste0(min_period, '.', max_period), nrow(B)), sep='.')
-
-      idxes = which(colnames(B) %in% c('variable', 'Time'))
-      feature.vec = c(feature.vec, as.character(B$variable))
-      time.vec = c(time.vec, as.numeric(B$Time))
-
-      B = B[, -idxes]
-      colnames(B) = paste(unit.tr, colnames(B), sep='.')
-      idx2 = length(B_list) + 1
-      B_list[[idx2]] = B
-
-
-    }
-
-
-    if(cov_agg=='last_period'){
-      feature_names = covagg[[cov_agg]]
-      feature_names = c(outcome.var, feature_names[feature_names!=outcome.var])
-      n_features = length(feature_names)
-
-      years = max_period
-      temp = data.bal.co[data.bal.co[, "Time"] %in% years,
-                         c('ID', 'Time', feature_names)]
-
-      temp = data.table::melt(data.table(temp), id.vars=c('ID', 'Time'))
-      B = data.frame(data.table::dcast(temp, variable+Time~ID))
-
-
-
-      rownames(B) = paste(rep(unit.tr, nrow(B)),
-                          B$variable,
-                          B$Time, sep='.')
-
-      idxes = which(colnames(B) %in% c('variable', 'Time'))
-      feature.vec = c(feature.vec, as.character(B$variable))
-      time.vec = c(time.vec, as.numeric(B$Time))
-
-      B = B[, -idxes]
-      colnames(B) = paste(unit.tr, colnames(B), sep='.')
-      idx2 = length(B_list) + 1
-      B_list[[idx2]] = B
+      var_name = gsub('\\.', '_', var_name)
+      # Determine periods to use
+      if (!is.null(cov_spec$periods)) {
+        periods_to_use <- cov_spec$periods
+      } else {
+        periods_to_use <- period.pre
+      }
+      
+      # Check if each=TRUE (create separate feature for each period)
+      if (!is.null(cov_spec$each) && cov_spec$each) {
+        
+        # Create separate feature for each period
+        for (period in periods_to_use) {
+          if (period %in% period.pre) {
+            temp = data.bal.co[data.bal.co[, "Time"] == period, c('ID', 'Time', var_name)]
+            
+            if (nrow(temp) > 0) {
+              B = data.frame(data.table::dcast(data.table::melt(data.table(temp), id.vars=c('ID', 'Time')), variable+Time~ID))
+              
+              # Use underscores consistently - clean all names
+              clean_unit_tr <- gsub('[^A-Za-z0-9_]', '_', unit.tr)
+              clean_unit_tr <- gsub('_{2,}', '_', clean_unit_tr)
+              rownames(B) = paste(rep(clean_unit_tr, nrow(B)), cov_name, period, sep='.')
+              
+              idxes = which(colnames(B) %in% c('variable', 'Time'))
+              B = B[, -idxes]
+              
+              # IMPORTANT: Use the exact same transformation that Y.donors will use
+              # This matches the str_remove + gsub pattern in Y.donors creation
+              temp_names <- paste("gdpcap", colnames(B), sep = ".")
+              y_names_equivalent <- stringr::str_remove(temp_names, "gdpcap")
+              y_names_equivalent <- stringr::str_remove(y_names_equivalent, "\\.")
+              final_clean_names <- gsub('[^A-Za-z0-9_]', '_', y_names_equivalent)
+              final_clean_names <- gsub('_{2,}', '_', final_clean_names)
+              # Remove trailing underscores to match Y.donors
+              final_clean_names <- gsub('_+$', '', final_clean_names)
+              
+              colnames(B) <- final_clean_names
+              
+              idx2 = length(B_list) + 1
+              B_list[[idx2]] = B
+            }
+          }
+        }
+        
+      } else {
+        
+        # Default: aggregate using mean (or custom aggfunc if specified)
+        aggfunc <- if (!is.null(cov_spec$aggfunc)) cov_spec$aggfunc else "mean"
+        # Filter data for the specified periods
+        temp = data.bal.co[data.bal.co[, "Time"] %in% periods_to_use, c('ID', 'Time', var_name)]
+        
+        if (nrow(temp) > 0) {
+          # Apply aggregation by ID
+          if (aggfunc == "mean") {
+            agg_data <- aggregate(temp[[var_name]], by=list(ID=temp$ID), FUN=mean, na.rm=TRUE)
+          } else {
+            agg_data <- aggregate(temp[[var_name]], by=list(ID=temp$ID), FUN=mean, na.rm=TRUE)
+          }
+          
+          # Convert to matrix format
+          B <- data.frame(t(agg_data$x))
+          
+          # IMPORTANT: Use the exact same transformation that Y.donors will use
+          # This matches the str_remove + gsub pattern in Y.donors creation
+          temp_names <- paste("gdpcap", agg_data$ID, sep = ".")
+          y_names_equivalent <- stringr::str_remove(temp_names, "gdpcap")
+          y_names_equivalent <- stringr::str_remove(y_names_equivalent, "\\.")
+          final_clean_names <- gsub('[^A-Za-z0-9_]', '_', y_names_equivalent)
+          final_clean_names <- gsub('_{2,}', '_', final_clean_names)
+          # Remove trailing underscores to match Y.donors
+          final_clean_names <- gsub('_+$', '', final_clean_names)
+        
+          
+          clean_unit_tr <- gsub('[^A-Za-z0-9_]', '_', unit.tr)
+          clean_unit_tr <- gsub('_{2,}', '_', clean_unit_tr)
+          
+          # B matrix columns should match Y.donors exactly  
+          colnames(B) <- final_clean_names
+          rownames(B) <- paste(clean_unit_tr, cov_name, aggfunc, sep='.')
+          
+          idx2 = length(B_list) + 1
+          B_list[[idx2]] = B
+        }
+      }
     }
   }
 
@@ -552,22 +494,14 @@ scdata <- function(df,
   # feature.vec = feature.vec[!duplicated(feature.vec)]
 
   A = dplyr::bind_rows(A_list)
+  
   B = dplyr::bind_rows(B_list)
-
-  rnA = gsub('\\.\\.\\.\\d+$', '', rownames(A))
-  if(sum(duplicated(rnA))>0){
-    A = A[-which(duplicated(rnA)), , drop=F]
-  }
-  rownames(A) = rnA[!duplicated(rnA)]
+  
+  
   A = as.matrix(A)
 
-  rnB = gsub('\\.\\.\\.\\d+$', '', rownames(B))
-  if(sum(duplicated(rnB))>0){
-    B = B[-which(duplicated(rnB)),, drop=F]
-  }
-  rownames(B) = rnB[!duplicated(rnB)]
-  colnames(B) = gsub(' |-|\\.', '_', colnames(B))
   B = as.matrix(B)
+
 
 
   ## Create matrix with pre-period outcomes for the donors
@@ -577,39 +511,51 @@ scdata <- function(df,
                         idvar     = "Time",
                         timevar   = "ID")
 
+  colnames(aux)     <- stringr::str_remove(colnames(aux), outcome.var)
+  colnames(aux)     <- stringr::str_remove(colnames(aux),"\\.")
 
+  Y.donors <- as.matrix(aux[, colnames(aux) != "Time", drop=FALSE])
+   
   Y.pre <- as.matrix(data.bal[rows.tr.pre, outcome.var])
-  rownames(Y.pre) <- paste(unit.tr,as.character(data.bal[rows.tr.pre, "Time"]),sep=".")
+  rownames(Y.pre) <- paste(unit.tr,as.character(data.bal[rows.tr.pre, "Time"]), sep=".")
   colnames(Y.pre) <- outcome.var
 
   # if "Time" is not in numeric format the matrix becomes a matrix of characters,
   # this is why we do everything in one step
-  Y.donors <- as.matrix(aux[, colnames(aux) != "Time", drop=FALSE])
-  Y.names     <- stringr::str_remove(colnames(Y.donors), outcome.var)
-  Y.names     <- stringr::str_remove(Y.names,".")
-  colnames(Y.donors) <- paste(unit.tr, Y.names, sep = ".")
-  colnames(Y.donors) = gsub(' |-|\\.', '_', colnames(Y.donors))
+  
+  # # Use underscores consistently - clean Y.names to match B matrix format
+  # clean_y_names <- gsub('[^A-Za-z0-9_]', '_', Y.names)
+  # clean_y_names <- gsub('_{2,}', '_', clean_y_names)
+  # # Remove trailing underscores
+  # clean_y_names <- gsub('_+$', '', clean_y_names)
+  
+  # # Y.donors columns should match B matrix columns (no unit.tr prefix)
+  # colnames(Y.donors) <- clean_y_names
   rownames(Y.donors) <- paste(unit.tr, as.character(aux[,'Time']), sep = ".")
+  
+  
   Y.donors    <- Y.donors[ , colnames(B)]  # Re-order according to B
 
   ## Create matrix with post-period outcomes for the donors
   sel <- data.bal[rows.co.post, c(outcome.var, "ID", "Time")] # Select rows and columns
+
   aux.post <- stats::reshape(sel,
                              direction = "wide",
                              idvar     = "Time",
                              timevar   = "ID")
+  colnames(aux.post)     <- stringr::str_remove(colnames(aux.post), outcome.var)
+  colnames(aux.post)     <- stringr::str_remove(colnames(aux.post),"\\.")
 
   # if "Time" is not in numeric format the matrix becomes a matrix of characters,
   # this is why we do everything in one step
   Y.donors.post <- as.matrix(aux.post[, colnames(aux) != "Time", drop=FALSE])
-  Y.names.post     <- stringr::str_remove(colnames(Y.donors.post), outcome.var)
-  Y.names.post    <- stringr::str_remove(Y.names.post,".")
-  colnames(Y.donors.post) <- paste(unit.tr, Y.names.post, sep = ".")
-  colnames(Y.donors.post) = gsub(' |-|\\.', '_', colnames(Y.donors.post))
+  
+  # Y.donors.post columns should match B matrix columns (no unit.tr prefix)
+  # colnames(Y.donors.post) <- clean_y_names_post
   rownames(Y.donors.post) <- paste(unit.tr, as.character(aux.post[,'Time']), sep = ".")
   Y.donors.post    <- Y.donors.post[ , colnames(B)]  # Re-order according to B
-
-
+  
+  
   ############################################################################
   ##############################################################################
   ### Prediction Data
@@ -628,12 +574,14 @@ scdata <- function(df,
                         direction = "wide",
                         idvar     = "Time",
                         timevar   = "ID")
+
+  colnames(aux)     <- stringr::str_remove(colnames(aux), outcome.var)
+  colnames(aux)     <- stringr::str_remove(colnames(aux),"\\.")
+
   P <- as.matrix(aux[, names(aux) != "Time"])
+
   rownames(P) <- paste(unit.tr, as.character(aux[,'Time']), sep = ".")
-  P.names     <- stringr::str_remove(colnames(P), outcome.var)
-  colnames(P) <- paste(unit.tr, P.names, sep = ".")
-  colnames(P) = gsub('\\.\\.', '.', colnames(P))
-  colnames(P) = gsub(' |-|\\.', '_', colnames(P))
+
   P <- P[, colnames(B), drop = F]  # Re-order as the matrix B
 
   # If the outcome variable is within the specified features then we need to
@@ -720,12 +668,14 @@ scdata <- function(df,
       rownames(X) <- expected_rownames
     } else {
       # If dimensions don't match, create simple rownames matching actual rows
-      cat("DEBUG: Dimension mismatch! Expected:", length(expected_rownames), "Actual:", nrow(X), "\n")
+      # Dimension mismatch - using simple rownames
       rownames(X) <- paste0("row_", 1:nrow(X))
     }
   }
 
+  
   select      <- rowSums(is.na(X)) == 0
+  
   X.na        <- X[select, , drop = FALSE]
   if (nrow(X.na) == 0) {
     stop("Current specification has too many missing values and no observations are left!")
@@ -734,7 +684,7 @@ scdata <- function(df,
   j1   <- dim(as.matrix(A))[2]  # Columns of A
   j2   <- j1 + dim(B)[2]        # Columns of B
   j3   <- j2
-
+  
   A.na           <- X.na[, 1:j1, drop = FALSE]
   B.na           <- X.na[, (j1+1):j2, drop = FALSE]
 
@@ -804,7 +754,9 @@ scdata <- function(df,
                 donors.units = unit.co.eff,
                 effect = "unit-time",
                 sparse.matrices = FALSE,
-                units.est = unit.tr)
+                units.est = unit.tr,
+                col.name.unit = id.var,
+                col.name.time = time.var)
 
   df.sc <- list(A = A.na,
                 B = B.na,

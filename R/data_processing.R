@@ -131,12 +131,12 @@ create_analysis_config <- function(analysis_type = c("homicide", "ois"), custom_
         basic_homicide = list(
           label = "Basic Homicide",
           var = c("num_homicide", "hr_rate"),
-          each_period = TRUE
+          each = TRUE
         ),
         extended_homicide = list(
           label = "Extended Homicide", 
           var = c("num_homicide", "cleared_cases", "hr_rate"),
-          each_period = TRUE
+          each = TRUE
         ),
         avg_homicide = list(
           label = "Average Homicide",
@@ -165,12 +165,12 @@ create_analysis_config <- function(analysis_type = c("homicide", "ois"), custom_
         basic_ois = list(
           label = "Basic OIS",
           var = c("oisp", "oiso"),
-          each_period = TRUE
+          each = TRUE
         ),
         extended_ois = list(
           label = "Extended OIS",
           var = c("oisp", "oiso", "ofp"),
-          each_period = TRUE
+          each = TRUE
         ),
         avg_ois = list(
           label = "Average OIS",

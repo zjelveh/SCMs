@@ -26,7 +26,7 @@ Save Visualization Plots
 # Save plots
 plots <- list(
   shap_dist = plot_shapley_distributions(results),
-  interactions = plot_interaction_heatmap(interaction_data)
+  main_interactions = plot_categorical_main_vs_interactions(decomp)
 )
 save_visualization_plots(plots, "output/analysis_plots")
 }

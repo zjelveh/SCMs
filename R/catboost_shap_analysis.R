@@ -258,6 +258,7 @@ run_catboost_shap_analysis <- function(long_data, config) {
   results_dt <- data.table::data.table()
   all_shapley_values <- data.table::data.table()
   predictions_dt <- data.table::data.table()
+  all_models <- list()  # Store models for shapviz
   
   # Get all possible factor levels from the full dataset for consistent encoding
   all_factor_levels <- list()
@@ -280,6 +281,11 @@ run_catboost_shap_analysis <- function(long_data, config) {
       results_dt <- rbind(results_dt, analysis_results$results)
       all_shapley_values <- rbind(all_shapley_values, analysis_results$shapley)
       predictions_dt <- rbind(predictions_dt, analysis_results$predictions)
+      
+      # Store the trained model for this unit
+      if(!is.null(analysis_results$model)) {
+        all_models[[unit]] <- analysis_results$model
+      }
     }
   }
   
@@ -294,6 +300,7 @@ run_catboost_shap_analysis <- function(long_data, config) {
     results = results_dt,
     shapley = all_shapley_values,
     predictions = predictions_dt,
+    models = all_models,  # Include trained models for shapviz
     config = config
   ))
 }
@@ -562,8 +569,9 @@ analyze_unit_catboost <- function(unit_data, unit, config,
     is_treated = ifelse(unit == config$treated_unit_name, config$treated_unit_name, "Other")
   )
   
-  # Add specification metadata - full_spec_id uniquely identifies each specification
-  available_cols <- intersect(c("full_spec_id"), names(unit_data_complete))
+  # Add specification metadata - full_spec_id and spec features for interaction analysis
+  metadata_cols <- c("full_spec_id", config$spec_features)
+  available_cols <- intersect(metadata_cols, names(unit_data_complete))
   if (length(available_cols) > 0) {
     spec_metadata <- unit_data_complete[, ..available_cols]
     predictions_dt <- cbind(predictions_dt, spec_metadata)
@@ -693,6 +701,7 @@ analyze_unit_catboost <- function(unit_data, unit, config,
   return(list(
     results = results_dt,
     shapley = shap_long,
-    predictions = predictions_dt
+    predictions = predictions_dt,
+    model = catboost_model_final  # Return the trained model for shapviz
   ))
 }

@@ -7,9 +7,9 @@ library(SCMs)
 library(data.table)
 
 # Load the included German dataset
-dataset <- fread(system.file("scpi_germany.csv", package = "SCMs"))
+dataset <- fread(system.file("extdata/scpi_germany.csv", package = "SCMs"))
 
-# Basic synthetic control estimation
+# Basic synthetic control estimation using the main user interface
 results <- scest(
   dataset, 
   treated_unit = "West Germany",

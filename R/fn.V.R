@@ -28,10 +28,45 @@ fn.V <- function(
 ) {
   # kernlab functions imported via NAMESPACE
   
+  # Validate variables.v before creating diagonal matrix
+  if (is.null(variables.v) || length(variables.v) <= 0) {
+    stop("variables.v is NULL or has length 0")
+  }
+  
+  if (any(is.na(variables.v))) {
+    stop("variables.v contains NA values")
+  }
+  
+  if (any(!is.finite(variables.v))) {
+    stop("variables.v contains non-finite values")
+  }
+  
+  var_length <- length(variables.v)
+  if (var_length <= 0 || is.na(var_length) || !is.finite(var_length)) {
+    stop(paste("Invalid length of variables.v:", var_length))
+  }
+  
   # Create diagonal V matrix from variables
   V <- diag(x = as.numeric(abs(variables.v) / sum(abs(variables.v))),
-            nrow = length(variables.v),
-            ncol = length(variables.v))
+            nrow = var_length,
+            ncol = var_length)
+  
+  # Validate input matrices
+  if (is.null(X0.scaled) || !is.matrix(X0.scaled)) {
+    stop("X0.scaled is NULL or not a matrix")
+  }
+  
+  if (is.null(X1.scaled) || !is.matrix(X1.scaled)) {
+    stop("X1.scaled is NULL or not a matrix")
+  }
+  
+  if (nrow(X0.scaled) != var_length) {
+    stop(paste("Dimension mismatch: X0.scaled has", nrow(X0.scaled), "rows but variables.v has length", var_length))
+  }
+  
+  if (nrow(X1.scaled) != var_length) {
+    stop(paste("Dimension mismatch: X1.scaled has", nrow(X1.scaled), "rows but variables.v has length", var_length))
+  }
   
   # Set up quadratic programming problem
   H <- t(X0.scaled) %*% V %*% (X0.scaled)

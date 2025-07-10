@@ -571,7 +571,6 @@ if (!is.null(y_limits)) {
 }
 
 # Now you can print p1 and combine it with p2 using plot_grid as before.
-# print(p1)
 # p2: Specification Choices and Shapley Values (Bottom) 
 # Panel B: Standard SHAP visualization (no significance strip)
 p2 <- ggplot(plot_data_p2, aes(x = Specification, y = feature)) +

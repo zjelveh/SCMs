@@ -41,7 +41,7 @@ Runs the complete pipeline for CatBoost modeling and SHAP analysis
 on specification curve results for all units in the dataset.
 
 Creates configuration for CatBoost analysis that works directly
-with long format data from spec_curve(..., output_format = "long").
+with long format data from spec_curve().
 }
 \details{
 Run Complete CatBoost SHAP Analysis

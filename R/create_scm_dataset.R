@@ -34,6 +34,7 @@ create_scm_dataset <- function(dataset,
                                min_period,
                                end_period,
                                constant = FALSE) {
+  
   # Convert input to data.table
   dataset <- data.table::as.data.table(dataset)
 
@@ -63,6 +64,13 @@ create_scm_dataset <- function(dataset,
   }
 
   # Create SCM dataset using scpi package
+  
+  # Check which variables actually exist in the dataset
+  dataset_vars <- names(dataset)
+  
+  # Check for variables with periods that might be missing
+  period_vars <- dataset_vars[grepl("\\.", dataset_vars)]
+  
   scpi_data <- scdata(
     df = as.data.frame(dataset),
     id.var = col_name_unit_name,
@@ -75,6 +83,7 @@ create_scm_dataset <- function(dataset,
     constant = constant,
     covagg = covagg
   )
+  
 
   # Calculate standard deviations and standardize data
   X0_sds <- apply(scpi_data$B, 1, sd)

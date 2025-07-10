@@ -2,23 +2,23 @@
 % Please edit documentation in R/inference_placebo.R
 \name{calculate_abadie_significance}
 \alias{calculate_abadie_significance}
-\title{Calculate Post/Pre RMSPE Ratios and Rank-based P-values}
+\title{Calculate Multiple Test Statistics and Rank-based P-values}
 \usage{
-calculate_abadie_significance(taus_result, rmse_result, rmspe_threshold = 2)
+calculate_abadie_significance(taus_result, rmse_result, rmspe_threshold = 0)
 }
 \arguments{
 \item{taus_result}{Data.table containing treatment effects for all units}
 
 \item{rmse_result}{Data.table containing RMSE values for all units}
 
-\item{rmspe_threshold}{Numeric. Threshold for filtering poor pre-treatment fits (default: 2)}
+\item{rmspe_threshold}{Numeric. Threshold for filtering poor pre-treatment fits (default: 0)}
 }
 \value{
-List containing Abadie significance measures
+List containing Abadie significance measures for all test statistics
 }
 \description{
 Calculates significance measures following Abadie et al. (2010) German reunification paper.
-Includes post/pre RMSPE ratios, rank-based p-values, and filtering for poor pre-treatment fits.
+Computes post/pre RMSPE ratios, treatment effects, normalized treatment effects, and their rank-based two-sided p-values.
 }
 \details{
 Calculate Abadie-style Significance Measures

@@ -43,11 +43,10 @@ scdata(
 
 \item{verbose}{Logical. Whether to print diagnostic messages and warnings. Default is TRUE.}
 
-\item{covagg}{List. Flexible specification for covariate aggregation. Can use either:
+\item{covagg}{List. Flexible specification for covariate aggregation.
+Each element is a list with \code{var} and aggregation type:
 \itemize{
-\item \strong{New flexible format}: Each element is a list with \code{var} and aggregation type:
-\itemize{
-\item \code{list(var = "gdp", each_period = TRUE)} - Separate variable for each period
+\item \code{list(var = "gdp", each = TRUE)} - Separate variable for each period
 \item \code{list(var = "trade", average = "full_pre")} - Average over full pre-period
 \item \code{list(var = "schooling", every_n = 5)} - Every N periods
 \item \code{list(var = "invest", periods = c(1980, 1985))} - Specific periods
@@ -56,8 +55,6 @@ scdata(
 \item \code{list(var = "trade", rolling = 3)} - Rolling N-period averages
 \item \code{list(var = "gdp", growth = "period_over_period")} - Growth rates
 \item \code{list(var = "gdp", volatility = "sd")} - Volatility measures
-}
-\item \strong{Legacy format}: List of variable names (for backward compatibility)
 }
 Default is empty list.}
 
@@ -124,7 +121,7 @@ scm_data_adh <- scdata(df = germany_data,
                        unit.tr = "West Germany",
                        unit.co = c("USA", "UK", "France"),
                        covagg = list(
-                         gdp_each = list(var = "gdp", each_period = TRUE),
+                         gdp_each = list(var = "gdp", each = TRUE),
                          investment_avg = list(var = "investment", average = "full_pre"),
                          schooling_5yr = list(var = "schooling", every_n = 5),
                          trade_final = list(var = "trade", periods = 1990)

@@ -28,7 +28,6 @@ Imports: CVXR        (>= 1.0-10),
          parallel    (>= 4.1.0),
          purrr       (>= 0.3.4),
          Qtools      (>= 1.5.6),
-         reshape2    (>= 1.4.4),
          rlang       (>= 0.4.11),
          stats       (>= 4.1.0),
          stringr     (>= 1.4.0),
@@ -39,9 +38,11 @@ Imports: CVXR        (>= 1.0-10),
          doSNOW,
          fastDummies,
          glmnet,
-         devtools,
          catboost,
-         ggnewscale
+         ggnewscale,
+         shapviz,
+         treeshap,
+         ggrepel
 Description: Comprehensive toolkit for Synthetic Control Methods (SCM) with advanced 
     features including specification curve analysis, CatBoost+SHAP machine learning 
     analysis, and multiple inference procedures. The package highlight is specification 
@@ -54,5 +55,6 @@ LazyData: true
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
 Suggests: 
-    testthat (>= 3.0.0)
+    testthat (>= 3.0.0),
+    devtools
 Config/testthat/edition: 3

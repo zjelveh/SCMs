@@ -302,21 +302,12 @@ perform_bootstrap_inference <- function(dataset_null, sc.pred, actual_effects,
 #' @return List with bootstrap results or error details
 #' @export
 debug_single_bootstrap <- function(sc.pred, dataset_null, iteration_number = 1) {
-  cat("=== DEBUG BOOTSTRAP ITERATION", iteration_number, "===\n")
-  
   col_name_unit <- sc.pred$col_name_unit_name
   all_units <- unique(dataset_null[[col_name_unit]])
-  
-  cat("Total units available:", length(all_units), "\n")
-  cat("Treated unit:", sc.pred$name_treated_unit, "\n")
-  cat("Control units:", length(all_units) - 1, "\n")
   
   # Sample units
   set.seed(iteration_number)  # For reproducibility
   bootstrap_units <- sample(all_units, size = length(all_units), replace = TRUE)
-  
-  cat("Bootstrap sample:\n")
-  print(table(bootstrap_units))
   
   # Test dataset creation
   tryCatch({

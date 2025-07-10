@@ -4,23 +4,14 @@
 \alias{run_spec_curve_analysis}
 \title{Run Specification Curve Analysis with Multiple Configurations}
 \usage{
-run_spec_curve_analysis(
-  dataset,
-  outcomes = NULL,
-  params,
-  output_dir = NULL,
-  inference_type = "placebo",
-  inference_config = list()
-)
+run_spec_curve_analysis(dataset, params, cores = 1, output_dir = NULL)
 }
 \arguments{
 \item{dataset}{Data frame containing the panel data for analysis.}
 
-\item{outcomes}{Character vector of outcome variable names. If NULL, uses outcomes from params.}
-
-\item{params}{List containing analysis parameters including:
+\item{params}{List containing ALL analysis parameters including:
 \itemize{
-\item \code{outcomes} - Character vector of outcome variables
+\item \code{outcomes} - Character vector of outcome variables (REQUIRED)
 \item \code{col_name_unit_name} - Column name for unit identifiers
 \item \code{name_treated_unit} - Name of treated unit
 \item \code{covagg} - List of covariate specifications
@@ -32,24 +23,13 @@ run_spec_curve_analysis(
 \item \code{donor_sample} - Donor sample selection methods
 \item \code{outcome_models} - Outcome modeling approaches
 \item \code{constraints} - Weight constraint specifications
+\item \code{inference_type} - "placebo", "bootstrap", or "all" (default: "placebo")
+\item \code{inference_config} - List with bootstrap_n_replications, verbose, etc.
 }}
+
+\item{cores}{Integer. Number of cores for parallel processing (applies to both bootstrap and placebo inference unless overridden in params$inference_config).}
 
 \item{output_dir}{Character. Directory to save results. If NULL, results are not saved.}
-
-\item{inference_type}{Character. Type of inference to perform: "placebo" (default), "bootstrap", or "all".
-\itemize{
-\item "placebo": Traditional placebo-based inference using control units
-\item "bootstrap": Bootstrap null hypothesis testing with unit-level resampling
-\item "all": Both placebo and bootstrap inference (for comparison)
-}}
-
-\item{inference_config}{List. Configuration for inference methods. Can include:
-\itemize{
-\item \code{bootstrap_n_replications} - Number of bootstrap replications (default: 1000)
-\item \code{bootstrap_cores} - Cores for bootstrap processing (default: 1)
-\item \code{placebo_cores} - Cores for placebo processing (default: 1)
-\item \code{verbose} - Verbose inference output (default: FALSE)
-}}
 }
 \value{
 List structure containing:
@@ -68,7 +48,6 @@ Run Comprehensive Specification Curve Analysis
 }
 \examples{
 \dontrun{
-# Create analysis configuration
 params <- list(
   outcomes = "gdp",
   col_name_unit_name = "country",
@@ -87,29 +66,21 @@ params <- list(
 )
 
 # Run analysis with placebo inference (default)
-results_placebo <- run_spec_curve_analysis(dataset, params = params)
+results_placebo <- run_spec_curve_analysis(dataset, params)
 
-# Run bootstrap inference only 
-results_bootstrap <- run_spec_curve_analysis(
-  dataset, 
-  params = params,
-  inference_type = "bootstrap",
-  inference_config = list(
-    bootstrap_n_replications = 1000,
-    bootstrap_cores = 4
-  )
-)
+# Run bootstrap inference with 4 cores
+params_bootstrap <- params
+params_bootstrap$inference_type <- "bootstrap"
+params_bootstrap$inference_config <- list(bootstrap_n_replications = 1000)
+results_bootstrap <- run_spec_curve_analysis(dataset, params_bootstrap, cores = 4)
 
-# Run both inference methods for comparison
-results_both <- run_spec_curve_analysis(
-  dataset,
-  params = params, 
-  inference_type = "all",
-  inference_config = list(
-    bootstrap_n_replications = 500,  # Fewer for speed when running both
-    bootstrap_cores = 2,
-    placebo_cores = 1
-  )
+# Run both inference methods for comparison  
+params_both <- params
+params_both$inference_type <- "all"
+params_both$inference_config <- list(
+  bootstrap_n_replications = 500,  # Fewer for speed when running both
+  verbose = TRUE
 )
+results_both <- run_spec_curve_analysis(dataset, params_both, cores = 2)
 }
 }

@@ -18,7 +18,7 @@ library(data.table)
 # Load the German reunification dataset
 # This dataset contains GDP per capita and covariates for West Germany and 
 # potential donor countries from 1960-2003
-dataset <- fread(system.file("scpi_germany.csv", package = "SCMs"))
+dataset <- fread(system.file("extdata/scpi_germany.csv", package = "SCMs"))
 
 # Examine the data structure
 cat("Dataset dimensions:", nrow(dataset), "rows x", ncol(dataset), "columns\n")
@@ -42,7 +42,7 @@ params <- list(
     # Specification 1: ADH-style with all variables
     adh_full = list(
       label = 'ADH Full',
-      gdp_each = list(var = "gdp", each_period = TRUE),
+      gdp_each = list(var = "gdp", each = TRUE),
       invest_final = list(var = "invest80", periods = 1980),
       schooling_census = list(var = "schooling", every_n = 5),
       trade_avg = list(var = "trade", average = "full_pre"),
@@ -59,7 +59,7 @@ params <- list(
     # Specification 3: GDP-only matching
     gdp_only = list(
       label = 'GDP Only',
-      gdp_each = list(var = "gdp", each_period = TRUE)
+      gdp_each = list(var = "gdp", each = TRUE)
     )
   ),
   

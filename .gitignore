@@ -4,3 +4,20 @@ sftp.json
 .vscode
 .Rhistory
 .Rbuildignore
+
+# R CMD check artifacts
+*.Rcheck/
+..Rcheck/
+
+# CatBoost training artifacts
+catboost_info/
+*/catboost_info/
+
+# Temporary files
+*.tmp
+*.temp
+*~
+
+# OS files
+.DS_Store
+Thumbs.db

@@ -62,6 +62,7 @@ estimate_sc <- function(dataset,           # Input dataset (panel data format)
   if (!methods::is(data, "scdata") & !methods::is(data, "scdataMulti")) {
     stop("data should be the object returned by running scdata or scdata_multi!")
   }
+  
   # 2. SCM Estimation
   scm_model <- scest(data = data,     # Estimate the Synthetic Control
     w.constr = w.constr,

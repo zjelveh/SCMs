@@ -232,7 +232,7 @@ spec_curve <- function(
       stringsAsFactors = FALSE
     )
   }
-  
+
   # Function to process a single specification
   process_spec <- function(
     outc, const_idx, fw, ca_idx, ds, spec_number,
@@ -244,17 +244,17 @@ spec_curve <- function(
     const <- constraints[[const_idx]]
     ca <- covagg[[ca_idx]]
     
-    # Create feature names - handle both old and new covagg formats
+    # Create feature names
     # Check if user provided a custom label first
     if (!is.null(ca$label) && is.character(ca$label) && length(ca$label) == 1) {
       feature_names <- ca$label
     } else if (is.list(ca) && "var" %in% names(ca)) {
-      # NEW FORMAT: Create descriptive name from specification
+      # Create descriptive name from specification
       spec_parts <- c()
       spec_parts <- c(spec_parts, ca$var)
       
-      if (!is.null(ca$each_period) && ca$each_period) {
-        spec_parts <- c(spec_parts, "each_period")
+      if (!is.null(ca$each) && ca$each) {
+        spec_parts <- c(spec_parts, "each")
       } else if (!is.null(ca$average)) {
         spec_parts <- c(spec_parts, paste0("avg_", ca$average))
       } else if (!is.null(ca$every_n)) {
@@ -294,15 +294,14 @@ spec_curve <- function(
     
     # Ensure ca is in proper format for estimate_sc
     if (is.list(ca) && "var" %in% names(ca)) {
-      # NEW FORMAT: Wrap single spec in a list with a name
+      # Wrap single spec in a list with a name
       ca_formatted <- list()
       ca_formatted[[names(covagg)[ca_idx]]] <- ca
     } else {
-      # OLD FORMAT: Use as-is
-      ca_formatted <- ca
+      stop("Invalid covagg format - only new format is supported")
     }
     
-    sc.pred <- 
+    sc.pred <- tryCatch({
       estimate_sc(
         dataset2,
         outc,
@@ -317,7 +316,10 @@ spec_curve <- function(
         feature_weights = fw,
         w.constr = const                      
       )
-    
+    }, error = function(e) {
+      message(sprintf("ERROR in estimate_sc for spec %s: %s", spec_name, e$message))
+      return(NULL)
+    })
     
     if (!is.null(sc.pred)) {
       
@@ -543,7 +545,14 @@ spec_curve <- function(
     # Use foreach for parallel execution
     results_list <- foreach::foreach(
       i = 1:nrow(param_grid),
-      .packages = c('data.table', 'devtools', 'SCMs')#,  # Include SCMs package
+      .packages = c('data.table', 'devtools', 'SCMs', 'optimx', 'kernlab'),  # Include all required packages
+      .export = c('validate_covariate_spec', 'determine_processing_pattern', 
+                  'process_aggregate_arbitrary', 'process_aggregate_range',
+                  'process_each_arbitrary', 'process_each_range',
+                  'resolve_target_periods', 'get_agg_function', 'generate_var_name',
+                  'validate_agg_function', 'validate_periods', 'validate_range_size',
+                  'process_covariates', 'fn.V'),  # Export fn.V function
+      .noexport = c('data.table', '.SD', '.N', '.BY')  # Ensure data.table works in parallel
     ) %dopar% {
       # SCMs package functions available in parallel worker
       
@@ -607,6 +616,7 @@ spec_curve <- function(
 
   for (res in results_list) {
     if (!is.null(res) && !is.null(res$result)) {
+      
       # Extract data from the result structure
       if (!is.null(res$result$infer) && 
           is.list(res$result$infer) && 
@@ -714,6 +724,7 @@ spec_curve <- function(
           
           bootstrap_results_list[[length(bootstrap_results_list) + 1]] <- bootstrap_spec_results
         }
+      } else {
       }
     }
   }

@@ -16,14 +16,18 @@ plot_spec_curve(
   height = 10,
   show_pvalues = TRUE,
   p_threshold = 0.05,
+  pvalue_style = "continuous",
   prefer_bootstrap_pvalues = FALSE,
+  test_statistic = "rmse_ratio",
   null_distribution = "placebo",
   crop_outliers = "none",
   sort_by = "tau"
 )
 }
 \arguments{
-\item{long_data}{Data.table. Long format data from spec_curve(..., output_format = "long").}
+\item{long_data}{Data.table or List. Long format data from spec_curve().
+Can be either the results data.table directly, or the full structured results
+(with results, abadie_inference, bootstrap_inference components).}
 
 \item{name_treated_unit}{Character. Name of the treated unit.}
 
@@ -41,7 +45,7 @@ Options: "none" (default), "percent_of_mean", "percent_of_preperiod", "standardi
 \item{rmse_threshold}{Numeric. Threshold for root mean square error to filter results. Default is Inf.}
 
 \item{shap_values}{Data.table or NULL. SHAP values from run_xgboost_shap_analysis().
-Should contain spec_number column for perfect alignment. Default is NULL.}
+Should contain full_spec_id column for perfect alignment. Default is NULL.}
 
 \item{file_path_save}{Character or NA. File path to save the plot. If NA, plot is not saved. Default is NA.}
 
@@ -54,8 +58,18 @@ Uses Abadie p-values by default, or bootstrap p-values if available. Default is 
 
 \item{p_threshold}{Numeric. P-value threshold for significance coloring. Default is 0.05.}
 
+\item{pvalue_style}{Character. Style for p-value visualization. Options: "continuous" (default) or "categorical".
+\itemize{
+\item "continuous": Uses -log10(p-value) color scale with continuous gradation
+\item "categorical": Uses discrete significance categories (original behavior)
+}}
+
 \item{prefer_bootstrap_pvalues}{Logical. Whether to prefer bootstrap p-values over Abadie p-values
 when both are available. Default is FALSE (prefer Abadie).}
+
+\item{test_statistic}{Character. Which test statistic p-values to use for coloring.
+Options: "rmse_ratio" (default), "treatment_effect", "normalized_te".
+Only applies to Abadie placebo inference which provides multiple test statistics.}
 
 \item{null_distribution}{Character. The distribution to plot as the null/comparison.
 Options: "placebo" (default) or "bootstrap".
@@ -87,7 +101,7 @@ A ggplot object representing the specification curve.
 \description{
 Creates specification curve plots directly from long format data,
 ensuring perfect alignment between SHAP values and specifications through
-shared spec_number identifiers.
+shared full_spec_id identifiers.
 }
 \details{
 Plot Specification Curve Using Direct Long Format Data
@@ -106,19 +120,31 @@ spec_results_long <- run_spec_curve_analysis(
 # 2. Run SHAP analysis
 shap_results <- run_catboost_shap_analysis(spec_results_long, config)
 
-# 3. Plot using placebo null (default)
-plot_placebo <- plot_spec_curve(
-  long_data = spec_results_long,
-  name_treated_unit = "TREATED_ID",
-  shap_values = shap_results$shapley
-)
-
-# 4. Plot using bootstrap null
-plot_bootstrap <- plot_spec_curve(
+# 3. Plot using placebo null with continuous p-values (default - RMSE ratio)
+plot_rmse_ratio <- plot_spec_curve(
   long_data = spec_results_long,
   name_treated_unit = "TREATED_ID",
   shap_values = shap_results$shapley,
-  null_distribution = "bootstrap"
+  test_statistic = "rmse_ratio",
+  pvalue_style = "continuous"
+)
+
+# 4. Plot using treatment effect test statistic p-values
+plot_treatment_effect <- plot_spec_curve(
+  long_data = spec_results_long,
+  name_treated_unit = "TREATED_ID",
+  shap_values = shap_results$shapley,
+  test_statistic = "treatment_effect",
+  pvalue_style = "continuous"
+)
+
+# 5. Plot using normalized treatment effect test statistic p-values
+plot_normalized_te <- plot_spec_curve(
+  long_data = spec_results_long,
+  name_treated_unit = "TREATED_ID",
+  shap_values = shap_results$shapley,
+  test_statistic = "normalized_te",
+  pvalue_style = "categorical"
 )
 }
 }
