@@ -166,7 +166,8 @@ spec_curve <- function(
     cores = 1,
     verbose = TRUE,
     inference_type = "placebo",
-    inference_config = list()
+    inference_config = list(),
+    expected_direction = "negative"
 ) {
   # Input validation
   if (!any(c("data.frame", "data.table") %in% class(dataset))) {
@@ -245,10 +246,18 @@ spec_curve <- function(
     ca <- covagg[[ca_idx]]
     
     # Create feature names
-    # Check if user provided a custom label first
+    # Extract label from specification level (nested format)
+    spec_label <- NULL
     if (!is.null(ca$label) && is.character(ca$label) && length(ca$label) == 1) {
-      feature_names <- ca$label
-    } else if (is.list(ca) && "var" %in% names(ca)) {
+      spec_label <- ca$label
+      feature_names <- spec_label
+    } else if (is.list(ca)) {
+      # Check if this is a nested specification with label at top level
+      has_nested_specs <- any(sapply(ca, function(x) is.list(x) && !is.null(x$var)))
+      if (has_nested_specs && !is.null(ca$label)) {
+        spec_label <- ca$label
+        feature_names <- spec_label
+      } else if ("var" %in% names(ca)) {
       # Create descriptive name from specification
       spec_parts <- c()
       spec_parts <- c(spec_parts, ca$var)
@@ -275,6 +284,7 @@ spec_curve <- function(
       
       feature_names <- paste(spec_parts, collapse = "_")
     } 
+    }
     
     # Use the provided min_period directly
     local_min_period <- min_period
@@ -287,18 +297,26 @@ spec_curve <- function(
     }
     
     # Create specification identifier for logging
-    spec_name <- paste(outc, const$name, fw, feature_names, ds, 
-                       paste0('n_pp_years_', treated_period-min_period), sep = "-")
+    spec_name <- paste(outc, const$name, fw, feature_names, ds, sep = "-")
     
     if (verbose) message(sprintf("Processing: %s", spec_name))
     
     # Ensure ca is in proper format for estimate_sc
-    if (is.list(ca) && "var" %in% names(ca)) {
-      # Wrap single spec in a list with a name
-      ca_formatted <- list()
-      ca_formatted[[names(covagg)[ca_idx]]] <- ca
+    if (is.list(ca)) {
+      # Check if this is a nested specification (has label + feature specs)
+      has_nested_specs <- any(sapply(ca, function(x) is.list(x) && !is.null(x$var)))
+      if (has_nested_specs) {
+        # Nested format: use as-is (scdata.R will handle the nested structure)
+        ca_formatted <- ca
+      } else if ("var" %in% names(ca)) {
+        # Single spec format: wrap in a list with a name  
+        ca_formatted <- list()
+        ca_formatted[[names(covagg)[ca_idx]]] <- ca
+      } else {
+        stop("Invalid covagg format - specifications must have 'var' field or nested structure")
+      }
     } else {
-      stop("Invalid covagg format - only new format is supported")
+      stop("Invalid covagg format - only list format is supported")
     }
     
     sc.pred <- tryCatch({
@@ -352,17 +370,24 @@ spec_curve <- function(
             cores = 1,  # No nested parallelism
             w.bounds = NULL,
             e.bounds = NULL,
-            verbose = FALSE
+            verbose = FALSE,
+            expected_direction = expected_direction
           )
         }, error = function(e) {
           warning(sprintf("Error in placebo inference for spec '%s': %s", spec_name, e$message))
           return(NULL)
         })
+
         if (!is.null(placebo_results)) {
-          sc.infer <- placebo_results
+          # Standardize structure to match bootstrap mode expectations
+          sc.infer <- list(
+            inference.results = placebo_results$inference.results,
+            rmse = placebo_results$rmse,
+            abadie_significance = placebo_results$abadie_significance
+          )
+          
         }
       }
-
 
       # Run bootstrap inference if requested  
       if (inference_type %in% c("bootstrap", "all")) {
@@ -472,15 +497,15 @@ spec_curve <- function(
           }
         }
       }
-      
       result <- list(
         estimate = sc.pred,
         infer = sc.infer
       )
+
     } else {
       result <- NULL
     }
-  
+
     return(list(
       outc = outc,
       spec_number = spec_number,
@@ -488,7 +513,6 @@ spec_curve <- function(
       fw = fw,
       feature_names = feature_names,
       ds = ds,
-      pre_period_label = paste0('n_pp_years_', treated_period-min_period),
       result = result
     ))
   }
@@ -701,6 +725,7 @@ spec_curve <- function(
             }
           }
           
+          
           abadie_results_list[[length(abadie_results_list) + 1]] <- abadie_spec_results
         }
         
@@ -736,7 +761,8 @@ spec_curve <- function(
     
     # Create return structure
     final_results <- list(
-      results = long_df
+      results = long_df,
+      expected_direction = expected_direction
     )
     
     # Process and add Abadie inference results if available
@@ -782,6 +808,7 @@ spec_curve <- function(
         abadie_combined$filtered_results <- data.table::rbindlist(abadie_filtered, fill = TRUE)
       }
       
+      
       final_results$abadie_inference <- abadie_combined
     }
     
@@ -809,6 +836,149 @@ spec_curve <- function(
     stop("No valid results found")
   }
 
+  # Calculate specification curve p-values
+  if (verbose) message("Calculating specification curve p-values...")
+  spec_curve_pvalues <- calculate_spec_curve_pvalues(final_results, expected_direction)
+  final_results$spec_curve_pvalues <- spec_curve_pvalues
+
   if (verbose) message("Specification curve generation complete")
   return(final_results)
+}
+
+
+#' Calculate Specification Curve P-values
+#'
+#' @title Calculate Cross-Specification P-values for All Units
+#' @description Calculates specification curve-level p-values by aggregating treatment effects
+#' across all specifications and ranking units. Implements two test statistics:
+#' 1) Median treatment effect across specifications, 2) Average Z-score (Stouffer's method).
+#'
+#' @param spec_curve_results List. Results from spec_curve() function containing results and inference data
+#' @param expected_direction Character. Expected direction of treatment effect: "negative", "positive", or "two_sided"
+#'
+#' @return List containing specification curve p-values:
+#' \itemize{
+#'   \item median_tau_pvalues: P-values based on median treatment effect across specifications
+#'   \item stouffer_pvalues: P-values based on average Z-score across specifications (Stouffer's method)
+#' }
+#'
+#' @details
+#' This function implements specification curve-level inference by:
+#' \itemize{
+#'   \item Calculating median treatment effect for each unit across all specifications
+#'   \item Converting individual specification p-values to Z-scores and averaging them
+#'   \item Ranking all units and assigning p-values based on their position in the distribution
+#'   \item Accounting for expected direction when ranking (negative vs positive effects)
+#' }
+#'
+#' @examples
+#' \dontrun{
+#' # After running spec_curve
+#' results <- spec_curve(dataset, ...)
+#' spec_pvals <- calculate_spec_curve_pvalues(results, "negative")
+#' }
+calculate_spec_curve_pvalues <- function(spec_curve_results, expected_direction = "negative") {
+  
+  # Extract main results
+  if (!"results" %in% names(spec_curve_results)) {
+    stop("spec_curve_results must contain 'results' component")
+  }
+  
+  results_dt <- as.data.table(spec_curve_results$results)
+  
+  # Test Statistic 1: Median Treatment Effect Across All Specifications
+  # Calculate average tau for each unit across all specs (post-period only)
+  avg_tau_by_spec <- results_dt[post_period == TRUE, .(
+    ave_tau = mean(tau)
+  ), by = .(full_spec_id, unit_name, unit_type)]
+  
+  # Get median of those averages for each unit across all specifications
+  median_tau_by_unit <- avg_tau_by_spec[, .(
+    median_tau = median(ave_tau),
+    n_specs = .N
+  ), by = .(unit_name, unit_type)]
+  
+  # Rank units based on expected direction and assign p-values
+  if (expected_direction == "negative") {
+    # Most negative gets rank 1 (lowest p-value)
+    median_tau_by_unit[, rank_med := rank(median_tau, ties.method = "min")]
+  } else if (expected_direction == "positive") {
+    # Most positive gets rank 1 (lowest p-value)  
+    median_tau_by_unit[, rank_med := rank(-median_tau, ties.method = "min")]
+  } else {
+    # Two-sided: rank by absolute value (most extreme gets rank 1)
+    median_tau_by_unit[, rank_med := rank(-abs(median_tau), ties.method = "min")]
+  }
+  
+  # Calculate p-values and total units
+  median_tau_by_unit[, `:=`(
+    pval_rank_med = rank_med / .N,
+    total_units = .N
+  )]
+  
+  # Test Statistic 2: Average Z-score (Stouffer's Method)
+  # Need to extract p-values from Abadie inference and convert to Z-scores
+  if ("abadie_inference" %in% names(spec_curve_results)) {
+    
+    # Use RMSE ratio p-values (one-sided) for Z-score conversion
+    if ("p_values_rmse_ratio" %in% names(spec_curve_results$abadie_inference)) {
+      
+      abadie_pvals <- as.data.table(spec_curve_results$abadie_inference$p_values_rmse_ratio)
+      
+      # Merge treatment effects with p-values
+      tau_pval_merged <- merge(
+        avg_tau_by_spec,
+        abadie_pvals[, .(full_spec_id, unit_name, p_value_one_sided)], 
+        by = c('full_spec_id', 'unit_name'),
+        all.x = TRUE
+      )
+      
+      # Convert p-values to Z-scores
+      tau_pval_merged[, zscore := qnorm(p_value_one_sided, mean = 0, sd = 1, lower.tail = TRUE)]
+      
+      # Handle extreme p-values
+      tau_pval_merged[p_value_one_sided == 1, zscore := 4.25]
+      tau_pval_merged[p_value_one_sided == 0, zscore := -4.25]
+      tau_pval_merged[is.na(zscore), zscore := 0]  # Handle any remaining NAs
+      
+      # Calculate mean Z-score for each unit across all specifications
+      mean_z_by_unit <- tau_pval_merged[, .(
+        mean_z = mean(zscore, na.rm = TRUE),
+        n_specs_with_pvals = sum(!is.na(zscore))
+      ), by = .(unit_name, unit_type)]
+      
+      # Rank units by mean Z-score based on expected direction
+      if (expected_direction == "negative") {
+        # Most negative Z-score gets rank 1 (most significant in negative direction)
+        mean_z_by_unit[, rank_z := rank(mean_z, ties.method = "min")]
+      } else if (expected_direction == "positive") {
+        # Most positive Z-score gets rank 1 (most significant in positive direction)
+        mean_z_by_unit[, rank_z := rank(-mean_z, ties.method = "min")]
+      } else {
+        # Two-sided: most extreme (absolute) Z-score gets rank 1
+        mean_z_by_unit[, rank_z := rank(-abs(mean_z), ties.method = "min")]
+      }
+      
+      # Calculate p-values and total units
+      mean_z_by_unit[, `:=`(
+        pval_rank_z = rank_z / .N,
+        total_units = .N
+      )]
+      
+      stouffer_results <- mean_z_by_unit
+      
+    } else {
+      warning("No RMSE ratio p-values found for Stouffer's method calculation")
+      stouffer_results <- data.table()
+    }
+  } else {
+    warning("No Abadie inference results found for Stouffer's method calculation")
+    stouffer_results <- data.table()
+  }
+  
+  # Return both test statistics
+  return(list(
+    median_tau_pvalues = median_tau_by_unit,
+    stouffer_pvalues = stouffer_results
+  ))
 }

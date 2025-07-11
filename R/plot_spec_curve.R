@@ -17,7 +17,7 @@
 #'   - "standardized": tau / sd(control_effects)
 #'   - "rmspe_ratio": post_RMSPE / pre_RMSPE (Abadie-style)
 #' @param rmse_threshold Numeric. Threshold for root mean square error to filter results. Default is Inf.
-#' @param shap_values Data.table or NULL. SHAP values from run_xgboost_shap_analysis().
+#' @param shap_values Data.table or NULL. SHAP values from run_catboost_shap_analysis().
 #'   Should contain full_spec_id column for perfect alignment. Default is NULL.
 #' @param file_path_save Character or NA. File path to save the plot. If NA, plot is not saved. Default is NA.
 #' @param width Numeric. Width of the saved plot in inches. Default is 6.
@@ -93,6 +93,7 @@
 #'   test_statistic = "normalized_te",
 #'   pvalue_style = "categorical"
 #' )
+#' 
 #' }
 plot_spec_curve <- function(
     long_data,
@@ -121,7 +122,7 @@ plot_spec_curve <- function(
   if (!test_statistic %in% valid_test_statistics) {
     stop("test_statistic must be one of: ", paste(valid_test_statistics, collapse = ", "))
   }
-
+  
   # Input validation and data extraction
   if (is.list(long_data) && "results" %in% names(long_data)) {
     # Handle structured results from spec_curve
@@ -130,9 +131,12 @@ plot_spec_curve <- function(
     # Merge inference results for the specified test statistic
     p_values_key <- paste0("p_values_", test_statistic)
     test_stats_key <- paste0("test_statistics_", test_statistic)
-    
+
+
     if (!is.null(long_data$abadie_inference[[p_values_key]])) {
       abadie_pvals <- long_data$abadie_inference[[p_values_key]]
+      # limit to treated unit
+      abadie_pvals = abadie_pvals[unit_type=='treated']
       main_data = merge(main_data, abadie_pvals[, .(full_spec_id, p_value)], 
        by = "full_spec_id", all.x = TRUE)
     }
@@ -170,6 +174,7 @@ plot_spec_curve <- function(
       main_data = merge(main_data, bootstrap_pvals[, .(full_spec_id, p_value_two_tailed )], 
        by = "full_spec_id", all.x = TRUE)
     }
+    
     
     # Add bootstrap iteration data for null distribution plotting
     if (!is.null(long_data$bootstrap_inference$iteration_data)) {
@@ -211,22 +216,27 @@ plot_spec_curve <- function(
       }
     }
     
-    long_data <- main_data
-  } else if (!data.table::is.data.table(long_data)) {
-    long_data <- data.table::as.data.table(long_data)
+    # Keep main_data as the processed results data
+  } else {
+    # Handle direct data.table input (not structured from spec_curve)
+    if (!data.table::is.data.table(long_data)) {
+      long_data <- data.table::as.data.table(long_data)
+    }
+    main_data <- long_data
   }
-  
+
   # Check required columns
   required_cols <- c("unit_name", "tau", "post_period", "full_spec_id")
-  missing_cols <- setdiff(required_cols, names(long_data))
+  missing_cols <- setdiff(required_cols, names(main_data))
   if (length(missing_cols) > 0) {
-    stop(paste("Missing required columns in long_data:", paste(missing_cols, collapse = ", ")))
+    stop(paste("Missing required columns in main_data:", paste(missing_cols, collapse = ", ")))
   }
   
   # Check if p-value data is available
-  has_abadie_pvalues <- "p_value" %in% names(long_data)
-  has_bootstrap_pvalues <- "p_value_two_tailed" %in% names(long_data)
+  has_abadie_pvalues <- "p_value" %in% names(main_data)
+  has_bootstrap_pvalues <- "p_value_two_tailed" %in% names(main_data)
   has_pvalues <- has_abadie_pvalues || has_bootstrap_pvalues
+  
   
   # Determine which p-values to use
   # When using bootstrap null distribution, prefer bootstrap p-values
@@ -243,10 +253,10 @@ plot_spec_curve <- function(
   p_value_column <- if (use_bootstrap_pvalues) "p_value_two_tailed" else "p_value"
   
   # Filter by outcomes
-  if ("outcome" %in% names(long_data)) {
-    sc_results_df <- long_data[outcome %in% outcomes]
+  if ("outcome" %in% names(main_data)) {
+    sc_results_df <- main_data[outcome %in% outcomes]
   } else {
-    sc_results_df <- long_data
+    sc_results_df <- main_data
   }
   
   # Filter by RMSE if threshold provided
@@ -257,7 +267,7 @@ plot_spec_curve <- function(
   if (nrow(sc_results_df) == 0) {
     stop("No data remaining after filtering")
   }
-  
+
   # Calculate average effects for plotting (post-treatment period only)
   # Check if post_pre_ratio exists before trying to aggregate it
   if ("post_pre_ratio" %in% names(sc_results_df)) {
@@ -278,7 +288,6 @@ plot_spec_curve <- function(
       'outcome_model', 'const', 'fw', 'feat', 'data_sample')
     ]
   }
-  
   
   
   # Normalize outcomes if requested
@@ -375,6 +384,7 @@ plot_spec_curve <- function(
 
     panel_a_data <- merge(panel_a_data, p_value_data[, .(Specification, p_value)], by = "Specification", all.x = TRUE)
   }
+  
 
   # B. Prepare data for Panel B (SHAP & Specification Details)
   if ("post_pre_ratio" %in% names(average_effect_df)) {
@@ -455,10 +465,8 @@ plot_spec_curve <- function(
   panel_b_data[feature_group== 'data_sample', feature_group:='Donor Pool']
   panel_b_data[feature == 'simplex' & feature_group=='Weight\nMethod', feature := "Original"]
   panel_b_data[feature == 'lasso' & feature_group=='Weight\nMethod', feature := "Original + Penalty Lasso"]
-  panel_b_data[feature == 'ridge' & feature_group=='Weight
-Method', feature := "Original + Penalty Ridge"]
-  panel_b_data[feature == 'ols' & feature_group=='Weight
-Method', feature := "OLS Weights"]
+  panel_b_data[feature == 'ridge' & feature_group=='Weight\nMethod', feature := "Original + Penalty Ridge"]
+  panel_b_data[feature == 'ols' & feature_group=='Weight\nMethod', feature := "OLS Weights"]
 
   # Filter out feature_groups with only one unique feature value
   feature_counts <- panel_b_data[, .(n_unique = uniqueN(feature)), by = feature_group]
@@ -506,11 +514,6 @@ Method', feature := "OLS Weights"]
     } else {
       # Categorical p-value coloring (original behavior)
       treated_data[, significance_category := fcase(
-        # p_value < 0.01, "p < 0.01)",
-        # p_value < 0.05, "Significant (p < 0.05)", 
-        # p_value < 0.10, "Marginally Significant (p < 0.10)",
-        # p_value >= 0.10, "Not Significant (p >= 0.10)",
-        # default = "Unknown"
         p_value < 0.01, "p < 0.01",
         p_value < 0.05, "p < 0.05", 
         p_value < 0.10, "p < 0.10",
@@ -531,12 +534,6 @@ Method', feature := "OLS Weights"]
                      "Unknown" = "#999999"),
           breaks = c("p < 0.01", "p < 0.05",
                      "p < 0.10", "p >= 0.10")
-          # name = "Statistical Significance",
-          # values = c("p < 0.01)" = "#08519c", "Significant (p < 0.05)" = "#3182bd",
-          #            "Marginally Significant (p < 0.10)" = "#fd8d3c", "Not Significant (p >= 0.10)" = "#d94701",
-          #            "Unknown" = "#999999"),
-          # breaks = c("p < 0.01)", "Significant (p < 0.05)",
-          #            "Marginally Significant (p < 0.10)", "Not Significant (p >= 0.10)")
         )
     }
   } else {
@@ -564,6 +561,63 @@ p1 <- p1 +
     axis.text = element_text(colour = "black")
   ) +
   labs(x = NULL, y = y_label)
+
+# Add specification curve p-values annotation if available  
+if (is.list(long_data) && "spec_curve_pvalues" %in% names(long_data)) {
+  spec_curve_pvals <- long_data$spec_curve_pvalues
+  
+  # Extract treated unit p-values for both test statistics
+  treated_median_pval <- NULL
+  treated_stouffer_pval <- NULL
+  
+  # Get median tau p-value for treated unit
+  if (!is.null(spec_curve_pvals$median_tau_pvalues)) {
+    median_pvals <- spec_curve_pvals$median_tau_pvalues
+    treated_median_data <- median_pvals[unit_type == "treated"]
+    if (nrow(treated_median_data) > 0) {
+      treated_median_pval <- treated_median_data$pval_rank_med[1]
+    }
+  }
+  
+  # Get Stouffer's method p-value for treated unit
+  if (!is.null(spec_curve_pvals$stouffer_pvalues)) {
+    stouffer_pvals <- spec_curve_pvals$stouffer_pvalues
+    treated_stouffer_data <- stouffer_pvals[unit_type == "treated"]
+    if (nrow(treated_stouffer_data) > 0) {
+      treated_stouffer_pval <- treated_stouffer_data$pval_rank_z[1]
+    }
+  }
+  
+  # Create annotation text if we have at least one p-value
+  if (!is.null(treated_median_pval) || !is.null(treated_stouffer_pval)) {
+    annotation_lines <- c()
+    
+    if (!is.null(treated_median_pval)) {
+      treated_median_rank <- treated_median_data$rank_med[1]
+      # Calculate total units from the full median_pvals data
+      total_median_units <- nrow(median_pvals)
+      annotation_lines <- c(annotation_lines, sprintf("Median tau: p = %.3f (rank %d/%d)", treated_median_pval, treated_median_rank, total_median_units))
+    }
+    
+    if (!is.null(treated_stouffer_pval)) {
+      treated_stouffer_rank <- treated_stouffer_data$rank_z[1]
+      # Calculate total units from the full stouffer_pvals data
+      total_stouffer_units <- nrow(stouffer_pvals)
+      annotation_lines <- c(annotation_lines, sprintf("Stouffer: p = %.3f (rank %d/%d)", treated_stouffer_pval, treated_stouffer_rank, total_stouffer_units))
+    }
+    
+    spec_annotation_text <- paste(annotation_lines, collapse = "\n")
+    
+    # Add annotation to lower-left of Panel A (treatment effects plot)
+    p1 <- p1 + 
+      annotate("text", 
+               x = -Inf, y = -Inf, 
+               label = spec_annotation_text,
+               hjust = -0.1, vjust = -0.5,  # Left-align and move up slightly
+               size = 3, color = "#000000",
+               fontface = "plain")
+  }
+}
 
 # Apply y-axis limits if outlier cropping is requested
 if (!is.null(y_limits)) {
