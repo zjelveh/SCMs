@@ -78,15 +78,23 @@ fn.V <- function(
   u <- rep(1, length(c))
   r <- 0
   
-  # Solve quadratic programming problem using interior point optimization
-  res <- ipop(c = c, H = H, A = A, b = b, l = l, u = u, r = r, 
-              bound = bound.ipop,
-              margin = margin.ipop, 
-              maxiter = 1000, 
-              sigf = sigf.ipop)
+  # Check if clarabel should be used for V optimization
+  use_clarabel <- getOption("SCMs.prefer_clarabel", FALSE)
   
-  # Extract solution weights
-  solution.w <- as.matrix(primal(res))
+  if (use_clarabel && requireNamespace("clarabel", quietly = TRUE)) {
+    # Use clarabel for QP solving
+    solution.w <- solve_qp_clarabel(c, H, A, b, l, u)
+  } else {
+    # Use kernlab::ipop for QP solving
+    res <- kernlab::ipop(c = c, H = H, A = A, b = b, l = l, u = u, r = r, 
+                         bound = bound.ipop,
+                         margin = margin.ipop, 
+                         maxiter = 1000, 
+                         sigf = sigf.ipop)
+    
+    # Extract solution weights
+    solution.w <- as.matrix(kernlab::primal(res))
+  }
   
   # Compute loss for features
   loss.w <- as.numeric(t(X1.scaled - X0.scaled %*% solution.w) %*%
@@ -98,4 +106,74 @@ fn.V <- function(
   loss.v <- loss.v / nrow(Z0)
   
   return(invisible(loss.v))
+}
+
+#' @title Solve QP using Clarabel for V optimization
+#' @description Solve quadratic programming problem using clarabel solver
+#' @param c Linear objective coefficients
+#' @param H Quadratic objective matrix (Hessian)
+#' @param A Equality constraint matrix
+#' @param b Equality constraint RHS
+#' @param l Lower bounds
+#' @param u Upper bounds
+#' @return Solution vector as matrix
+solve_qp_clarabel <- function(c, H, A, b, l, u) {
+  # Convert kernlab::ipop problem to clarabel format
+  # ipop: minimize c'x + 0.5*x'Hx subject to Ax = b, l <= x <= u
+  # clarabel: minimize 0.5*x'Px + q'x subject to Ax + s = b, s in cones
+  
+  n_vars <- length(c)
+  
+  # Clarabel QP formulation
+  P <- H  # Quadratic term (ipop uses 0.5*x'Hx, clarabel uses 0.5*x'Px)
+  q <- c  # Linear term
+  
+  # Constraints: Ax = b, l <= x <= u
+  # Reformulate as: 
+  # 1. Ax = b (zero cone)
+  # 2. -x + s_l = -l, s_l >= 0 (lower bounds)
+  # 3. x + s_u = u, s_u >= 0 (upper bounds)
+  
+  # Build constraint matrix
+  A_eq <- A  # Equality constraints Ax = b
+  A_lower <- -diag(n_vars)  # Lower bound constraints -x + s_l = -l
+  A_upper <- diag(n_vars)   # Upper bound constraints x + s_u = u
+  
+  A_constraints <- rbind(A_eq, A_lower, A_upper)
+  b_constraints <- c(b, -l, u)
+  
+  # Cone specification
+  n_eq <- nrow(A_eq)
+  n_lower <- length(l)
+  n_upper <- length(u)
+  
+  # Call clarabel solver
+  control_settings <- clarabel::clarabel_control(
+    verbose = FALSE,
+    max_iter = 1000L,
+    tol_gap_abs = 1e-8,
+    tol_gap_rel = 1e-8
+  )
+  
+  result <- clarabel::clarabel(
+    A = A_constraints,
+    b = b_constraints,
+    q = q,
+    P = P,
+    cones = list(z = n_eq, l = n_lower + n_upper),  # Zero cones + linear cones
+    control = control_settings
+  )
+  
+  # Check clarabel status
+  if (result$status != 2) {
+    status_desc <- names(clarabel::solver_status_descriptions())[result$status]
+    stop(paste0("Clarabel V optimization failed! Status: ", result$status, 
+                " (", status_desc, "). Problem may be infeasible or ill-conditioned."))
+  }
+  
+  # Extract solution (first n_vars components)
+  solution <- result$x[1:n_vars]
+  
+  # Return as matrix to match ipop format
+  return(as.matrix(solution))
 }
