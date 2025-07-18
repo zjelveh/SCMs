@@ -650,16 +650,21 @@ shrinkage.EST <- function(method, A, Z, V, J, KM) {
 # depending on the desired method
 b.est <- function(A, Z, J, KM, w.constr, V, CVXR.solver = "ECOS") {
   
-  # Future-proof solver selection for pensynth
-  if (w.constr[["p"]] == "pensynth") {
-    # Check for global clarabel preference (future feature)
-    use_clarabel <- getOption("SCMs.prefer_clarabel", FALSE)
-    
-    if (use_clarabel && requireNamespace("clarabel", quietly = TRUE)) {
+  # Check for global clarabel preference for all constraint types
+  use_clarabel <- getOption("SCMs.prefer_clarabel", FALSE)
+  
+  if (use_clarabel && requireNamespace("clarabel", quietly = TRUE)) {
+    # Use clarabel for all constraint types (including pensynth)
+    if (w.constr[["p"]] == "pensynth") {
       return(b.est.clarabel(A, Z, J, KM, w.constr, V))
     } else {
-      return(b.est.cvxr.pensynth(A, Z, J, KM, w.constr, V, CVXR.solver))
+      return(b.est.clarabel.unified(A, Z, J, KM, w.constr, V))
     }
+  }
+  
+  # Fallback to CVXR/specialized functions
+  if (w.constr[["p"]] == "pensynth") {
+    return(b.est.cvxr.pensynth(A, Z, J, KM, w.constr, V, CVXR.solver))
   }
   
 
@@ -859,6 +864,217 @@ b.est.clarabel <- function(A, Z, J, KM, w.constr, V) {
   names(weights) <- colnames(Z)
   
   return(weights)
+}
+
+#' @title Clarabel W Optimization - OLS (Unconstrained)
+#' @description Solve unconstrained quadratic programming problem using clarabel
+#' @param A Treated unit features matrix
+#' @param Z Donor features matrix  
+#' @param J Number of donor units
+#' @param KM Number of additional variables
+#' @param w.constr Constraint specification
+#' @param V Feature weighting matrix
+#' @return Numeric vector of weights
+b.est.clarabel.ols <- function(A, Z, J, KM, w.constr, V) {
+  # QP formulation: minimize 0.5 * x'Px + q'x
+  # P = 2 * Z'VZ, q = -2 * Z'VA
+  P <- 2 * t(Z) %*% V %*% Z
+  q <- -2 * as.vector(t(Z) %*% V %*% A)
+  
+  # For unconstrained QP, clarabel might not accept empty constraint matrices
+  # Let's add a dummy constraint that doesn't restrict anything: 0*x = 0
+  n_vars <- J + KM
+  A_constraints <- matrix(0, nrow = 1, ncol = n_vars)  # All zeros
+  b_constraints <- 0  # RHS = 0
+  
+  # Call clarabel solver
+  control_settings <- clarabel::clarabel_control(
+    verbose = FALSE,
+    max_iter = 1000L,
+    tol_gap_abs = 1e-8,
+    tol_gap_rel = 1e-8
+  )
+  
+  result <- clarabel::clarabel(
+    A = A_constraints,
+    b = b_constraints,
+    q = q,
+    P = P,
+    cones = list(z = 1L),  # One zero cone for the dummy constraint
+    control = control_settings
+  )
+  
+  # Check clarabel status - accept only solved status (numeric code 2 = "Solved")
+  if (result$status != 2) {
+    status_desc <- names(clarabel::solver_status_descriptions())[result$status]
+    stop(paste0("Clarabel OLS optimization failed! Status: ", result$status, " (", status_desc, ")"))
+  }
+  
+  return(as.numeric(result$x))
+}
+
+#' @title Clarabel W Optimization - Simplex
+#' @description Solve simplex-constrained QP using clarabel (sum to 1, non-negative)
+#' @param A Treated unit features matrix
+#' @param Z Donor features matrix
+#' @param J Number of donor units
+#' @param KM Number of additional variables
+#' @param w.constr Constraint specification
+#' @param V Feature weighting matrix
+#' @return Numeric vector of weights
+b.est.clarabel.simplex <- function(A, Z, J, KM, w.constr, V) {
+  # QP formulation: minimize 0.5 * x'Px + q'x
+  P <- 2 * t(Z) %*% V %*% Z
+  q <- -2 * as.vector(t(Z) %*% V %*% A)
+  
+  # Get constraint parameters
+  QQ <- w.constr[["Q"]]  # Should be 1 for simplex
+  lb <- w.constr[["lb"]]  # Lower bound, typically 0
+  
+  # Constraint matrices for simplex: sum(x[1:J]) = QQ, x[1:J] >= lb
+  # A_constraints * x + s = b_constraints, s in cones
+  n_vars <- J + KM
+  
+  # Equality constraint: sum(x[1:J]) = QQ
+  A_eq <- matrix(0, nrow = 1, ncol = n_vars)
+  A_eq[1, 1:J] <- 1
+  
+  # Inequality constraints: x[1:J] >= lb, reformulated as -x[1:J] + s = -lb, s >= 0
+  A_ineq <- matrix(0, nrow = J, ncol = n_vars)
+  A_ineq[1:J, 1:J] <- -diag(J)
+  
+  # Combine constraints
+  A_constraints <- rbind(A_eq, A_ineq)
+  b_constraints <- c(QQ, rep(-lb, J))
+  
+  # Call clarabel solver
+  control_settings <- clarabel::clarabel_control(
+    verbose = FALSE,
+    max_iter = 1000L,
+    tol_gap_abs = 1e-8,
+    tol_gap_rel = 1e-8
+  )
+  
+  result <- clarabel::clarabel(
+    A = A_constraints,
+    b = b_constraints,
+    q = q,
+    P = P,
+    cones = list(z = 1L, l = J),  # 1 zero cone (equality) + J linear cones (non-negativity)
+    control = control_settings
+  )
+  
+  # Check clarabel status - accept only solved status (numeric code 2 = "Solved")
+  if (result$status != 2) {
+    status_desc <- names(clarabel::solver_status_descriptions())[result$status]
+    stop(paste0("Clarabel simplex optimization failed! Status: ", result$status, " (", status_desc, ")"))
+  }
+  
+  return(as.numeric(result$x))
+}
+
+#' @title Clarabel W Optimization - Ridge
+#' @description Solve ridge-constrained QP using clarabel (L2 norm constraint)
+#' @param A Treated unit features matrix
+#' @param Z Donor features matrix
+#' @param J Number of donor units
+#' @param KM Number of additional variables
+#' @param w.constr Constraint specification
+#' @param V Feature weighting matrix
+#' @return Numeric vector of weights
+b.est.clarabel.ridge <- function(A, Z, J, KM, w.constr, V) {
+  # QP formulation: minimize 0.5 * x'Px + q'x
+  P <- 2 * t(Z) %*% V %*% Z
+  q <- -2 * as.vector(t(Z) %*% V %*% A)
+  
+  # Get constraint parameters
+  QQ <- w.constr[["Q"]]
+  dire <- w.constr[["dir"]]
+  
+  # Ridge constraint: ||x[1:J]||_2 <= QQ or ||x[1:J]||_2 == QQ
+  # For second-order cone: ||Ax + b||_2 <= c'x + d
+  # We want: ||x[1:J]||_2 <= QQ, which means ||[x[1:J]; 0]||_2 <= QQ
+  
+  n_vars <- J + KM
+  
+  if (dire == "<=") {
+    # Second-order cone constraint: ||x[1:J]||_2 <= QQ
+    # Standard form: ||Ax + b||_2 <= c'x + d
+    # We want: ||x[1:J]||_2 <= QQ
+    # This becomes: t >= ||x[1:J]||_2, t <= QQ where t is auxiliary variable
+    
+    # For clarabel, we need to formulate as: A_cone * x + s = b_cone, s in SOC
+    # SOC constraint: [t; x[1:J]] in second-order cone, meaning t >= ||x[1:J]||_2
+    
+    # We need constraints:
+    # 1. Linear constraint: t <= QQ
+    # 2. SOC constraint: [t; x[1:J]] in second-order cone
+    
+    # The challenge is that clarabel's SOC is for variables, not constraints
+    # Let's use a simpler approach: ||x[1:J]||_2^2 <= QQ^2 as quadratic constraint
+    
+    # For now, fall back to CVXR for ridge constraints
+    stop("Ridge constraint with clarabel not yet fully implemented. Use CVXR for now.")
+    
+    # TODO: Implement proper second-order cone formulation
+    # This requires careful setup of auxiliary variables and cone constraints
+    
+  } else {  # dire == "=="
+    # Equality constraint: ||x[1:J]||_2 == QQ
+    # This is more complex - convert to ||x[1:J]||_2^2 == QQ^2
+    # Add as quadratic constraint (may need different approach)
+    stop("Ridge equality constraint not yet implemented for clarabel")
+  }
+  
+  # Check clarabel status
+  if (result$status != "Solved") {
+    stop(paste0("Clarabel ridge optimization failed! Status: ", result$status))
+  }
+  
+  # Extract original variables (remove auxiliary t)
+  return(as.numeric(result$x[1:n_vars]))
+}
+
+#' @title Unified Clarabel W Optimization Dispatcher
+#' @description Dispatch to appropriate clarabel constraint-specific function
+#' @param A Treated unit features matrix
+#' @param Z Donor features matrix
+#' @param J Number of donor units
+#' @param KM Number of additional variables
+#' @param w.constr Constraint specification
+#' @param V Feature weighting matrix
+#' @return Numeric vector of weights
+b.est.clarabel.unified <- function(A, Z, J, KM, w.constr, V) {
+  # Extract constraint parameters
+  p <- w.constr[["p"]]
+  dire <- w.constr[["dir"]]
+  
+  # Dispatch to appropriate constraint-specific function
+  if (p == "no norm") {
+    return(b.est.clarabel.ols(A, Z, J, KM, w.constr, V))
+    
+  } else if (p == "L1" && dire == "==") {
+    return(b.est.clarabel.simplex(A, Z, J, KM, w.constr, V))
+    
+  } else if (p == "L1" && dire == "<=") {
+    # Lasso - not implemented yet
+    stop("Clarabel lasso constraint not yet implemented")
+    
+  } else if (p == "L2") {
+    # Ridge constraint - temporarily not implemented
+    stop("Ridge constraint with clarabel not yet fully implemented. Use CVXR by setting options(SCMs.prefer_clarabel = FALSE)")
+    
+  } else if (p == "L1-L2") {
+    # L1-L2 - not implemented yet
+    stop("Clarabel L1-L2 constraint not yet implemented")
+    
+  } else if (p == "pensynth") {
+    # Should not reach here - pensynth handled separately
+    stop("Pensynth constraint should be handled by specialized functions")
+    
+  } else {
+    stop(paste0("Unknown constraint type: p=", p, ", dir=", dire))
+  }
 }
 
 
