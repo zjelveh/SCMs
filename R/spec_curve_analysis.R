@@ -21,6 +21,7 @@
 #'     \item \code{constraints} - Weight constraint specifications
 #'     \item \code{inference_type} - "placebo", "bootstrap", or "all" (default: "placebo")
 #'     \item \code{inference_config} - List with bootstrap_n_replications, verbose, etc.
+#'     \item \code{expected_direction} - "negative", "positive", or "two_sided" (default: "negative")
 #'   }
 #' @param cores Integer. Number of cores for parallel processing (applies to both bootstrap and placebo inference unless overridden in params$inference_config).
 #' @param output_dir Character. Directory to save results. If NULL, results are not saved.
@@ -57,6 +58,11 @@
 #' # Run analysis with placebo inference (default)
 #' results_placebo <- run_spec_curve_analysis(dataset, params)
 #' 
+#' # Run analysis expecting positive treatment effects
+#' params_positive <- params
+#' params_positive$expected_direction <- "positive"
+#' results_positive <- run_spec_curve_analysis(dataset, params_positive)
+#' 
 #' # Run bootstrap inference with 4 cores
 #' params_bootstrap <- params
 #' params_bootstrap$inference_type <- "bootstrap"
@@ -87,6 +93,11 @@ run_spec_curve_analysis <- function(dataset, params, cores = 1, output_dir = NUL
     all_params$inference_type <- "placebo"
   }
   
+  # Handle expected direction - use params setting or default
+  if (is.null(all_params$expected_direction)) {
+    all_params$expected_direction <- "negative"
+  }
+  
   # Set up inference configuration with defaults, applying cores parameter
   default_inference_config <- list(
     bootstrap_n_replications = 1000,
@@ -102,7 +113,7 @@ run_spec_curve_analysis <- function(dataset, params, cores = 1, output_dir = NUL
     user_config <- all_params$inference_config
     if (is.null(user_config$bootstrap_cores)) user_config$bootstrap_cores <- cores
     if (is.null(user_config$placebo_cores)) user_config$placebo_cores <- cores
-    all_params$inference_config <- modifyList(default_inference_config, user_config)
+    all_params$inference_config <- utils::modifyList(default_inference_config, user_config)
   }
   
   actual_outcomes <- all_params$outcomes

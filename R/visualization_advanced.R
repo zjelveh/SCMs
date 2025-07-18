@@ -239,7 +239,7 @@ calculate_shapviz_interactions <- function(catboost_results, treated_unit, top_n
   
   # Calculate SHAP values using CatBoost directly, then create shapviz object
   train_pool <- catboost.load_pool(data = feature_matrix, label = y_values)
-  
+
   # Get SHAP values from CatBoost
   shap_matrix <- catboost.get_feature_importance(
     model = model,
@@ -247,7 +247,7 @@ calculate_shapviz_interactions <- function(catboost_results, treated_unit, top_n
     type = 'ShapValues',
     thread_count = 1
   )
-  
+
   # Remove baseline column if present (CatBoost sometimes adds it)
   if(ncol(shap_matrix) == ncol(feature_matrix) + 1) {
     shap_matrix <- shap_matrix[, -ncol(shap_matrix), drop = FALSE]
@@ -263,7 +263,7 @@ calculate_shapviz_interactions <- function(catboost_results, treated_unit, top_n
   
   # Get predictions
   predictions <- catboost.predict(model, train_pool)
-  
+
   # Create shapviz object manually
   shap_values <- shapviz::shapviz(
     object = shap_matrix,
@@ -273,7 +273,7 @@ calculate_shapviz_interactions <- function(catboost_results, treated_unit, top_n
   
   # Extract SHAP value matrix
   shap_matrix <- shap_values$S
-  
+
   # Calculate individual SHAP importance
   individual_importance <- data.table(
     feature = available_features,
@@ -285,33 +285,14 @@ calculate_shapviz_interactions <- function(catboost_results, treated_unit, top_n
   
   # Calculate SHAP interaction values using shapviz
   # Note: shapviz sv_interaction requires TreeSHAP which may not work with all models
-  # We'll use a simpler approach: calculate pairwise correlations between SHAP values
+  
   
   interaction_ranking <- data.table()
   n_features <- length(available_features)
   
   # Calculate TRUE SHAP interactions using treeshap with one-hot encoding
   tryCatch({
-    # Enhanced treeshap availability check
-    if(!requireNamespace("treeshap", quietly = TRUE)) {
-      warning("treeshap package is not available. Install with: devtools::install_github('ModelOriented/treeshap@catboost')")
-      warning("Falling back to correlation-based approximation for interactions")
-      return(calculate_correlation_based_interactions(feature_matrix, target_values, top_n))
-    }
-    
-    # Test treeshap basic functionality
-    tryCatch({
-      # Test if treeshap can handle our data structure
-      test_unified <- treeshap::catboost.unify(model, feature_matrix[1:min(10, nrow(feature_matrix)), , drop = FALSE])
-      if(is.null(test_unified)) {
-        stop("catboost.unify returned NULL - model may be incompatible")
-      }
-    }, error = function(e) {
-      warning("treeshap model unification failed: ", e$message)
-      warning("Falling back to correlation-based approximation for interactions")
-      return(calculate_correlation_based_interactions(feature_matrix, target_values, top_n))
-    })
-    
+        
     # Performance safeguards
     n_obs <- nrow(feature_matrix)
     n_features <- ncol(feature_matrix)
@@ -445,7 +426,7 @@ calculate_shapviz_interactions <- function(catboost_results, treated_unit, top_n
       cat("Feature mapping created:", length(unique(onehot_to_original)), "original features\n")
       
       # Calculate interactions at the categorical level (one-hot encoded features)
-      # This gives specific category-level interactions like "fw_optimize × outcome_model_ridge"
+      # This gives specific category-level interactions like "fw_optimize x outcome_model_ridge"
       onehot_features <- names(feature_matrix_onehot)
       n_onehot <- length(onehot_features)
       
@@ -543,20 +524,12 @@ calculate_shapviz_interactions <- function(catboost_results, treated_unit, top_n
     
   }, error = function(e) {
     warning("SHAP interactions failed with treeshap: ", e$message)
-    warning("Falling back to correlation-based approximation for interactions")
     warning("For true SHAP interactions, ensure treeshap is properly installed: devtools::install_github('ModelOriented/treeshap@catboost')")
-    
-    # Fallback to correlation-based approximation
-    tryCatch({
-      return(calculate_correlation_based_interactions(feature_matrix, target_values, top_n))
-    }, error = function(fallback_error) {
-      warning("Fallback correlation-based interactions also failed: ", fallback_error$message)
-      return(list(
+    return(list(
         interactions = data.table(),
         categorical_decomposition = NULL,
         method = "failed"
       ))
-    })
   })
   
   # Rank interactions by strength
@@ -1114,7 +1087,7 @@ plot_categorical_shap_decomposition <- function(categorical_decomposition, top_n
   
   # Create interaction labels
   plot_dt[component == "Top Interaction", 
-          interaction_label := paste0("× ", gsub("^[^_]+_", "", interaction_partner))]
+          interaction_label := paste0("x ", gsub("^[^_]+_", "", interaction_partner))]
   plot_dt[component != "Top Interaction", interaction_label := ""]
   
   # Order categories by total SHAP value
@@ -1148,7 +1121,7 @@ plot_categorical_shap_decomposition <- function(categorical_decomposition, top_n
     
     labs(
       title = if(is.null(title)) paste0("SHAP Decomposition: Total, Main Effect, and Top Interaction (", value_type, ")") else title,
-      subtitle = "Shows: Total SHAP value | True main effect (feature in isolation) | Top interaction effect\nRed labels = interaction partners • % = interaction/main ratio",
+      subtitle = "Shows: Total SHAP value | True main effect (feature in isolation) | Top interaction effect\nRed labels = interaction partners, % = interaction/main ratio",
       x = "Categorical Values", 
       y = paste0("SHAP Magnitude (", value_type, ")"),
       caption = "Ordered by total SHAP impact"
@@ -1335,70 +1308,3 @@ save_visualization_plots <- function(plots, base_path, width = 10, height = 8) {
   }
 }
 
-#' Calculate Correlation-Based Interaction Approximation
-#' 
-#' @description Fallback function when treeshap is not available.
-#' Provides correlation-based approximation of feature interactions.
-#' 
-#' @param feature_matrix Data frame. Feature matrix for model.
-#' @param target_values Numeric vector. Target values (e.g., treatment effects).
-#' @param top_n Integer. Number of top interactions to return.
-#' 
-#' @return List with interactions data table and method indicator.
-#' 
-#' @keywords internal
-calculate_correlation_based_interactions <- function(feature_matrix, target_values, top_n = 10) {
-  
-  # Convert feature matrix to numeric for correlation calculation
-  numeric_features <- feature_matrix
-  for(col in names(numeric_features)) {
-    if(is.factor(numeric_features[[col]]) || is.character(numeric_features[[col]])) {
-      numeric_features[[col]] <- as.numeric(as.factor(numeric_features[[col]]))
-    }
-  }
-  
-  available_features <- names(numeric_features)
-  n_features <- length(available_features)
-  interaction_ranking <- data.table()
-  
-  # Calculate pairwise correlations as interaction proxy
-  for(i in 1:(n_features-1)) {
-    for(j in (i+1):n_features) {
-      feat1 <- available_features[i]
-      feat2 <- available_features[j]
-      
-      # Calculate correlation between features
-      feat_correlation <- cor(numeric_features[[feat1]], numeric_features[[feat2]], use = "complete.obs")
-      
-      # Calculate correlation of product with target (interaction proxy)
-      product_correlation <- cor(numeric_features[[feat1]] * numeric_features[[feat2]], 
-                                target_values, use = "complete.obs")
-      
-      interaction_ranking <- rbind(interaction_ranking, data.table(
-        feature1 = feat1,
-        feature2 = feat2,
-        true_shap_interaction = NA,
-        mean_abs_shap_interaction = abs(product_correlation),
-        shap_correlation = feat_correlation,
-        shap_product_interaction = product_correlation,
-        treeshap_sd = NA,
-        rank = 0
-      ))
-    }
-  }
-  
-  # Rank by absolute product correlation
-  if(nrow(interaction_ranking) > 0) {
-    interaction_ranking <- interaction_ranking[order(-mean_abs_shap_interaction)]
-    interaction_ranking[, rank := seq_len(.N)]
-    top_interactions <- interaction_ranking[1:min(top_n, nrow(interaction_ranking))]
-  } else {
-    top_interactions <- data.table()
-  }
-  
-  return(list(
-    interactions = top_interactions,
-    categorical_decomposition = NULL,
-    method = "correlation_approximation"
-  ))
-}

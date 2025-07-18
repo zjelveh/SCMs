@@ -34,15 +34,27 @@ create_scm_dataset <- function(dataset,
                                min_period,
                                end_period,
                                constant = FALSE) {
-  
-  # Convert input to data.table
-  dataset <- data.table::as.data.table(dataset)
 
-  # Create unit name and number columns
+  # Convert input to data.table and create a proper copy to avoid shallow copy warnings
+  dataset <- data.table::copy(data.table::as.data.table(dataset))
+
+  # Store original unit names before any transformation
+  dataset[, original_unit_name := get(col_name_unit_name)]
+  
+  # Apply consistent name transformation (same as scdata function)
+  # This ensures all operations work with consistent naming
+  name_treated_unit <- gsub(' +|\\.+|-+', '_', name_treated_unit)
+  
+  # Transform unit names in the dataset using proper data.table syntax
+  if(is.character(dataset[[col_name_unit_name]])){
+    dataset[, (col_name_unit_name) := gsub(' +|\\.+|-+', '_', get(col_name_unit_name))]
+  }
+
+  # Create unit name and number columns (now with transformed names)
   dataset[, unit_name := get(col_name_unit_name)]
   dataset[, unit_numbers := as.numeric(as.factor(unit_name))]
   
-  # Create treatment indicator
+  # Create treatment indicator (now works because names are consistent)
   dataset[, trt := ifelse(unit_name == name_treated_unit, 1, 0)]
   
   # Set maximum untreated period
@@ -51,7 +63,7 @@ create_scm_dataset <- function(dataset,
   # Get unique control and treated units
   unit.co <- unique(dataset[trt == 0][[col_name_unit_name]])
   unit.tr <- unique(dataset[trt == 1][[col_name_unit_name]])
-
+  
   # Set min and max periods if not provided
   if (is.null(min_period)) {
     min_period <- min(dataset[[col_name_period]])
@@ -64,13 +76,13 @@ create_scm_dataset <- function(dataset,
   }
 
   # Create SCM dataset using scpi package
-  
+
   # Check which variables actually exist in the dataset
   dataset_vars <- names(dataset)
   
   # Check for variables with periods that might be missing
   period_vars <- dataset_vars[grepl("\\.", dataset_vars)]
-  
+
   scpi_data <- scdata(
     df = as.data.frame(dataset),
     id.var = col_name_unit_name,
@@ -83,7 +95,6 @@ create_scm_dataset <- function(dataset,
     constant = constant,
     covagg = covagg
   )
-  
 
   # Calculate standard deviations and standardize data
   X0_sds <- apply(scpi_data$B, 1, sd)

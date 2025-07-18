@@ -27,7 +27,8 @@ inference_sc(
   cores = 1,
   w.bounds = NULL,
   e.bounds = NULL,
-  verbose = TRUE
+  verbose = TRUE,
+  expected_direction = "negative"
 )
 }
 \arguments{

@@ -25,6 +25,7 @@ run_spec_curve_analysis(dataset, params, cores = 1, output_dir = NULL)
 \item \code{constraints} - Weight constraint specifications
 \item \code{inference_type} - "placebo", "bootstrap", or "all" (default: "placebo")
 \item \code{inference_config} - List with bootstrap_n_replications, verbose, etc.
+\item \code{expected_direction} - "negative", "positive", or "two_sided" (default: "negative")
 }}
 
 \item{cores}{Integer. Number of cores for parallel processing (applies to both bootstrap and placebo inference unless overridden in params$inference_config).}
@@ -67,6 +68,11 @@ params <- list(
 
 # Run analysis with placebo inference (default)
 results_placebo <- run_spec_curve_analysis(dataset, params)
+
+# Run analysis expecting positive treatment effects
+params_positive <- params
+params_positive$expected_direction <- "positive"
+results_positive <- run_spec_curve_analysis(dataset, params_positive)
 
 # Run bootstrap inference with 4 cores
 params_bootstrap <- params

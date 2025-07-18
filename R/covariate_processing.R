@@ -251,6 +251,12 @@ validate_periods <- function(periods, period.pre, cov_name) {
     stop(paste("periods for", cov_name, "must be numeric or integer"))
   }
   
+  # Check for duplicate periods
+  if (length(periods) != length(unique(periods))) {
+    duplicates <- periods[duplicated(periods)]
+    stop(paste("Covariate", cov_name, "has duplicate periods:", paste(unique(duplicates), collapse = ", ")))
+  }
+  
   missing_periods <- setdiff(periods, period.pre)
   if (length(missing_periods) > 0) {
     warning(paste("Covariate", cov_name, "requests periods not in data:", paste(missing_periods, collapse = ", ")))

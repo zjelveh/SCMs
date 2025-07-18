@@ -7,7 +7,7 @@
 plot_spec_curve(
   long_data,
   name_treated_unit,
-  outcomes,
+  outcomes = NULL,
   normalize_outcomes = "none",
   rmse_threshold = Inf,
   shap_values = NULL,
@@ -16,12 +16,13 @@ plot_spec_curve(
   height = 10,
   show_pvalues = TRUE,
   p_threshold = 0.05,
-  pvalue_style = "continuous",
   prefer_bootstrap_pvalues = FALSE,
   test_statistic = "rmse_ratio",
   null_distribution = "placebo",
   crop_outliers = "none",
-  sort_by = "tau"
+  sort_by = "tau",
+  calculate_shap_pvalues = TRUE,
+  shap_pvalue_type = "absolute"
 )
 }
 \arguments{
@@ -31,7 +32,7 @@ Can be either the results data.table directly, or the full structured results
 
 \item{name_treated_unit}{Character. Name of the treated unit.}
 
-\item{outcomes}{Character vector. Names of the outcome variables to plot.}
+\item{outcomes}{Character vector or NULL. Names of the outcome variables to plot. If NULL, all outcomes in the data will be plotted.}
 
 \item{normalize_outcomes}{Character. Method for normalizing treatment effects for comparability.
 Options: "none" (default), "percent_of_mean", "percent_of_preperiod", "standardized", "rmspe_ratio".
@@ -44,7 +45,7 @@ Options: "none" (default), "percent_of_mean", "percent_of_preperiod", "standardi
 
 \item{rmse_threshold}{Numeric. Threshold for root mean square error to filter results. Default is Inf.}
 
-\item{shap_values}{Data.table or NULL. SHAP values from run_xgboost_shap_analysis().
+\item{shap_values}{Data.table or NULL. SHAP values from run_catboost_shap_analysis().
 Should contain full_spec_id column for perfect alignment. Default is NULL.}
 
 \item{file_path_save}{Character or NA. File path to save the plot. If NA, plot is not saved. Default is NA.}
@@ -57,12 +58,6 @@ Should contain full_spec_id column for perfect alignment. Default is NULL.}
 Uses Abadie p-values by default, or bootstrap p-values if available. Default is TRUE.}
 
 \item{p_threshold}{Numeric. P-value threshold for significance coloring. Default is 0.05.}
-
-\item{pvalue_style}{Character. Style for p-value visualization. Options: "continuous" (default) or "categorical".
-\itemize{
-\item "continuous": Uses -log10(p-value) color scale with continuous gradation
-\item "categorical": Uses discrete significance categories (original behavior)
-}}
 
 \item{prefer_bootstrap_pvalues}{Logical. Whether to prefer bootstrap p-values over Abadie p-values
 when both are available. Default is FALSE (prefer Abadie).}
@@ -94,6 +89,18 @@ Options: "tau" (default), "pvalue", "rmspe_ratio".
 \item "pvalue": Sort by statistical significance (most significant first)
 \item "rmspe_ratio": Sort by post/pre RMSPE ratio
 }}
+
+\item{calculate_shap_pvalues}{Logical. Whether to automatically calculate SHAP significance when
+multi-unit SHAP data is available. When TRUE (default), if SHAP values for control units are
+found, calculates p-values for treated unit's feature importance and displays significance via
+point transparency. Set to FALSE to disable SHAP significance testing.}
+
+\item{shap_pvalue_type}{Character. Method for calculating SHAP p-values.
+Options: "absolute" (default) or "signed".
+\itemize{
+\item "absolute": Calculates p-values based on the absolute magnitude of SHAP values.
+\item "signed": Calculates p-values based on the signed magnitude, considering positive and negative effects separately.
+}}
 }
 \value{
 A ggplot object representing the specification curve.
@@ -112,7 +119,7 @@ Plot Specification Curve Using Direct Long Format Data
 
 # 1. Generate long format data with bootstrap inference
 spec_results_long <- run_spec_curve_analysis(
-  dataset, 
+  dataset,
   params = params,
   inference_type = "bootstrap"
 )
@@ -125,8 +132,7 @@ plot_rmse_ratio <- plot_spec_curve(
   long_data = spec_results_long,
   name_treated_unit = "TREATED_ID",
   shap_values = shap_results$shapley,
-  test_statistic = "rmse_ratio",
-  pvalue_style = "continuous"
+  test_statistic = "rmse_ratio"
 )
 
 # 4. Plot using treatment effect test statistic p-values
@@ -134,8 +140,7 @@ plot_treatment_effect <- plot_spec_curve(
   long_data = spec_results_long,
   name_treated_unit = "TREATED_ID",
   shap_values = shap_results$shapley,
-  test_statistic = "treatment_effect",
-  pvalue_style = "continuous"
+  test_statistic = "treatment_effect"
 )
 
 # 5. Plot using normalized treatment effect test statistic p-values
@@ -143,8 +148,43 @@ plot_normalized_te <- plot_spec_curve(
   long_data = spec_results_long,
   name_treated_unit = "TREATED_ID",
   shap_values = shap_results$shapley,
-  test_statistic = "normalized_te",
-  pvalue_style = "categorical"
+  test_statistic = "normalized_te"
 )
+
+# 6. Plot with SHAP significance testing (requires multi-unit SHAP data)
+# Run CatBoost analysis on all units
+config_all_units <- create_catboost_config(
+  dataset_name = "example",
+  treated_unit_name = "TREATED_ID",
+  treated_unit_only = FALSE   # Analyze all units for significance testing
+)
+shap_all_units <- run_catboost_shap_analysis(spec_results_long, config_all_units)
+
+# Plot with automatic SHAP significance testing (absolute method, default)
+plot_with_shap_significance_abs <- plot_spec_curve(
+  long_data = spec_results_long,
+  name_treated_unit = "TREATED_ID",
+  shap_values = shap_all_units$shapley,   # Multi-unit SHAP data
+  calculate_shap_pvalues = TRUE   # Enable significance testing (default)
+)
+# Displays SHAP values with transparency indicating statistical significance (absolute)
+
+# Plot with SHAP significance testing using signed p-values
+plot_with_shap_significance_signed <- plot_spec_curve(
+  long_data = spec_results_long,
+  name_treated_unit = "TREATED_ID",
+  shap_values = shap_all_units$shapley,
+  calculate_shap_pvalues = TRUE,
+  shap_pvalue_type = "signed" # New option
+)
+
+# 7. Disable SHAP significance testing if not wanted
+plot_no_shap_significance <- plot_spec_curve(
+  long_data = spec_results_long,
+  name_treated_unit = "TREATED_ID",
+  shap_values = shap_all_units$shapley,
+  calculate_shap_pvalues = FALSE   # Disable significance testing
+)
+
 }
 }

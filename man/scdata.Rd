@@ -17,6 +17,7 @@ scdata(
   constant = FALSE,
   verbose = TRUE,
   covagg = list(),
+  default_agg = NULL,
   cointegrated.data = FALSE
 )
 }
@@ -57,6 +58,18 @@ Each element is a list with \code{var} and aggregation type:
 \item \code{list(var = "gdp", volatility = "sd")} - Volatility measures
 }
 Default is empty list.}
+
+\item{default_agg}{List. Optional default aggregation specification for simplified covariate processing.
+Contains three fields:
+\itemize{
+\item \code{outcome_agg}: Character. How to aggregate outcome variable ("mean", "per_period").
+If NULL, no outcome variable added to matching matrices.
+\item \code{features}: Character vector. Explicit list of variable names to include.
+\item \code{features_agg}: Character. How to aggregate feature variables ("mean", "per_period").
+Required when features are specified.
+}
+Variables specified in both default_agg and covagg will use covagg specification (with warning).
+Default is NULL.}
 
 \item{cointegrated.data}{Logical. Whether to treat the data as cointegrated (affects some computations). Default is FALSE.}
 }
@@ -126,5 +139,38 @@ scm_data_adh <- scdata(df = germany_data,
                          schooling_5yr = list(var = "schooling", every_n = 5),
                          trade_final = list(var = "trade", periods = 1990)
                        ))
+                       
+# With simplified default aggregation
+scm_data_simple <- scdata(df = germany_data,
+                          id.var = "country",
+                          time.var = "year",
+                          outcome.var = "gdp",
+                          period.pre = 1960:1990,
+                          period.post = 1991:2003,
+                          unit.tr = "West Germany", 
+                          unit.co = c("USA", "UK", "France"),
+                          default_agg = list(
+                            outcome_agg = "mean",              # Mean outcome for matching
+                            features = c("investment", "trade"), # Explicit feature list
+                            features_agg = "per_period"        # Per-period features
+                          ))
+                          
+# Mixed approach: default_agg + custom covagg
+scm_data_mixed <- scdata(df = germany_data,
+                         id.var = "country", 
+                         time.var = "year",
+                         outcome.var = "gdp",
+                         period.pre = 1960:1990,
+                         period.post = 1991:2003,
+                         unit.tr = "West Germany",
+                         unit.co = c("USA", "UK", "France"),
+                         default_agg = list(
+                           outcome_agg = "per_period",
+                           features = c("investment", "trade"),
+                           features_agg = "mean"
+                         ),
+                         covagg = list(
+                           schooling_custom = list(var = "schooling", last = 5)
+                         ))
 }
 }

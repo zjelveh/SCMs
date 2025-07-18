@@ -55,8 +55,10 @@ inference_sc <- function(
     cores        = 1,
     w.bounds     = NULL,
     e.bounds     = NULL,
-    verbose      = TRUE
+    verbose      = TRUE,
+    expected_direction = "negative"
 ){
+  
   
   # Check if sc.pred structure is valid
   if (is.null(sc.pred)) {
@@ -71,21 +73,6 @@ inference_sc <- function(
   # Check column name
   col_name_unit <- sc.pred$data$specs$col.name.unit
   
-  if (is.null(col_name_unit)) {
-    # Try to infer the unit column name from common patterns
-    possible_names <- c("country", "state", "unit", "id", "unit_id", "unit_name", "ori9", "stateid")
-    col_name_unit <- NULL
-    for (name in possible_names) {
-      if (name %in% names(dataset)) {
-        col_name_unit <- name
-        break
-      }
-    }
-    
-    if (is.null(col_name_unit)) {
-      return(NULL)
-    }
-  }
   
   if (!col_name_unit %in% names(dataset)) {
     return(NULL)
@@ -133,7 +120,7 @@ inference_sc <- function(
     )
     
     class(result) <- "scpi"
-    
+
     # Set class type based on data structure
     if (class.type == "scpi_data") {
       result$data$specs$class.type <- "scpi_scpi"
@@ -143,11 +130,13 @@ inference_sc <- function(
   } else {
     # Perform placebo inference
     inference.results <- tryCatch({
+
       inference_placebo(
         sc.pred = sc.pred,
         dataset = dataset, 
         cores = cores,
-        verbose = verbose
+        verbose = verbose,
+        expected_direction = expected_direction
       )
     }, error = function(e) {
       return(NULL)
@@ -162,6 +151,5 @@ inference_sc <- function(
       abadie_significance = inference.results$abadie_significance
     )
   }
-  
   return(result)
 }

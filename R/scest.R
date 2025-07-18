@@ -86,7 +86,7 @@ scest <- function(data,
                   V.mat     = NULL,
                   solver    = "ECOS",
                   save.data = NULL) {
-
+  
   # Check if input data is of correct class
   if (!methods::is(data, "scdata")) {
     stop("data should be the object returned by running scdata!")
@@ -99,8 +99,8 @@ scest <- function(data,
     }
     if (!"name" %in% names(w.constr)) {
       w.constr[["name"]] <- "NULL"
-    } else if (!w.constr[["name"]] %in% c("simplex","lasso","ridge","ols","L1-L2")) {
-      stop("If 'name' is specified in w.constr, it should be 'simplex', 'lasso', 'ridge', 'ols', or 'L1-L2'.")
+    } else if (!w.constr[["name"]] %in% c("simplex","lasso","ridge","ols","L1-L2","pensynth")) {
+      stop("If 'name' is specified in w.constr, it should be 'simplex', 'lasso', 'ridge', 'ols', 'L1-L2', or 'pensynth'.")
     }
   }
 
@@ -235,6 +235,12 @@ scest <- function(data,
   rownames(V) <- rownames(Z)
   colnames(V) <- rownames(V)
 
+  # Handle pensynth lambda CV before constraint processing
+  if (!is.null(w.constr) && w.constr[["name"]] == "pensynth") {
+    if (!"lambda" %in% names(w.constr) || is.null(w.constr[["lambda"]])) {
+      w.constr[["lambda"]] <- estimate_optimal_lambda_cv(A, Z, V, Y.donors, Z1)
+    }
+  }
   # Estimate synthetic control
   w.constr <- w.constr.OBJ(w.constr, A, Z, V, J, KM, M)
   if (w.constr[["name"]] == "lasso") solver <- "OSQP"

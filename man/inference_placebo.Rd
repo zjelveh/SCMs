@@ -4,7 +4,13 @@
 \alias{inference_placebo}
 \title{Perform placebo inference with multiple test statistics}
 \usage{
-inference_placebo(sc.pred, dataset, cores, verbose)
+inference_placebo(
+  sc.pred,
+  dataset,
+  cores,
+  verbose,
+  expected_direction = "negative"
+)
 }
 \arguments{
 \item{sc.pred}{List. Results from synthetic control estimation}
@@ -14,6 +20,8 @@ inference_placebo(sc.pred, dataset, cores, verbose)
 \item{cores}{Numeric. Number of cores for parallel processing}
 
 \item{verbose}{Logical. Whether to print progress information}
+
+\item{expected_direction}{Character. Expected direction of treatment effect: "negative", "positive", or "two_sided" (default: "negative")}
 }
 \value{
 List containing:

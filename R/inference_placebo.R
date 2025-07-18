@@ -7,9 +7,10 @@
 #' @param taus_result Data.table containing treatment effects for all units
 #' @param rmse_result Data.table containing RMSE values for all units
 #' @param rmspe_threshold Numeric. Threshold for filtering poor pre-treatment fits (default: 0)
+#' @param expected_direction Character. Expected direction of treatment effect: "negative", "positive", or "two_sided" (default: "negative")
 #'
 #' @return List containing Abadie significance measures for all test statistics
-calculate_abadie_significance <- function(taus_result, rmse_result, rmspe_threshold = 0) {
+calculate_abadie_significance <- function(taus_result, rmse_result, rmspe_threshold = 0, expected_direction = "negative") {
   
   if (nrow(taus_result) == 0 || nrow(rmse_result) == 0) {
     return(list(
@@ -30,6 +31,7 @@ calculate_abadie_significance <- function(taus_result, rmse_result, rmspe_thresh
     post_rmspe = sqrt(mean(tau^2))
   ), by = .(unit_name, unit_type, outcome_model)]
   
+
   rmse_ratio_stats <- merge(rmse_result, post_rmspe, by = c("unit_name", "unit_type", "outcome_model"))
   rmse_ratio_stats[, test_statistic_value := post_rmspe / pre_rmse]
   
@@ -42,72 +44,73 @@ calculate_abadie_significance <- function(taus_result, rmse_result, rmspe_thresh
   te_post <- taus_result[post_period == TRUE, .(
     avg_treatment_effect = mean(tau)
   ), by = .(unit_name, unit_type, outcome_model)]
+
   
   pre_sd <- taus_result[post_period == FALSE, .(
     pre_sd = sd(tau)
   ), by = .(unit_name, unit_type, outcome_model)]
+
   
   normalized_te_stats <- merge(te_post, pre_sd, by = c("unit_name", "unit_type", "outcome_model"))
   normalized_te_stats[, test_statistic_value := avg_treatment_effect / pre_sd]
-  
+
+
   # Function to calculate p-values for a given test statistic
   calculate_pvalues <- function(test_stat_data, test_type = "treatment_effect") {
-    treated_ratios <- test_stat_data[unit_type == "treated", .(outcome_model, treated_ratio = test_statistic_value)]
     
-    if (nrow(treated_ratios) > 0) {
-      p_values_result <- test_stat_data[unit_type == "control", {
-        if (.N > 0) {
-          treated_val <- treated_ratios[outcome_model == .BY$outcome_model, treated_ratio]
-          if (length(treated_val) > 0) {
-            control_vals <- test_statistic_value
-            
-            if (test_type == "rmse_ratio") {
-              # For RMSE ratios: one-sided test (is treated unit an outlier in upper tail?)
-              # Traditional Abadie approach - testing if treated unit is unusually volatile
-              rank_val <- sum(control_vals >= treated_val) + 1
-              total_val <- length(control_vals) + 1
-              p_value_one_sided <- rank_val / total_val
-              p_value_two_sided <- NA  # Keep as one-sided for RMSE ratios
-              
-            } else {
-              # For treatment effects: standard two-sided test
-              total_val <- length(control_vals) + 1
-              
-              # Count control units as extreme or more extreme in the same direction
-              if (treated_val >= 0) {
-                same_direction_extreme <- sum(control_vals >= treated_val)
-              } else {
-                same_direction_extreme <- sum(control_vals <= treated_val)  
-              }
-              
-              # One-sided p-value
-              p_value_one_sided <- (same_direction_extreme + 1) / total_val
-              
-              # Two-sided: double the one-sided p-value, capped at 1
-              p_value_two_sided <- min(2 * p_value_one_sided, 1.0)
-              
-              rank_val <- same_direction_extreme + 1
-            }
-            
-            list(
-              treated_ratio = treated_val,
-              rank = rank_val,
-              total_units = total_val,
-              p_value_one_sided = p_value_one_sided,
-              p_value = p_value_two_sided
-            )
-          } else {
-            list(treated_ratio = NA_real_, rank = NA_integer_, total_units = NA_integer_, 
-                 p_value_one_sided = NA_real_, p_value = NA_real_)
-          }
-        } else {
-          list(treated_ratio = NA_real_, rank = NA_integer_, total_units = NA_integer_, 
-               p_value_one_sided = NA_real_, p_value = NA_real_)
-        }
-      }, by = outcome_model]
-    } else {
-      p_values_result <- data.table()
+    if (nrow(test_stat_data) == 0) {
+      return(data.table())
     }
+    
+    # Calculate p-values for all units based on their rank within each outcome model
+    p_values_result <- test_stat_data[, {
+      if (.N > 0) {
+        
+        if (test_type == "rmse_ratio") {
+          # For RMSE ratios: one-sided test (higher values = worse fit = higher rank)
+          # Rank in descending order (higher test statistic = higher rank = worse p-value)
+          unit_ranks <- rank(-test_statistic_value, ties.method = "min")
+          p_value_one_sided <- unit_ranks / .N
+          p_value_two_sided <- NA  # Keep as one-sided for RMSE ratios
+          
+        } else {
+          # For treatment effects: directional test based on expected direction
+          if (expected_direction == "negative") {
+            # Rank by raw tau value (most negative = rank 1, gets lowest p-value)
+            unit_ranks <- rank(test_statistic_value, ties.method = "min")
+            p_value_one_sided <- unit_ranks / .N
+            p_value_two_sided <- p_value_one_sided  # One-sided test for directional
+            
+          } else if (expected_direction == "positive") {
+            # Rank by negative tau value (most positive = rank 1, gets lowest p-value)
+            unit_ranks <- rank(-test_statistic_value, ties.method = "min")
+            p_value_one_sided <- unit_ranks / .N
+            p_value_two_sided <- p_value_one_sided  # One-sided test for directional
+            
+          } else {
+            # Two-sided test: rank by raw tau value for symmetric test
+            unit_ranks <- rank(test_statistic_value, ties.method = "min")
+            p_value_one_sided <- unit_ranks / .N
+            p_value_two_sided <- pmin(2 * pmin(p_value_one_sided, 1 - p_value_one_sided), 1.0)
+          }
+        }
+        
+        list(
+          unit_name = unit_name,
+          unit_type = unit_type,
+          test_statistic_value = test_statistic_value,
+          rank = unit_ranks,
+          total_units = .N,
+          p_value_one_sided = p_value_one_sided,
+          p_value = if (test_type == "rmse_ratio") p_value_one_sided else p_value_two_sided
+        )
+      } else {
+        list(unit_name = character(0), unit_type = character(0), 
+             test_statistic_value = numeric(0), rank = integer(0), 
+             total_units = integer(0), p_value_one_sided = numeric(0), p_value = numeric(0))
+      }
+    }, by = outcome_model]
+    
     return(p_values_result)
   }
   
@@ -115,10 +118,10 @@ calculate_abadie_significance <- function(taus_result, rmse_result, rmspe_thresh
   rmse_ratio_pvalues <- calculate_pvalues(rmse_ratio_stats, "rmse_ratio")
   te_pvalues <- calculate_pvalues(te_stats, "treatment_effect")
   normalized_te_pvalues <- calculate_pvalues(normalized_te_stats, "treatment_effect")
-  
+
   # Calculate filtered results for RMSE ratio (only applicable for this test statistic)
   treated_pre_rmse <- rmse_ratio_stats[unit_type == "treated", .(outcome_model, treated_pre_rmse = pre_rmse)]
-  
+
   if (nrow(treated_pre_rmse) > 0) {
     filtered_result <- rmse_ratio_stats[, {
         treated_rmse <- treated_pre_rmse[outcome_model == .BY$outcome_model, treated_pre_rmse]
@@ -164,7 +167,7 @@ calculate_abadie_significance <- function(taus_result, rmse_result, rmspe_thresh
   } else {
     filtered_result <- data.table()
   }
-  
+
   return(list(
     rmse_ratio = list(
       test_statistics = rmse_ratio_stats,
@@ -194,6 +197,7 @@ calculate_abadie_significance <- function(taus_result, rmse_result, rmspe_thresh
 #' @param dataset Data.frame. Original dataset used for estimation
 #' @param cores Numeric. Number of cores for parallel processing
 #' @param verbose Logical. Whether to print progress information
+#' @param expected_direction Character. Expected direction of treatment effect: "negative", "positive", or "two_sided" (default: "negative")
 #'
 #' @return List containing:
 #' \itemize{
@@ -212,7 +216,8 @@ inference_placebo <- function(
     sc.pred,
     dataset,
     cores,
-    verbose
+    verbose,
+    expected_direction = "negative"
 ){
 
   # Debug: Check critical fields immediately
@@ -236,6 +241,7 @@ inference_placebo <- function(
   if (!col_name_unit %in% names(dataset)) {
     stop(paste("Column", col_name_unit, "not found in dataset"))
   }
+
   
   dataset = dataset[get(col_name_unit) != name_treated_unit]
 
@@ -349,7 +355,7 @@ inference_placebo <- function(
         unit_type = 'control',
         outcome_model = oc
       )
-      
+
       control_taus_list[[paste(cu, oc, sep="_")]] = data.table(
         unit_name = rep(cu, length(all_tau)),
         period = sc.pred$min_period:sc.pred$end_period,
@@ -359,28 +365,26 @@ inference_placebo <- function(
         outcome_model = oc
       )
     }
+
   }
- 
   # Combine treated and control results
   all_taus = c(treated_taus_list, control_taus_list)
   all_rmse = c(treated_rmse_list, control_rmse_list)
 
-  # Handle empty lists safely
+  # Hard failure if no data generated
   if (length(all_taus) == 0) {
-    taus_result <- data.table()
-  } else {
-    taus_result <- rbindlist(all_taus)
+    stop("Placebo inference failed: No treatment effect data generated. Check that treated unit and control units can be estimated successfully.")
   }
+  taus_result <- rbindlist(all_taus)
   
   if (length(all_rmse) == 0) {
-    rmse_result <- data.table()
-  } else {
-    rmse_result <- rbindlist(all_rmse)
+    stop("Placebo inference failed: No RMSE data generated. Check that treated unit and control units can be estimated successfully.")
   }
-
+  rmse_result <- rbindlist(all_rmse)
+  
   # Calculate Abadie-style significance measures
-  abadie_results <- calculate_abadie_significance(taus_result, rmse_result)
-
+  abadie_results <- calculate_abadie_significance(taus_result, rmse_result, rmspe_threshold = 0, expected_direction)
+  
   # Return both treatment effects, RMSE values, and Abadie significance measures
   return(list(
     taus = taus_result,

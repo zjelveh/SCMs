@@ -2,7 +2,7 @@
 #'
 #' @title **CORE ENGINE** - Specification Curve Computation
 #' @description **INTERNAL COMPUTATIONAL CORE** - This function performs the core computation
-#' for specification curve analysis by systematically varying modeling choices and estimating 
+#' for specification curve analysis by systematically varying modeling choices and estimating
 #' treatment effects across all combinations. Called internally by `run_spec_curve_analysis()`.
 #' For user-facing specification curve analysis, use `run_spec_curve_analysis()` instead.
 #'
@@ -10,7 +10,18 @@
 #' @param outcomes Character vector of outcome variable names to analyze. Multiple outcomes will be processed separately.
 #' @param col_name_unit_name Character. Name of column containing unit identifiers (e.g., "state", "country").
 #' @param name_treated_unit Character. Identifier of the treated unit as it appears in the data.
-#' @param covagg List of covariate specifications for pre-treatment matching. Each element should be a vector of variable names.
+#' @param covagg List of covariate specifications for pre-treatment matching. Supports two formats:
+#'   \itemize{
+#'     \item \strong{Simplified Format} (recommended): List with optional fields:
+#'       \itemize{
+#'         \item \code{label} - Character: descriptive name for specification
+#'         \item \code{per_period} - Character vector: variables to include per-period
+#'         \item \code{pre_period_mean} - Character vector: variables to average over pre-period
+#'         \item Use \code{"outcome_var"} to refer to the outcome variable
+#'       }
+#'     \item \strong{Traditional Format}: List of lists with \code{var}, \code{average}, \code{each}, etc.
+#'   }
+#'   Default is empty list.
 #' @param treated_period Numeric. First time period when treatment is active for the treated unit.
 #' @param min_period Numeric. Earliest time period available in the dataset.
 #' @param end_period Numeric. Latest time period available in the dataset.
@@ -43,7 +54,7 @@
 #' @param cores Integer. Number of CPU cores for parallel processing. Default is 1 (sequential).
 #'   Higher values significantly speed up computation but require more memory.
 #' @param verbose Logical. Whether to display progress messages and warnings. Default is TRUE.
-#' @param inference_type Character. Type of inference to perform: 
+#' @param inference_type Character. Type of inference to perform:
 #'   \itemize{
 #'     \item \code{"placebo"} - Abadie-style placebo inference only (default)
 #'     \item \code{"bootstrap"} - Bootstrap null hypothesis inference only
@@ -87,16 +98,16 @@
 #'       \item \code{p_values} - Specification-level bootstrap p-values and statistics
 #'     }
 #' }
-#' 
-#' The \code{results} data.table contains treatment effects (tau), unit information, and specification 
+#'
+#' The \code{results} data.table contains treatment effects (tau), unit information, and specification
 #' metadata for all units (treated, control placebo, bootstrap iterations) across all specifications.
 #' Inference results are separated to avoid duplication and provide cleaner access to statistical tests.
 #'
-#' @references 
+#' @references
 #' \itemize{
-#'   \item Simonsohn, U., Simmons, J. P., & Nelson, L. D. (2020). Specification curve analysis. 
+#'   \item Simonsohn, U., Simmons, J. P., & Nelson, L. D. (2020). Specification curve analysis.
 #'         \emph{Nature Human Behaviour}, 4(11), 1208-1214.
-#'   \item Huntington-Klein, N. et al. (2021). The influence of hidden researcher decisions in applied microeconomics. 
+#'   \item Huntington-Klein, N. et al. (2021). The influence of hidden researcher decisions in applied microeconomics.
 #'         \emph{Economic Inquiry}, 59(3), 944-960.
 #' }
 #'
@@ -106,11 +117,11 @@
 #' results <- spec_curve(
 #'   dataset = state_panel,
 #'   outcomes = "gdp_per_capita",
-#'   col_name_unit_name = "state", 
+#'   col_name_unit_name = "state",
 #'   name_treated_unit = "California",
 #'   covagg = list(c("population", "income")),
 #'   treated_period = 2000,
-#'   min_period = 1990, 
+#'   min_period = 1990,
 #'   end_period = 2010,
 #'   col_name_period = "year",
 #'   constraints = list(
@@ -121,12 +132,60 @@
 #'   cores = 4
 #' )
 #'
+#' # Using new simplified covagg format
+#' results_simplified <- spec_curve(
+#'   dataset = state_panel,
+#'   outcomes = "gdp_per_capita",
+#'   col_name_unit_name = "state",
+#'   name_treated_unit = "California",
+#'   covagg = list(
+#'     "Traditional SCM" = list(label = "Traditional SCM"),
+#'     "GDP Analysis" = list(
+#'       label = "GDP Analysis",
+#'       per_period = c("gdp", "outcome_var"),
+#'       pre_period_mean = c("population", "income")
+#'     ),
+#'     "All Variables Mean" = list(
+#'       label = "All Variables Mean",
+#'       pre_period_mean = c("gdp", "population", "income", "outcome_var")
+#'     )
+#'   ),
+#'   treated_period = 2000,
+#'   min_period = 1990,
+#'   end_period = 2010,
+#'   col_name_period = "year"
+#' )
+#'
+# Multiple specification patterns
+#' results_mixed <- spec_curve(
+#'   dataset = policy_data,
+#'   outcomes = "gdp",
+#'   col_name_unit_name = "country",
+#'   name_treated_unit = "Germany",
+#'   covagg = list(
+#'     "Traditional SCM" = list(label = "Traditional SCM"),
+#'     "All Mean" = list(
+#'       label = "All Mean",
+#'       pre_period_mean = c("population", "trade", "investment", "outcome_var")
+#'     ),
+#'     "Outcome Per Period" = list(
+#'       label = "Outcome Per Period",
+#'       per_period = c("outcome_var"),
+#'       pre_period_mean = c("population", "trade")
+#'     )
+#'   ),
+#'   treated_period = 2005,
+#'   min_period = 1990,
+#'   end_period = 2010,
+#'   col_name_period = "year"
+#' )
+#'
 #' # Multi-outcome analysis
 #' results_multi <- spec_curve(
 #'   dataset = policy_data,
 #'   outcomes = c("unemployment", "gdp", "investment"),
 #'   col_name_unit_name = "country",
-#'   name_treated_unit = "Germany", 
+#'   name_treated_unit = "Germany",
 #'   covagg = list(
 #'     c("population", "gdp_lag"),
 #'     c("population", "gdp_lag", "trade_openness")
@@ -137,20 +196,22 @@
 #'   col_name_period = "year",  
 #'   cores = 8
 #' )
-#' 
+#'
 #' # Plot results
 #' plot_spec_curve(results)
 #' }
+#' 
+
 #' @export
 spec_curve <- function(
     dataset,
     outcomes,
     col_name_unit_name,
     name_treated_unit,
-    covagg,
+    covagg = list(),
     treated_period,
     min_period,
-    end_period, 
+    end_period,
     col_name_period,
     feature_weights = c('uniform', 'optimize'),
     outcome_models = c('none', 'augsynth', 'ridge', 'lasso', 'ols'),
@@ -173,31 +234,81 @@ spec_curve <- function(
   if (!any(c("data.frame", "data.table") %in% class(dataset))) {
     stop("dataset must be a data.frame or data.table")
   }
-  
+
   # Validate inference_type parameter
   valid_inference_types <- c("placebo", "bootstrap", "all")
   if (!inference_type %in% valid_inference_types) {
     stop("inference_type must be one of: ", paste(valid_inference_types, collapse = ", "))
   }
+
+
+  # Validate that we have at least some specifications
+  if (length(covagg) == 0) {
+    stop("No covariate specifications provided. Must provide covagg specifications.")
+  }
+
+  # Validate that covagg specifications have names OR label fields
+  covagg_names <- names(covagg)
   
+  # Check if we have any unnamed specifications without label fields
+  if (is.null(covagg_names)) {
+    # No names at all - check if all specs have labels
+    for (i in seq_along(covagg)) {
+      spec <- covagg[[i]]
+      if (!is.list(spec) || is.null(spec$label) || !is.character(spec$label) || length(spec$label) != 1) {
+        stop("Covariate specification at index ", i, " must have either a descriptive name or a label field.")
+      }
+    }
+    # Create dummy names for processing
+    covagg_names <- paste0("spec_", seq_along(covagg))
+    names(covagg) <- covagg_names
+  } else if (any(is.na(covagg_names)) || any(nchar(covagg_names) == 0)) {
+    # Some names are missing - check those without names have labels
+    for (i in seq_along(covagg_names)) {
+      if (is.na(covagg_names[i]) || nchar(covagg_names[i]) == 0) {
+        spec <- covagg[[i]]
+        if (!is.list(spec) || is.null(spec$label) || !is.character(spec$label) || length(spec$label) != 1) {
+          stop("Covariate specification at index ", i, " must have either a descriptive name or a label field.")
+        }
+      }
+    }
+  }
+
+  # Validate covagg specifications have proper names/labels
+  for (i in seq_along(covagg_names)) {
+    name <- covagg_names[i]
+    spec <- covagg[[i]]
+    
+    # Check if specification has a label field (preferred)
+    if (is.list(spec) && !is.null(spec$label) && is.character(spec$label) && length(spec$label) == 1) {
+      # Good - has explicit label
+      next
+    } else {
+      # Warn that this might not be descriptive enough
+      if (verbose) {
+        message(sprintf("Warning: covagg specification '%s' may not be descriptive enough. Consider adding a 'label' field for better visualization.", name))
+      }
+    }
+  }
+
   # Set default inference config values
   default_config <- list(
     bootstrap_n_replications = 1000,
     bootstrap_cores = 1
   )
-  
+
   # Merge user config with defaults
-  inference_config <- modifyList(default_config, inference_config)
-  
+  inference_config <- utils::modifyList(default_config, inference_config)
+
   # Always return long format (no more nested format)
   collect_long_format <- TRUE
-  
+
   # Ensure dataset is a data.table for faster operations
   if (!data.table::is.data.table(dataset)) {
     dataset <- data.table::as.data.table(dataset)
   }
-  
-  
+
+
   # Pre-compute donor samples to avoid redundancy
   donor_samples <- list()
   if ("most_similar" %in% donor_sample) {
@@ -208,11 +319,11 @@ spec_curve <- function(
                                             col_name_unit_name,
                                             name_treated_unit,
                                             treated_period,
-                                            min_period, 
+                                            min_period,
                                             col_name_period)
     }
   }
-  
+
   # Generate parameter grid for all combinations
   create_param_grid <- function() {
     param_list <- list(
@@ -222,7 +333,7 @@ spec_curve <- function(
       covariate_agg = seq_along(covagg),
       donor = donor_sample
     )
-    
+
     # Create all combinations
     expand.grid(
       outcome = param_list$outcome,
@@ -234,91 +345,124 @@ spec_curve <- function(
     )
   }
 
+  # Helper function to detect covagg format type
+  detect_covagg_format <- function(ca) {
+    # Check if it has the new simplified parameters
+    has_simplified <- !is.null(ca$per_period) || !is.null(ca$pre_period_mean)
+    
+    # Check if it has traditional detailed specs (lists with var field)
+    other_keys <- setdiff(names(ca), c("label", "per_period", "pre_period_mean"))
+    has_traditional <- any(sapply(ca[other_keys], function(x) is.list(x) && !is.null(x$var)))
+    
+    # Check if it has single spec format (direct var field)
+    has_single_spec <- "var" %in% names(ca)
+    
+    if (has_simplified && (has_traditional || has_single_spec)) {
+      stop("Cannot mix simplified format (per_period/pre_period_mean) with traditional format in same specification")
+    }
+    
+    if (has_simplified) return("simplified")
+    if (has_traditional || has_single_spec) return("traditional")
+    
+    # Check if empty (only label field or completely empty)
+    non_label_keys <- setdiff(names(ca), "label")
+    if (length(non_label_keys) == 0) return("empty")
+    
+    # If we get here, it's an invalid format
+    stop("Invalid covagg format - must have simplified format (per_period/pre_period_mean), traditional format (var field), or be empty")
+  }
+  
+  # Helper function to convert simplified format to traditional format
+  convert_simplified_to_traditional <- function(ca, outcome_var) {
+    formatted_spec <- list()
+    
+    # Handle per_period variables
+    if (!is.null(ca$per_period)) {
+      for (var in ca$per_period) {
+        var_name <- if (var == "outcome_var") outcome_var else var
+        spec_name <- paste0(var_name, "_periods")
+        formatted_spec[[spec_name]] <- list(var = var_name, each = TRUE)
+      }
+    }
+    
+    # Handle pre_period_mean variables
+    if (!is.null(ca$pre_period_mean)) {
+      for (var in ca$pre_period_mean) {
+        var_name <- if (var == "outcome_var") outcome_var else var
+        spec_name <- paste0(var_name, "_mean")
+        formatted_spec[[spec_name]] <- list(var = var_name, average = "full_pre")
+      }
+    }
+    
+    return(formatted_spec)
+  }
+
   # Function to process a single specification
   process_spec <- function(
     outc, const_idx, fw, ca_idx, ds, spec_number,
-    constraints, covagg, donor_samples, dataset, 
+    constraints, covagg, donor_samples, dataset,
     min_period, treated_period, end_period,
     col_name_unit_name, name_treated_unit, col_name_period,
     outcome_models, verbose
   ) {
     const <- constraints[[const_idx]]
     ca <- covagg[[ca_idx]]
-    
-    # Create feature names
-    # Extract label from specification level (nested format)
-    spec_label <- NULL
-    if (!is.null(ca$label) && is.character(ca$label) && length(ca$label) == 1) {
-      spec_label <- ca$label
-      feature_names <- spec_label
-    } else if (is.list(ca)) {
-      # Check if this is a nested specification with label at top level
-      has_nested_specs <- any(sapply(ca, function(x) is.list(x) && !is.null(x$var)))
-      if (has_nested_specs && !is.null(ca$label)) {
-        spec_label <- ca$label
-        feature_names <- spec_label
-      } else if ("var" %in% names(ca)) {
-      # Create descriptive name from specification
-      spec_parts <- c()
-      spec_parts <- c(spec_parts, ca$var)
-      
-      if (!is.null(ca$each) && ca$each) {
-        spec_parts <- c(spec_parts, "each")
-      } else if (!is.null(ca$average)) {
-        spec_parts <- c(spec_parts, paste0("avg_", ca$average))
-      } else if (!is.null(ca$every_n)) {
-        spec_parts <- c(spec_parts, paste0("every_", ca$every_n))
-      } else if (!is.null(ca$periods)) {
-        spec_parts <- c(spec_parts, paste0("periods_", paste(ca$periods, collapse="-")))
-      } else if (!is.null(ca$first)) {
-        spec_parts <- c(spec_parts, paste0("first_", ca$first))
-      } else if (!is.null(ca$last)) {
-        spec_parts <- c(spec_parts, paste0("last_", ca$last))
-      } else if (!is.null(ca$rolling)) {
-        spec_parts <- c(spec_parts, paste0("roll_", ca$rolling))
-      } else if (!is.null(ca$growth)) {
-        spec_parts <- c(spec_parts, paste0("growth_", ca$growth))
-      } else if (!is.null(ca$volatility)) {
-        spec_parts <- c(spec_parts, paste0("vol_", ca$volatility))
+
+    # Create feature names - Use label field or covagg name
+    covagg_name <- names(covagg)[ca_idx]
+
+    # Check if specification has a label field (preferred approach)
+    if (is.list(ca) && !is.null(ca$label) && is.character(ca$label) && length(ca$label) == 1) {
+      feature_names <- ca$label
+    } else {
+      # Use covagg name directly, but skip dummy names
+      if (!is.null(covagg_name) && nchar(covagg_name) > 0 && !grepl("^spec_\\d+$", covagg_name)) {
+        feature_names <- covagg_name
+      } else {
+        # FAIL HARD - no fallback logic
+        stop(paste("Covariate specification at index", ca_idx, "must have a descriptive name or label field."))
       }
-      
-      feature_names <- paste(spec_parts, collapse = "_")
-    } 
     }
-    
+
     # Use the provided min_period directly
     local_min_period <- min_period
-    
+
     # Select donor sample (avoid unnecessary copy for 'all')
     if (ds == 'all') {
       dataset2 <- dataset  # No copy needed if not modifying
     } else if (ds == 'most_similar') {
       dataset2 <- donor_samples[[outc]]
     }
-    
+
     # Create specification identifier for logging
     spec_name <- paste(outc, const$name, fw, feature_names, ds, sep = "-")
-    
+
     if (verbose) message(sprintf("Processing: %s", spec_name))
-    
+
     # Ensure ca is in proper format for estimate_sc
     if (is.list(ca)) {
-      # Check if this is a nested specification (has label + feature specs)
-      has_nested_specs <- any(sapply(ca, function(x) is.list(x) && !is.null(x$var)))
-      if (has_nested_specs) {
-        # Nested format: use as-is (scdata.R will handle the nested structure)
-        ca_formatted <- ca
-      } else if ("var" %in% names(ca)) {
-        # Single spec format: wrap in a list with a name  
+      # Detect format type
+      format_type <- detect_covagg_format(ca)
+      
+      if (format_type == "simplified") {
+        # New simplified format: convert to traditional format
+        ca_formatted <- convert_simplified_to_traditional(ca, outc)
+        
+      } else if (format_type == "traditional") {
+        # Traditional detailed format: use as-is but remove label field
+        ca_formatted <- ca[setdiff(names(ca), "label")]
+        
+      } else if (format_type == "empty") {
+        # Empty specification (traditional SCM - outcome only)
         ca_formatted <- list()
-        ca_formatted[[names(covagg)[ca_idx]]] <- ca
+        
       } else {
-        stop("Invalid covagg format - specifications must have 'var' field or nested structure")
+        stop("Invalid covagg format - specifications must have 'var' field, simplified format (per_period/pre_period_mean), or be empty")
       }
     } else {
       stop("Invalid covagg format - only list format is supported")
     }
-    
+
     sc.pred <- tryCatch({
       estimate_sc(
         dataset2,
@@ -332,18 +476,18 @@ spec_curve <- function(
         end_period,
         outcome_models = outcome_models,
         feature_weights = fw,
-        w.constr = const                      
+        w.constr = const
       )
     }, error = function(e) {
       message(sprintf("ERROR in estimate_sc for spec %s: %s", spec_name, e$message))
       return(NULL)
     })
-    
+
     if (!is.null(sc.pred)) {
-      
+
       # Initialize inference structure
       sc.infer <- list()
-      
+
       # Run placebo inference if requested
       if (inference_type %in% c("placebo", "all")) {
         placebo_results <- tryCatch({
@@ -378,6 +522,7 @@ spec_curve <- function(
           return(NULL)
         })
 
+
         if (!is.null(placebo_results)) {
           # Standardize structure to match bootstrap mode expectations
           sc.infer <- list(
@@ -385,11 +530,11 @@ spec_curve <- function(
             rmse = placebo_results$rmse,
             abadie_significance = placebo_results$abadie_significance
           )
-          
+
         }
       }
 
-      # Run bootstrap inference if requested  
+      # Run bootstrap inference if requested
       if (inference_type %in% c("bootstrap", "all")) {
         bootstrap_results <- tryCatch({
           bootstrap_null_inference(
@@ -405,32 +550,32 @@ spec_curve <- function(
           }
           return(NULL)
         })
-        
+
         # Add bootstrap results to inference structure
         if (!is.null(bootstrap_results)) {
           if (inference_type == "bootstrap") {
             # Bootstrap-only mode: create complete inference structure with bootstrap data
-            
+
             # Create treated unit data (same as placebo mode)
             treated_taus_list <- list()
             treated_rmse_list <- list()
-            
+
             for(oc in names(sc.pred$est.results$outcome_model)){
-              sc_post = sc.pred$est.results$outcome_model[[oc]]$Y.post.fit 
+              sc_post = sc.pred$est.results$outcome_model[[oc]]$Y.post.fit
               sc_pre  = sc.pred$est.results$Y.pre.fit
-              
-              treated_tau = sc.pred$data$Y.post - sc_post 
+
+              treated_tau = sc.pred$data$Y.post - sc_post
               treated_pre_tau = sc.pred$data$Y.pre - sc_pre
               treated_all_tau = c(treated_pre_tau, treated_tau)
               treated_pre_rmse = sqrt(mean(treated_pre_tau^2))
-              
+
               treated_rmse_list[[oc]] = data.table(
                 unit_name = sc.pred$name_treated_unit,
                 pre_rmse = treated_pre_rmse,
                 unit_type = 'treated',
                 outcome_model = oc
               )
-              
+
               treated_taus_list[[oc]] = data.table(
                 unit_name = rep(sc.pred$name_treated_unit, length(treated_all_tau)),
                 period = sc.pred$min_period:sc.pred$end_period,
@@ -440,18 +585,18 @@ spec_curve <- function(
                 outcome_model = oc
               )
             }
-            
+
             # Combine treated data with bootstrap iteration data
             all_taus_list <- treated_taus_list
             all_rmse_list <- treated_rmse_list
-            
+
             # Add bootstrap iteration data as "control" units
             for(oc in names(bootstrap_results$bootstrap_iteration_data)) {
               bootstrap_data <- bootstrap_results$bootstrap_iteration_data[[oc]]
               if (nrow(bootstrap_data) > 0) {
                 # Add to tau data
                 all_taus_list[[paste0("bootstrap_", oc)]] <- bootstrap_data
-                
+
                 # Create RMSE data for bootstrap iterations (calculate from pre-period)
                 bootstrap_rmse <- bootstrap_data[post_period == FALSE, .(
                   pre_rmse = sqrt(mean(tau^2))
@@ -460,14 +605,14 @@ spec_curve <- function(
                 all_rmse_list[[paste0("bootstrap_rmse_", oc)]] <- bootstrap_rmse
               }
             }
-            
+
             # Create inference structure compatible with existing extraction code
             sc.infer <- list(
               inference.results = rbindlist(all_taus_list, fill = TRUE),
               rmse = rbindlist(all_rmse_list, fill = TRUE),
               bootstrap_significance = bootstrap_results
             )
-            
+
           } else {
             # "all" mode: add bootstrap results to existing placebo inference
             sc.infer$bootstrap_significance <- bootstrap_results
@@ -478,18 +623,18 @@ spec_curve <- function(
                 if (nrow(bootstrap_data) > 0) {
                     # Add bootstrap tau data to the main inference table
                     sc.infer$inference.results <- rbindlist(
-                      list(sc.infer$inference.results, bootstrap_data), 
+                      list(sc.infer$inference.results, bootstrap_data),
                       fill = TRUE
                     )
-                    
+
                     # Create and add bootstrap RMSE data
                     bootstrap_rmse <- bootstrap_data[post_period == FALSE, .(
                         pre_rmse = sqrt(mean(tau^2))
                     ), by = unit_name]
                     bootstrap_rmse[, `:=`(unit_type = 'bootstrap', outcome_model = oc)]
-                    
+
                     sc.infer$rmse <- rbindlist(
-                      list(sc.infer$rmse, bootstrap_rmse), 
+                      list(sc.infer$rmse, bootstrap_rmse),
                       fill = TRUE
                     )
                 }
@@ -516,11 +661,11 @@ spec_curve <- function(
       result = result
     ))
   }
-  
+
   # Create parameter grid
   param_grid <- create_param_grid()
   total_specs <- nrow(param_grid)
-  
+
   # Add specification numbers early - each row is one unique specification
   param_grid$spec_number <- 1:total_specs
 
@@ -528,16 +673,16 @@ spec_curve <- function(
   if (verbose) {
     message(sprintf("Running %d specifications with %d cores", total_specs, cores))
   }
-  
+
   # Run specifications (parallel or sequential)
   if (cores > 1 && total_specs > 1) {
     # Limit cores to reasonable maximum and available cores
     max_cores <- min(cores, parallel::detectCores(), total_specs)
-    
+
     if (verbose) {
       cat("Setting up parallel processing with", max_cores, "cores\n")
     }
-    
+
     # Setup parallel backend with error handling
     tryCatch({
       # Ensure required packages are loaded
@@ -547,30 +692,30 @@ spec_curve <- function(
       if (!requireNamespace("foreach", quietly = TRUE)) {
         stop("foreach package not available")
       }
-      
+
       cl <- parallel::makeCluster(max_cores)
       doParallel::registerDoParallel(cl)
       on.exit(parallel::stopCluster(cl))
-      
+
       if (verbose) {
-        cat("✓ Parallel backend registered successfully\n")
+        cat("Parallel backend registered successfully\n")
       }
     }, error = function(e) {
       warning("Failed to setup parallel processing: ", e$message, ". Falling back to sequential processing.")
       cores <<- 1  # Force sequential processing
     })
-    
+
   }
-  
+
   # Execute specifications
   if (cores > 1 && total_specs > 1) {
     # Packages for parallel execution imported via NAMESPACE
-    
+
     # Use foreach for parallel execution
     results_list <- foreach::foreach(
       i = 1:nrow(param_grid),
       .packages = c('data.table', 'devtools', 'SCMs', 'optimx', 'kernlab'),  # Include all required packages
-      .export = c('validate_covariate_spec', 'determine_processing_pattern', 
+      .export = c('validate_covariate_spec', 'determine_processing_pattern',
                   'process_aggregate_arbitrary', 'process_aggregate_range',
                   'process_each_arbitrary', 'process_each_range',
                   'resolve_target_periods', 'get_agg_function', 'generate_var_name',
@@ -579,14 +724,14 @@ spec_curve <- function(
       .noexport = c('data.table', '.SD', '.N', '.BY')  # Ensure data.table works in parallel
     ) %dopar% {
       # SCMs package functions available in parallel worker
-      
+
       p <- param_grid[i, ]
       process_spec(
-        outc = p$outcome, 
-        const_idx = p$constraint_idx, 
-        fw = p$feature_weight, 
+        outc = p$outcome,
+        const_idx = p$constraint_idx,
+        fw = p$feature_weight,
         ca_idx = p$covariate_agg,
-        ds = p$donor, 
+        ds = p$donor,
         spec_number = p$spec_number,
         constraints = constraints,
         covagg = covagg,
@@ -607,12 +752,13 @@ spec_curve <- function(
     results_list <- vector("list", total_specs)
     for (i in 1:nrow(param_grid)) {
       p <- param_grid[i, ]
+
       results_list[[i]] <- process_spec(
-        outc = p$outcome, 
-        const_idx = p$constraint_idx, 
-        fw = p$feature_weight, 
+        outc = p$outcome,
+        const_idx = p$constraint_idx,
+        fw = p$feature_weight,
         ca_idx = p$covariate_agg,
-        ds = p$donor, 
+        ds = p$donor,
         spec_number = p$spec_number,
         constraints = constraints,
         covagg = covagg,
@@ -627,12 +773,12 @@ spec_curve <- function(
         outcome_models = outcome_models,
         verbose = verbose
       )
-      
-      # Force garbage collection periodically 
+
+      # Force garbage collection periodically
       if (i %% 20 == 0) gc()
     }
   }
-  
+
   # Process results into separate data structures
   long_results_list <- list()
   abadie_results_list <- list()
@@ -640,21 +786,21 @@ spec_curve <- function(
 
   for (res in results_list) {
     if (!is.null(res) && !is.null(res$result)) {
-      
+
       # Extract data from the result structure
-      if (!is.null(res$result$infer) && 
-          is.list(res$result$infer) && 
+      if (!is.null(res$result$infer) &&
+          is.list(res$result$infer) &&
           "inference.results" %in% names(res$result$infer) &&
           "rmse" %in% names(res$result$infer)) {
-        
+
         # Get treatment effects data
         tau_data <- res$result$infer$inference.results
         rmse_data <- res$result$infer$rmse
-        
+
         # Make sure they're data.tables (using setDT for efficiency)
         if (!data.table::is.data.table(tau_data)) data.table::setDT(tau_data)
         if (!data.table::is.data.table(rmse_data)) data.table::setDT(rmse_data)
-        
+
         # Merge the main datasets on the common keys
         combined <- merge(
           tau_data,
@@ -674,23 +820,23 @@ spec_curve <- function(
 
         ## FIX: Create a new, fully unique specification ID
         combined[, full_spec_id := paste(spec_number, outcome_model, sep = "_")]
-        
+
         long_results_list[[length(long_results_list) + 1]] <- combined
-        
+
         # Process Abadie inference results separately
         if ("abadie_significance" %in% names(res$result$infer)) {
           abadie_data <- res$result$infer$abadie_significance
 
           # Create Abadie results for this specification
           abadie_spec_results <- list()
-          
+
           # Process each test statistic type
           test_stats <- c("rmse_ratio", "treatment_effect", "normalized_te")
-          
+
           for (test_stat in test_stats) {
             if (!is.null(abadie_data[[test_stat]])) {
               test_stat_data <- abadie_data[[test_stat]]
-              
+
               # Add p-values for this test statistic
               if (!is.null(test_stat_data$p_values) && nrow(test_stat_data$p_values) > 0) {
                 p_values_data <- copy(test_stat_data$p_values)
@@ -700,7 +846,7 @@ spec_curve <- function(
                 )]
                 abadie_spec_results[[paste0("p_values_", test_stat)]] <- p_values_data
               }
-              
+
               # Add test statistics for this test statistic type
               if (!is.null(test_stat_data$test_statistics) && nrow(test_stat_data$test_statistics) > 0) {
                 test_stats_data <- copy(test_stat_data$test_statistics)
@@ -710,10 +856,10 @@ spec_curve <- function(
                 )]
                 abadie_spec_results[[paste0("test_statistics_", test_stat)]] <- test_stats_data
               }
-              
+
               # Add filtered results (only for rmse_ratio)
-              if (test_stat == "rmse_ratio" && 
-                  !is.null(test_stat_data$filtered_results) && 
+              if (test_stat == "rmse_ratio" &&
+                  !is.null(test_stat_data$filtered_results) &&
                   nrow(test_stat_data$filtered_results) > 0) {
                 filtered_data <- copy(test_stat_data$filtered_results)
                 filtered_data[, `:=`(
@@ -724,18 +870,18 @@ spec_curve <- function(
               }
             }
           }
-          
-          
+
+
           abadie_results_list[[length(abadie_results_list) + 1]] <- abadie_spec_results
         }
-        
+
         # Process bootstrap inference results separately
         if ("bootstrap_significance" %in% names(res$result$infer)) {
           bootstrap_data <- res$result$infer$bootstrap_significance
-          
+
           # Create bootstrap results for this specification
           bootstrap_spec_results <- list()
-          
+
           # Add bootstrap p-values (specification-level)
           if (!is.null(bootstrap_data$p_values) && nrow(bootstrap_data$p_values) > 0) {
             bootstrap_p_data <- copy(bootstrap_data$p_values)
@@ -746,7 +892,7 @@ spec_curve <- function(
             )]
             bootstrap_spec_results[["p_values"]] <- bootstrap_p_data
           }
-          
+
           bootstrap_results_list[[length(bootstrap_results_list) + 1]] <- bootstrap_spec_results
         }
       } else {
@@ -758,27 +904,27 @@ spec_curve <- function(
   if (length(long_results_list) > 0) {
     # Combine all long format results (spec_number already included from process_spec)
     long_df <- data.table::rbindlist(long_results_list, fill = TRUE)
-    
+
     # Create return structure
     final_results <- list(
       results = long_df,
       expected_direction = expected_direction
     )
-    
+
     # Process and add Abadie inference results if available
     if (length(abadie_results_list) > 0) {
       abadie_combined <- list()
-      
+
       # Initialize lists for each test statistic type
       test_stats <- c("rmse_ratio", "treatment_effect", "normalized_te")
-      
+
       for (test_stat in test_stats) {
         p_values_key <- paste0("p_values_", test_stat)
         test_stats_key <- paste0("test_statistics_", test_stat)
-        
+
         p_values_list <- list()
         test_stats_list <- list()
-        
+
         for (spec_results in abadie_results_list) {
           if (p_values_key %in% names(spec_results)) {
             p_values_list[[length(p_values_list) + 1]] <- spec_results[[p_values_key]]
@@ -787,7 +933,7 @@ spec_curve <- function(
             test_stats_list[[length(test_stats_list) + 1]] <- spec_results[[test_stats_key]]
           }
         }
-        
+
         if (length(p_values_list) > 0) {
           abadie_combined[[p_values_key]] <- data.table::rbindlist(p_values_list, fill = TRUE)
         }
@@ -795,7 +941,7 @@ spec_curve <- function(
           abadie_combined[[test_stats_key]] <- data.table::rbindlist(test_stats_list, fill = TRUE)
         }
       }
-      
+
       # Handle filtered results (only for rmse_ratio)
       abadie_filtered <- list()
       for (spec_results in abadie_results_list) {
@@ -803,182 +949,41 @@ spec_curve <- function(
           abadie_filtered[[length(abadie_filtered) + 1]] <- spec_results$filtered_results
         }
       }
-      
+
       if (length(abadie_filtered) > 0) {
         abadie_combined$filtered_results <- data.table::rbindlist(abadie_filtered, fill = TRUE)
       }
-      
-      
+
+
       final_results$abadie_inference <- abadie_combined
     }
-    
+
     # Process and add bootstrap inference results if available
     if (length(bootstrap_results_list) > 0) {
       bootstrap_combined <- list()
-      
+
       # Combine p-values across specifications
       bootstrap_p_values <- list()
-      
+
       for (spec_results in bootstrap_results_list) {
         if ("p_values" %in% names(spec_results)) {
           bootstrap_p_values[[length(bootstrap_p_values) + 1]] <- spec_results$p_values
         }
       }
-      
+
       if (length(bootstrap_p_values) > 0) {
         bootstrap_combined$p_values <- data.table::rbindlist(bootstrap_p_values, fill = TRUE)
       }
-      
+
       final_results$bootstrap_inference <- bootstrap_combined
     }
-    
+
   } else {
     stop("No valid results found")
   }
 
-  # Calculate specification curve p-values
-  if (verbose) message("Calculating specification curve p-values...")
-  spec_curve_pvalues <- calculate_spec_curve_pvalues(final_results, expected_direction)
-  final_results$spec_curve_pvalues <- spec_curve_pvalues
 
   if (verbose) message("Specification curve generation complete")
   return(final_results)
 }
 
-
-#' Calculate Specification Curve P-values
-#'
-#' @title Calculate Cross-Specification P-values for All Units
-#' @description Calculates specification curve-level p-values by aggregating treatment effects
-#' across all specifications and ranking units. Implements two test statistics:
-#' 1) Median treatment effect across specifications, 2) Average Z-score (Stouffer's method).
-#'
-#' @param spec_curve_results List. Results from spec_curve() function containing results and inference data
-#' @param expected_direction Character. Expected direction of treatment effect: "negative", "positive", or "two_sided"
-#'
-#' @return List containing specification curve p-values:
-#' \itemize{
-#'   \item median_tau_pvalues: P-values based on median treatment effect across specifications
-#'   \item stouffer_pvalues: P-values based on average Z-score across specifications (Stouffer's method)
-#' }
-#'
-#' @details
-#' This function implements specification curve-level inference by:
-#' \itemize{
-#'   \item Calculating median treatment effect for each unit across all specifications
-#'   \item Converting individual specification p-values to Z-scores and averaging them
-#'   \item Ranking all units and assigning p-values based on their position in the distribution
-#'   \item Accounting for expected direction when ranking (negative vs positive effects)
-#' }
-#'
-#' @examples
-#' \dontrun{
-#' # After running spec_curve
-#' results <- spec_curve(dataset, ...)
-#' spec_pvals <- calculate_spec_curve_pvalues(results, "negative")
-#' }
-calculate_spec_curve_pvalues <- function(spec_curve_results, expected_direction = "negative") {
-  
-  # Extract main results
-  if (!"results" %in% names(spec_curve_results)) {
-    stop("spec_curve_results must contain 'results' component")
-  }
-  
-  results_dt <- as.data.table(spec_curve_results$results)
-  
-  # Test Statistic 1: Median Treatment Effect Across All Specifications
-  # Calculate average tau for each unit across all specs (post-period only)
-  avg_tau_by_spec <- results_dt[post_period == TRUE, .(
-    ave_tau = mean(tau)
-  ), by = .(full_spec_id, unit_name, unit_type)]
-  
-  # Get median of those averages for each unit across all specifications
-  median_tau_by_unit <- avg_tau_by_spec[, .(
-    median_tau = median(ave_tau),
-    n_specs = .N
-  ), by = .(unit_name, unit_type)]
-  
-  # Rank units based on expected direction and assign p-values
-  if (expected_direction == "negative") {
-    # Most negative gets rank 1 (lowest p-value)
-    median_tau_by_unit[, rank_med := rank(median_tau, ties.method = "min")]
-  } else if (expected_direction == "positive") {
-    # Most positive gets rank 1 (lowest p-value)  
-    median_tau_by_unit[, rank_med := rank(-median_tau, ties.method = "min")]
-  } else {
-    # Two-sided: rank by absolute value (most extreme gets rank 1)
-    median_tau_by_unit[, rank_med := rank(-abs(median_tau), ties.method = "min")]
-  }
-  
-  # Calculate p-values and total units
-  median_tau_by_unit[, `:=`(
-    pval_rank_med = rank_med / .N,
-    total_units = .N
-  )]
-  
-  # Test Statistic 2: Average Z-score (Stouffer's Method)
-  # Need to extract p-values from Abadie inference and convert to Z-scores
-  if ("abadie_inference" %in% names(spec_curve_results)) {
-    
-    # Use RMSE ratio p-values (one-sided) for Z-score conversion
-    if ("p_values_rmse_ratio" %in% names(spec_curve_results$abadie_inference)) {
-      
-      abadie_pvals <- as.data.table(spec_curve_results$abadie_inference$p_values_rmse_ratio)
-      
-      # Merge treatment effects with p-values
-      tau_pval_merged <- merge(
-        avg_tau_by_spec,
-        abadie_pvals[, .(full_spec_id, unit_name, p_value_one_sided)], 
-        by = c('full_spec_id', 'unit_name'),
-        all.x = TRUE
-      )
-      
-      # Convert p-values to Z-scores
-      tau_pval_merged[, zscore := qnorm(p_value_one_sided, mean = 0, sd = 1, lower.tail = TRUE)]
-      
-      # Handle extreme p-values
-      tau_pval_merged[p_value_one_sided == 1, zscore := 4.25]
-      tau_pval_merged[p_value_one_sided == 0, zscore := -4.25]
-      tau_pval_merged[is.na(zscore), zscore := 0]  # Handle any remaining NAs
-      
-      # Calculate mean Z-score for each unit across all specifications
-      mean_z_by_unit <- tau_pval_merged[, .(
-        mean_z = mean(zscore, na.rm = TRUE),
-        n_specs_with_pvals = sum(!is.na(zscore))
-      ), by = .(unit_name, unit_type)]
-      
-      # Rank units by mean Z-score based on expected direction
-      if (expected_direction == "negative") {
-        # Most negative Z-score gets rank 1 (most significant in negative direction)
-        mean_z_by_unit[, rank_z := rank(mean_z, ties.method = "min")]
-      } else if (expected_direction == "positive") {
-        # Most positive Z-score gets rank 1 (most significant in positive direction)
-        mean_z_by_unit[, rank_z := rank(-mean_z, ties.method = "min")]
-      } else {
-        # Two-sided: most extreme (absolute) Z-score gets rank 1
-        mean_z_by_unit[, rank_z := rank(-abs(mean_z), ties.method = "min")]
-      }
-      
-      # Calculate p-values and total units
-      mean_z_by_unit[, `:=`(
-        pval_rank_z = rank_z / .N,
-        total_units = .N
-      )]
-      
-      stouffer_results <- mean_z_by_unit
-      
-    } else {
-      warning("No RMSE ratio p-values found for Stouffer's method calculation")
-      stouffer_results <- data.table()
-    }
-  } else {
-    warning("No Abadie inference results found for Stouffer's method calculation")
-    stouffer_results <- data.table()
-  }
-  
-  # Return both test statistics
-  return(list(
-    median_tau_pvalues = median_tau_by_unit,
-    stouffer_pvalues = stouffer_results
-  ))
-}

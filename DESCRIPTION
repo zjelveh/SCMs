@@ -56,5 +56,6 @@ Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
 Suggests: 
     testthat (>= 3.0.0),
-    devtools
+    devtools,
+    clarabel
 Config/testthat/edition: 3

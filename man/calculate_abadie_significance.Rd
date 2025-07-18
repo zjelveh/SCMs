@@ -4,7 +4,12 @@
 \alias{calculate_abadie_significance}
 \title{Calculate Multiple Test Statistics and Rank-based P-values}
 \usage{
-calculate_abadie_significance(taus_result, rmse_result, rmspe_threshold = 0)
+calculate_abadie_significance(
+  taus_result,
+  rmse_result,
+  rmspe_threshold = 0,
+  expected_direction = "negative"
+)
 }
 \arguments{
 \item{taus_result}{Data.table containing treatment effects for all units}
@@ -12,6 +17,8 @@ calculate_abadie_significance(taus_result, rmse_result, rmspe_threshold = 0)
 \item{rmse_result}{Data.table containing RMSE values for all units}
 
 \item{rmspe_threshold}{Numeric. Threshold for filtering poor pre-treatment fits (default: 0)}
+
+\item{expected_direction}{Character. Expected direction of treatment effect: "negative", "positive", or "two_sided" (default: "negative")}
 }
 \value{
 List containing Abadie significance measures for all test statistics
