@@ -83,7 +83,23 @@ fn.V <- function(
   
   if (use_clarabel && requireNamespace("clarabel", quietly = TRUE)) {
     # Use clarabel for QP solving
-    solution.w <- solve_qp_clarabel(c, H, A, b, l, u)
+    tryCatch({
+      solution.w <- solve_qp_clarabel(c, H, A, b, l, u)
+      attr(solution.w, "v_solver_used") <- "clarabel"
+    }, error = function(e) {
+      # If clarabel fails, fall back to kernlab::ipop but log the fallback
+      warning(paste0("Clarabel failed for V optimization, falling back to kernlab::ipop: ", e$message))
+      res <- kernlab::ipop(c = c, H = H, A = A, b = b, l = l, u = u, r = r, 
+                           bound = bound.ipop,
+                           margin = margin.ipop, 
+                           maxiter = 1000, 
+                           sigf = sigf.ipop)
+      
+      # Extract solution weights
+      solution.w <- as.matrix(kernlab::primal(res))
+      attr(solution.w, "v_solver_used") <- "kernlab::ipop"
+      attr(solution.w, "v_fallback_reason") <- e$message
+    })
   } else {
     # Use kernlab::ipop for QP solving
     res <- kernlab::ipop(c = c, H = H, A = A, b = b, l = l, u = u, r = r, 
@@ -94,6 +110,7 @@ fn.V <- function(
     
     # Extract solution weights
     solution.w <- as.matrix(kernlab::primal(res))
+    attr(solution.w, "v_solver_used") <- "kernlab::ipop"
   }
   
   # Compute loss for features

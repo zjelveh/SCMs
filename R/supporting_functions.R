@@ -656,18 +656,55 @@ b.est <- function(A, Z, J, KM, w.constr, V, CVXR.solver = "ECOS") {
   if (use_clarabel && requireNamespace("clarabel", quietly = TRUE)) {
     # Use clarabel for all constraint types (including pensynth)
     if (w.constr[["p"]] == "pensynth") {
-      return(b.est.clarabel(A, Z, J, KM, w.constr, V))
+      result <- b.est.clarabel(A, Z, J, KM, w.constr, V)
+      attr(result, "solver_used") <- "clarabel"
+      attr(result, "constraint_type") <- "pensynth"
+      return(result)
     } else {
-      return(b.est.clarabel.unified(A, Z, J, KM, w.constr, V))
+      tryCatch({
+        result <- b.est.clarabel.unified(A, Z, J, KM, w.constr, V)
+        attr(result, "solver_used") <- "clarabel"
+        attr(result, "constraint_type") <- w.constr[["p"]]
+        return(result)
+      }, error = function(e) {
+        # If clarabel fails, fall back to CVXR but log the fallback
+        warning(paste0("Clarabel failed for constraint '", w.constr[["p"]], "', falling back to CVXR: ", e$message))
+        result <- b.est.cvxr.fallback(A, Z, J, KM, w.constr, V, CVXR.solver)
+        attr(result, "solver_used") <- "CVXR"
+        attr(result, "constraint_type") <- w.constr[["p"]]
+        attr(result, "fallback_reason") <- e$message
+        return(result)
+      })
     }
   }
   
   # Fallback to CVXR/specialized functions
   if (w.constr[["p"]] == "pensynth") {
-    return(b.est.cvxr.pensynth(A, Z, J, KM, w.constr, V, CVXR.solver))
+    result <- b.est.cvxr.pensynth(A, Z, J, KM, w.constr, V, CVXR.solver)
+    attr(result, "solver_used") <- "CVXR"
+    attr(result, "constraint_type") <- "pensynth"
+    return(result)
   }
   
 
+  # Use CVXR solver (default path)
+  result <- b.est.cvxr.fallback(A, Z, J, KM, w.constr, V, CVXR.solver)
+  attr(result, "solver_used") <- "CVXR"
+  attr(result, "constraint_type") <- w.constr[["p"]]
+  return(result)
+}
+
+#' @title CVXR fallback function for W optimization
+#' @description Solve W optimization using CVXR (original implementation)
+#' @param A Treated unit features matrix
+#' @param Z Donor features matrix
+#' @param J Number of donor units
+#' @param KM Number of additional variables
+#' @param w.constr Constraint specification
+#' @param V Feature weighting matrix
+#' @param CVXR.solver CVXR solver to use
+#' @return Numeric vector of weights
+b.est.cvxr.fallback <- function(A, Z, J, KM, w.constr, V, CVXR.solver) {
   dire <- w.constr[["dir"]]
   lb <- w.constr[["lb"]]
   p <- w.constr[["p"]]
@@ -2365,4 +2402,115 @@ most_similar <- function(
   control_units = ybar_controls[ 1 : round(nrow(ybar_controls) / 2) ][[col_name_unit_name]]
   dataset = dataset[get(col_name_unit_name)%in%c(name_treated_unit, control_units)]
   return(dataset)
+}
+
+#' @title Extract solver information from SCM results
+#' @description Extract information about which solvers were used for W and V optimization
+#' @param scm_result Result from scest() function
+#' @return List containing solver information
+#' @export
+get_solver_info <- function(scm_result) {
+  if (!methods::is(scm_result, "scest")) {
+    stop("Input must be a scest result object")
+  }
+  
+  # Extract W solver information
+  w_weights <- scm_result$est.results$w
+  w_solver <- attr(w_weights, "solver_used")
+  w_constraint <- attr(w_weights, "constraint_type")
+  w_fallback_reason <- attr(w_weights, "fallback_reason")
+  
+  # Extract V solver information (if V was optimized)
+  v_solver <- NULL
+  v_fallback_reason <- NULL
+  if (!is.null(scm_result$est.results$V)) {
+    v_solver <- attr(scm_result$est.results$V, "v_solver_used")
+    v_fallback_reason <- attr(scm_result$est.results$V, "v_fallback_reason")
+  }
+  
+  solver_info <- list(
+    w_optimization = list(
+      solver = w_solver %||% "CVXR",
+      constraint_type = w_constraint %||% "unknown",
+      fallback_reason = w_fallback_reason
+    ),
+    v_optimization = list(
+      solver = v_solver %||% "not_optimized",
+      fallback_reason = v_fallback_reason
+    )
+  )
+  
+  return(solver_info)
+}
+
+#' @title Print solver information summary
+#' @description Print a human-readable summary of solver information
+#' @param solver_info Result from get_solver_info()
+#' @export
+print_solver_info <- function(solver_info) {
+  cat("SCM Solver Information\n")
+  cat("======================\n")
+  
+  # W optimization
+  cat("W Optimization (Synthetic Control Weights):\n")
+  cat("  Solver used:", solver_info$w_optimization$solver, "\n")
+  cat("  Constraint type:", solver_info$w_optimization$constraint_type, "\n")
+  if (!is.null(solver_info$w_optimization$fallback_reason)) {
+    cat("  Fallback reason:", solver_info$w_optimization$fallback_reason, "\n")
+  }
+  
+  # V optimization
+  cat("\nV Optimization (Feature Weights):\n")
+  if (solver_info$v_optimization$solver == "not_optimized") {
+    cat("  V matrix not optimized (using uniform or pre-specified weights)\n")
+  } else {
+    cat("  Solver used:", solver_info$v_optimization$solver, "\n")
+    if (!is.null(solver_info$v_optimization$fallback_reason)) {
+      cat("  Fallback reason:", solver_info$v_optimization$fallback_reason, "\n")
+    }
+  }
+  
+  cat("\n")
+}
+
+#' @title Collect solver information from specification curve results
+#' @description Collect and summarize solver information from multiple SCM results
+#' @param spec_results List of scest results (e.g., from specification curve analysis)
+#' @return Data frame with solver information for each specification
+#' @export
+collect_solver_info <- function(spec_results) {
+  solver_summary <- data.frame(
+    spec_id = names(spec_results) %||% seq_along(spec_results),
+    w_solver = character(length(spec_results)),
+    w_constraint = character(length(spec_results)),
+    w_fallback = logical(length(spec_results)),
+    v_solver = character(length(spec_results)),
+    v_fallback = logical(length(spec_results)),
+    stringsAsFactors = FALSE
+  )
+  
+  for (i in seq_along(spec_results)) {
+    if (methods::is(spec_results[[i]], "scest")) {
+      info <- get_solver_info(spec_results[[i]])
+      
+      solver_summary$w_solver[i] <- info$w_optimization$solver
+      solver_summary$w_constraint[i] <- info$w_optimization$constraint_type
+      solver_summary$w_fallback[i] <- !is.null(info$w_optimization$fallback_reason)
+      solver_summary$v_solver[i] <- info$v_optimization$solver
+      solver_summary$v_fallback[i] <- !is.null(info$v_optimization$fallback_reason)
+    } else {
+      solver_summary$w_solver[i] <- "error"
+      solver_summary$w_constraint[i] <- "error"
+      solver_summary$w_fallback[i] <- TRUE
+      solver_summary$v_solver[i] <- "error"
+      solver_summary$v_fallback[i] <- TRUE
+    }
+  }
+  
+  return(solver_summary)
+}
+
+# Helper function for null coalescing
+`%||%` <- function(x, y) {
+  if (is.null(x)) y else x
 }

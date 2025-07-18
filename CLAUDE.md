@@ -69,6 +69,32 @@ result <- scest(data, feature_weights = "optimize")  # Uses clarabel for V optim
 - Unified solver architecture across all constraint types
 - Sparse matrix support for efficiency
 
+### Solver Tracking and Monitoring
+The package tracks which solver was used for each optimization, especially useful for parallel execution:
+
+```r
+# Enable clarabel globally
+options(SCMs.prefer_clarabel = TRUE)
+
+# Run SCM estimation
+result <- scest(data, w.constr = list(name = "simplex"))
+
+# Check which solvers were used
+solver_info <- get_solver_info(result)
+print_solver_info(solver_info)
+
+# For specification curve analysis
+spec_results <- run_spec_curve_analysis(...)
+solver_summary <- collect_solver_info(spec_results)
+print(solver_summary)
+```
+
+### Solver Information Tracking
+- **W Optimization**: Tracks solver used, constraint type, and fallback reasons
+- **V Optimization**: Tracks solver used for feature weight optimization
+- **Parallel Execution**: Fallback warnings and solver usage visible in parallel runs
+- **Specification Curves**: Aggregate solver statistics across all specifications
+
 ## Build Commands
 - Only run these when necessary.
 - `devtools::document()` - Update documentation
