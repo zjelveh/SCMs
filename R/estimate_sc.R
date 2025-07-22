@@ -102,6 +102,37 @@ estimate_sc <- function(dataset,           # Input dataset (panel data format)
     min_period = min_period,
     end_period = end_period
   )
+  
+  # Preserve solver information from the original scest result
+  # The solver attributes might be lost during outcome model processing
+  if (!is.null(scm_model$est.results$w)) {
+    solver_used <- attr(scm_model$est.results$w, "solver_used")
+    constraint_type <- attr(scm_model$est.results$w, "constraint_type")
+    fallback_reason <- attr(scm_model$est.results$w, "fallback_reason")
+    
+    if (!is.null(solver_used)) {
+      attr(result$est.results$w, "solver_used") <- solver_used
+    }
+    if (!is.null(constraint_type)) {
+      attr(result$est.results$w, "constraint_type") <- constraint_type
+    }
+    if (!is.null(fallback_reason)) {
+      attr(result$est.results$w, "fallback_reason") <- fallback_reason
+    }
+  }
+  
+  # Preserve V optimization solver information
+  if (!is.null(scm_model$est.results$V)) {
+    v_solver_used <- attr(scm_model$est.results$V, "v_solver_used")
+    v_fallback_reason <- attr(scm_model$est.results$V, "v_fallback_reason")
+    
+    if (!is.null(v_solver_used)) {
+      attr(result$est.results$V, "v_solver_used") <- v_solver_used
+    }
+    if (!is.null(v_fallback_reason)) {
+      attr(result$est.results$V, "v_fallback_reason") <- v_fallback_reason
+    }
+  }
 
   # Set the appropriate class type
   if (methods::is(data, "scdata") == TRUE) {

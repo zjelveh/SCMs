@@ -2410,8 +2410,8 @@ most_similar <- function(
 #' @return List containing solver information
 #' @export
 get_solver_info <- function(scm_result) {
-  if (!methods::is(scm_result, "scest")) {
-    stop("Input must be a scest result object")
+  if (!methods::is(scm_result, "scest") && !methods::is(scm_result, "scpi")) {
+    stop("Input must be a scest or scpi result object")
   }
   
   # Extract W solver information
