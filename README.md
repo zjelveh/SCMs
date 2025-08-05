@@ -247,14 +247,15 @@ spec_results <- spec_curve(
 shap_results <- run_catboost_shap_analysis(spec_results$results)
 
 # Create specification curve with SHAP coloring
-plot_spec_curve(spec_results, shap_values = shap_results$shapley)
+plot_spec_curve(spec_results, shap_values = shap_results$shapley,
+                file_path_save = "basque_spec_curve_analysis.pdf")
 ```
 
 **Key Finding**: The same conceptual SCM approach produces estimates ranging from large negative to large positive effects, demonstrating the critical importance of specification transparency.
 
-![Specification Curve Analysis](inst/examples/kaplan_spec_curve.png)
+![Specification Curve Analysis](inst/examples/basque_spec_curve.png)
 
-*Example specification curve showing treatment effect estimates across 280+ specifications, with SHAP values revealing which methodological choices drive variation.*
+*Basque Country specification curve showing treatment effect estimates across multiple specifications, demonstrating how methodological choices drive variation in results.*
 
 All examples demonstrate the full pipeline from data preparation through specification curve analysis with SHAP interpretability.
 
