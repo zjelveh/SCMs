@@ -213,8 +213,52 @@ Dataset should be in long format with:
 
 - **Quick Start**: `inst/examples/quick_start_example.R`
 - **Complete Workflow**: `inst/examples/german_reunification_example.R`
+- **Basque Terrorism Study**: `inst/examples/basque_terrorism_example.R`
 
-Both examples demonstrate the full pipeline from data preparation through specification curve analysis with SHAP interpretability.
+### Basque Country Example
+
+The Basque terrorism example replicates and extends Abadie & Gardeazabal (2003), demonstrating how different software implementations can produce contradictory results:
+
+```r
+library(SCMs)
+
+# Load Basque Country dataset
+dataset <- fread(system.file("extdata/basque.csv", package = "SCMs"))
+
+# Run specification curve analysis
+spec_results <- spec_curve(
+  dataset = dataset,
+  outcomes = "gdpcap",
+  name_treated_unit = "Basque Country (Pais Vasco)",
+  treated_period = 1970,
+  feature_weights = c("uniform", "optimize"),
+  outcome_models = c("none", "augsynth", "ridge"),
+  covagg = list(
+    time_averaged = list(
+      gdp_baseline = list(var = "gdpcap", periods = c(1960, 1965)),
+      sectors_avg = list(var = "sec.agriculture", average = "full_pre")
+    ),
+    per_period = list(
+      gdp_each = list(var = "gdpcap", each = TRUE),
+      sectors_each = list(var = "sec.agriculture", each = TRUE)
+    )
+  )
+)
+
+# Generate SHAP interpretability
+shap_results <- run_catboost_shap_analysis(spec_results$results)
+
+# Create specification curve with SHAP coloring
+plot_spec_curve(spec_results, shap_values = shap_results$shapley)
+```
+
+**Key Finding**: The same conceptual SCM approach produces estimates ranging from large negative to large positive effects, demonstrating the critical importance of specification transparency.
+
+![Specification Curve Analysis](inst/examples/kaplan_spec_curve.png)
+
+*Example specification curve showing treatment effect estimates across 280+ specifications, with SHAP values revealing which methodological choices drive variation.*
+
+All examples demonstrate the full pipeline from data preparation through specification curve analysis with SHAP interpretability.
 
 ## Citation
 
