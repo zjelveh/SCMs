@@ -42,7 +42,8 @@ Imports: CVXR        (>= 1.0-10),
          ggnewscale,
          shapviz,
          treeshap,
-         ggrepel
+         ggrepel,
+         ggtext
 Description: Comprehensive toolkit for Synthetic Control Methods (SCM) with advanced 
     features including specification curve analysis, CatBoost+SHAP machine learning 
     analysis, and multiple inference procedures. The package highlight is specification 

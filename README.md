@@ -15,16 +15,16 @@ devtools::install()
 library(SCMs)
 library(data.table)
 
-# Load German reunification dataset
-dataset <- fread(system.file("extdata/scpi_germany.csv", package = "SCMs"))
+# Load Basque Country dataset
+dataset <- fread(system.file("extdata/basque.csv", package = "SCMs"))
 
 # Create SCM data structure
 scm_data <- scdata(
   df = dataset,
-  id.var = "country", time.var = "year", outcome.var = "gdp",
-  period.pre = 1960:1990, period.post = 1991:2003,
-  unit.tr = "West Germany",
-  unit.co = setdiff(unique(dataset$country), "West Germany")
+  id.var = "regionname", time.var = "year", outcome.var = "gdpcap",
+  period.pre = 1955:1969, period.post = 1970:1997,
+  unit.tr = "Basque Country (Pais Vasco)",
+  unit.co = setdiff(unique(dataset$regionname), "Basque Country (Pais Vasco)")
 )
 
 # Estimate synthetic control
@@ -105,31 +105,30 @@ covagg = list(
 )
 ```
 
-### Realistic Example: Economic Development Analysis
+### Realistic Example: Regional Economic Analysis
 
 ```r
-# Comprehensive covariate specification for development analysis
-economic_covariates = list(
+# Comprehensive covariate specification for Basque Country analysis
+basque_covariates = list(
   # GDP measures
-  gdp_1970 = list(var = "gdp", periods = 1970),           # Baseline level
-  gdp_1980s = list(var = "gdp", periods = 1980:1989),     # Decade average
-  gdp_growth = list(var = "gdp", growth = "period_over_period"), # Growth trend
-  gdp_volatility = list(var = "gdp", volatility = "sd"),  # Economic stability
+  gdp_baseline = list(var = "gdpcap", periods = c(1960, 1965)),    # Baseline level
+  gdp_pre_trend = list(var = "gdpcap", last = 5),                  # Pre-treatment trend
+  gdp_each = list(var = "gdpcap", each = TRUE),                    # All periods
   
-  # Trade patterns
-  trade_openness = list(var = "trade", rolling = 3),      # Smoothed trend
-  trade_late_pre = list(var = "trade", last = 5),         # Recent pattern
+  # Economic structure (sectoral composition)
+  agriculture = list(var = "sec.agriculture", average = "full_pre"), # Agricultural share
+  industry = list(var = "sec.industry", average = "full_pre"),       # Industrial share
+  energy = list(var = "sec.energy", average = "full_pre"),           # Energy sector
+  construction = list(var = "sec.construction", average = "full_pre"), # Construction
+  services = list(var = "sec.services.venta", average = "full_pre"),  # Market services
   
-  # Investment and development
-  investment_early = list(var = "investment", first = 10), # Early development
-  investment_trend = list(var = "investment", rolling = 5), # Investment momentum
+  # Demographics and development
+  population_density = list(var = "popdens", rolling = 3),         # Population density
+  human_capital = list(var = "school.high", periods = c(1964, 1967, 1969)), # Education
   
-  # Demographics and education
-  pop_milestones = list(var = "population", every_n = 5),  # Population checkpoints
-  education_recent = list(var = "education", last = 3),    # Recent education levels
-  
-  # Infrastructure
-  infrastructure_each = list(var = "infrastructure", each = TRUE) # Period-specific
+  # Investment patterns  
+  investment_rate = list(var = "invest", first = 10),              # Early investment
+  investment_trend = list(var = "invest", rolling = 5)             # Investment momentum
 )
 ```
 
@@ -139,13 +138,13 @@ economic_covariates = list(
 # Run comprehensive specification curve analysis
 spec_results <- spec_curve(
   dataset = dataset,
-  outcomes = "gdp",
-  col_name_unit_name = "country",
-  name_treated_unit = "West Germany",
-  covagg = economic_covariates,  # Use complex covariate specification
-  treated_period = 1991,
-  min_period = 1960,
-  end_period = 2003,
+  outcomes = "gdpcap",
+  col_name_unit_name = "regionname",
+  name_treated_unit = "Basque Country (Pais Vasco)",
+  covagg = basque_covariates,  # Use complex covariate specification
+  treated_period = 1970,
+  min_period = 1955,
+  end_period = 1997,
   col_name_period = "year",
   feature_weights = c("uniform", "optimize"),
   outcome_models = c("none", "augsynth", "lasso"),
@@ -160,9 +159,9 @@ spec_results <- spec_curve(
 
 # Configure CatBoost + SHAP analysis
 catboost_config <- create_catboost_config(
-  dataset_name = "german_reunification",
-  treated_unit_name = "West Germany",
-  outcome_filter = "gdp",
+  dataset_name = "basque_terrorism",
+  treated_unit_name = "Basque Country (Pais Vasco)",
+  outcome_filter = "gdpcap",
   spec_features = c("feat", "outcome_model", "const", "data_sample", "fw")
 )
 
@@ -172,8 +171,8 @@ shap_results <- run_catboost_shap_analysis(spec_results$results, catboost_config
 # Create specification curve with SHAP coloring
 plot_spec_curve(
   spec_results,
-  name_treated_unit = "West Germany",
-  outcomes = "gdp",
+  name_treated_unit = "Basque Country (Pais Vasco)",
+  outcomes = "gdpcap",
   shap_values = shap_results$shapley,  # Color by SHAP importance
   test_statistic = "treatment_effect"
 )
@@ -212,8 +211,7 @@ Dataset should be in long format with:
 ## Examples and Documentation
 
 - **Quick Start**: `inst/examples/quick_start_example.R`
-- **Complete Workflow**: `inst/examples/german_reunification_example.R`
-- **Basque Terrorism Study**: `inst/examples/basque_terrorism_example.R`
+- **Complete Workflow**: `inst/examples/basque_terrorism_example.R`
 
 ### Basque Country Example
 
@@ -260,12 +258,12 @@ plot_spec_curve(spec_results, shap_values = shap_results$shapley)
 
 All examples demonstrate the full pipeline from data preparation through specification curve analysis with SHAP interpretability.
 
-## Citation
+<!-- ## Citation
 
 ```
 Jelveh, Z. (2024). SCMs: Synthetic Control Methods with Advanced Analytics.
 R package version 0.1.0.
-```
+``` -->
 
 ## Contact
 
