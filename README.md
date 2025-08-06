@@ -1,4 +1,4 @@
-# SCMs: Synthetic Control Methods with Advanced Analytics
+# SCMs: Synthetic Control Methods
 
 A comprehensive R package for Synthetic Control Methods featuring specification curve analysis with SHAP interpretability. The package's highlight is specification curves where each point is colored by its Shapley value, showing how much each specification feature contributes to the predicted treatment effect.
 
