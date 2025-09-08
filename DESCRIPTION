@@ -43,7 +43,8 @@ Imports: CVXR        (>= 1.0-10),
          shapviz,
          treeshap,
          ggrepel,
-         ggtext
+         ggtext,
+         generics
 Description: Comprehensive toolkit for Synthetic Control Methods (SCM) with advanced 
     features including specification curve analysis, CatBoost+SHAP machine learning 
     analysis, and multiple inference procedures. The package highlight is specification 
@@ -58,5 +59,6 @@ RoxygenNote: 7.3.2
 Suggests: 
     testthat (>= 3.0.0),
     devtools,
-    clarabel
+    clarabel,
+    broom
 Config/testthat/edition: 3
