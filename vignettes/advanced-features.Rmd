@@ -1,0 +1,828 @@
+---
+title: "Advanced Features: Customization and Optimization"
+author: "SCMs Package Authors"
+date: "`r Sys.Date()`"
+output: 
+  rmarkdown::html_vignette:
+    toc: true
+    toc_depth: 3
+    fig_width: 10
+    fig_height: 6
+vignette: >
+  %\VignetteIndexEntry{Advanced Features}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.path = "figures/advanced-",
+  warning = FALSE,
+  message = FALSE,
+  eval = FALSE  # Set to TRUE when demonstrating specific features
+)
+```
+
+# Advanced Features and Customization
+
+This vignette covers advanced features of the SCMs package for users who need to customize their analysis, optimize performance, or extend the basic functionality. Topics include:
+
+- Custom constraint specifications and optimization
+- Performance optimization for large datasets
+- Memory management strategies
+- Advanced visualization and SHAP analysis
+- Parallel processing and computational considerations
+- Extension points for methodological innovations
+
+```{r load-packages}
+library(SCMs)
+library(data.table)
+library(ggplot2)
+library(parallel)
+library(R6)  # For advanced object-oriented features
+
+set.seed(2023)
+```
+
+# Performance Optimization
+
+## Large-Scale Specification Curves
+
+When working with hundreds or thousands of specifications, performance becomes crucial:
+
+```{r performance-setup}
+# Create larger synthetic dataset for performance testing
+create_large_panel <- function(n_units = 50, n_periods = 30, n_outcomes = 3) {
+  
+  units <- c("treated", paste0("control_", 1:(n_units - 1)))
+  periods <- 1990:(1990 + n_periods - 1)
+  
+  panel <- expand.grid(unit = units, year = periods, stringsAsFactors = FALSE)
+  setDT(panel)
+  
+  # Multiple outcomes
+  for (i in 1:n_outcomes) {
+    outcome_name <- paste0("outcome_", i)
+    panel[, (outcome_name) := 100 + (year - 1990) * runif(1, 0.5, 2) + rnorm(.N, 0, 5)]
+    
+    # Treatment effects
+    panel[unit == "treated" & year >= 2005, 
+          (outcome_name) := get(outcome_name) + rnorm(1, -10, 2)]
+  }
+  
+  # Multiple covariates
+  for (i in 1:8) {
+    covar_name <- paste0("covar_", i)
+    panel[, (covar_name) := rnorm(.N, 50, 10)]
+  }
+  
+  return(panel)
+}
+
+# Create performance test dataset
+large_panel <- create_large_panel(n_units = 30, n_periods = 25, n_outcomes = 2)
+cat(sprintf("Created dataset with %d observations\n", nrow(large_panel)))
+```
+
+## Parallel Processing Configuration
+
+```{r parallel-config}
+# Detect available cores and configure parallel processing
+n_cores <- parallel::detectCores()
+optimal_cores <- min(n_cores - 1, 8)  # Leave one core free, cap at 8
+
+cat(sprintf("System has %d cores, using %d for analysis\n", n_cores, optimal_cores))
+
+# Configure parallel backend
+if (require("doParallel", quietly = TRUE)) {
+  cl <- makeCluster(optimal_cores)
+  registerDoParallel(cl)
+  
+  # Ensure proper cleanup
+  on.exit(stopCluster(cl), add = TRUE)
+}
+
+# Memory-aware specification processing
+process_large_spec_curve <- function(dataset, max_specs_per_batch = 50) {
+  
+  # Create specification combinations
+  covariate_specs <- list(
+    basic = list(pre_period_mean = c("covar_1", "covar_2")),
+    extended = list(pre_period_mean = c("covar_1", "covar_2", "covar_3", "covar_4")),
+    behavioral = list(pre_period_mean = c("covar_5", "covar_6"))
+  )
+  
+  # Use memory management for large specification spaces
+  storage_manager <- SpecResultsManager$new(
+    max_memory_mb = 500,  # Limit memory usage
+    compression_level = 9  # High compression for storage
+  )
+  
+  # Process in batches
+  results <- run_spec_curve_analysis(
+    dataset = dataset,
+    outcomes = c("outcome_1", "outcome_2"),
+    covagg_list = covariate_specs,
+    col_name_unit_name = "unit",
+    name_treated_unit = "treated",
+    treated_period = 2005,
+    min_period = 1990,
+    end_period = 2014,
+    col_name_period = "year",
+    
+    # Optimization settings
+    cores = optimal_cores,
+    batch_size = max_specs_per_batch,
+    storage_manager = storage_manager,
+    
+    # Reduced specification space for demonstration
+    feature_weights = c("uniform"),
+    outcome_models = c("none", "ridge"),
+    
+    verbose = TRUE
+  )
+  
+  return(results)
+}
+```
+
+## Custom Constraint Specifications
+
+Advanced users may need custom optimization constraints beyond the built-in options:
+
+```{r custom-constraints}
+# Define custom constraint function
+create_custom_constraint <- function(constraint_type = "custom", parameters = list()) {
+  
+  if (constraint_type == "elastic_net") {
+    # Elastic net combines L1 and L2 penalties
+    return(list(
+      name = "L1-L2",
+      Q1 = parameters$alpha * parameters$lambda,      # L1 penalty
+      Q2 = (1 - parameters$alpha) * parameters$lambda  # L2 penalty
+    ))
+  }
+  
+  if (constraint_type == "group_sparsity") {
+    # Encourage sparsity in groups of similar units
+    return(list(
+      name = "custom_group",
+      penalty_matrix = parameters$group_penalty_matrix,
+      lambda = parameters$lambda
+    ))
+  }
+  
+  if (constraint_type == "bounded_simplex") {
+    # Simplex with additional bounds on individual weights
+    return(list(
+      name = "bounded_simplex",
+      w_min = parameters$min_weight,
+      w_max = parameters$max_weight
+    ))
+  }
+  
+  stop(paste("Unknown constraint type:", constraint_type))
+}
+
+# Example custom constraints
+custom_constraints <- list(
+  
+  # Elastic net with different mixing parameters
+  create_custom_constraint("elastic_net", 
+                          list(alpha = 0.3, lambda = 0.1)),
+  
+  create_custom_constraint("elastic_net",
+                          list(alpha = 0.7, lambda = 0.05)),
+  
+  # Bounded simplex (prevent any single unit from dominating)
+  create_custom_constraint("bounded_simplex",
+                          list(min_weight = 0.0, max_weight = 0.4))
+)
+
+print("Custom constraint specifications:")
+str(custom_constraints)
+```
+
+## Advanced Solver Configuration
+
+```{r solver-config}
+# Intelligent solver selection based on problem characteristics
+configure_optimal_solver <- function(n_donors, constraint_type, problem_size) {
+  
+  available_solvers <- CVXR::installed_solvers()
+  
+  # Commercial solvers (if available) for large problems
+  if (problem_size > 1000 && "GUROBI" %in% available_solvers) {
+    return(list(
+      primary = "GUROBI",
+      settings = list(TimeLimit = 300, MIPGap = 1e-4)
+    ))
+  }
+  
+  # Specialized solvers for different constraint types
+  if (constraint_type == "lasso" && "OSQP" %in% available_solvers) {
+    return(list(
+      primary = "OSQP", 
+      settings = list(eps_abs = 1e-5, eps_rel = 1e-5)
+    ))
+  }
+  
+  if (constraint_type == "simplex" && n_donors <= 50 && "ECOS" %in% available_solvers) {
+    return(list(
+      primary = "ECOS",
+      settings = list(abstol = 1e-6, reltol = 1e-6)
+    ))
+  }
+  
+  # Default fallback
+  return(list(
+    primary = available_solvers[1],
+    settings = list()
+  ))
+}
+
+# Apply solver configuration
+solver_config <- configure_optimal_solver(
+  n_donors = 29,
+  constraint_type = "simplex", 
+  problem_size = nrow(large_panel)
+)
+
+cat("Recommended solver configuration:\n")
+str(solver_config)
+```
+
+# Memory Management for Large Analyses
+
+## Using the SpecResultsManager
+
+```{r memory-management}
+# Initialize advanced storage manager
+storage_manager <- SpecResultsManager$new(
+  storage_dir = tempfile("scm_results"),
+  max_memory_mb = 1000,
+  compression_level = 6
+)
+
+# Demonstrate storage and retrieval
+demo_spec_results <- list(
+  results = data.table(
+    spec_id = paste0("spec_", 1:100),
+    treatment_effect = rnorm(100, -5, 2),
+    rmse = runif(100, 0.5, 2.0)
+  ),
+  abadie_inference = list(
+    p_values = data.table(spec_id = paste0("spec_", 1:100), p_value = runif(100))
+  )
+)
+
+# Store results
+storage_id <- "demo_analysis_2023"
+storage_manager$store_results(demo_spec_results, storage_id)
+
+# Retrieve specific subsets without loading all data
+filtered_results <- storage_manager$get_filtered_results(
+  storage_id,
+  filter_function = function(dt) dt[treatment_effect < -3],
+  select_cols = c("spec_id", "treatment_effect", "rmse")
+)
+
+print("Filtered results sample:")
+print(head(filtered_results))
+
+# Get storage statistics
+storage_stats <- storage_manager$get_storage_summary()
+print("Storage summary:")
+str(storage_stats)
+```
+
+## Batch Processing for Extremely Large Specification Spaces
+
+```{r batch-processing}
+# Process specifications in memory-efficient batches
+process_specifications_in_batches <- function(all_specifications, batch_size = 100) {
+  
+  n_specs <- length(all_specifications)
+  n_batches <- ceiling(n_specs / batch_size)
+  
+  cat(sprintf("Processing %d specifications in %d batches\n", n_specs, n_batches))
+  
+  results <- vector("list", n_batches)
+  
+  for (batch_i in 1:n_batches) {
+    
+    start_idx <- (batch_i - 1) * batch_size + 1
+    end_idx <- min(batch_i * batch_size, n_specs)
+    
+    batch_specs <- all_specifications[start_idx:end_idx]
+    
+    cat(sprintf("Processing batch %d/%d (%d specifications)...\n", 
+                batch_i, n_batches, length(batch_specs)))
+    
+    # Process batch with error handling
+    batch_result <- tryCatch({
+      
+      # Your specification processing logic here
+      process_specification_batch(batch_specs)
+      
+    }, error = function(e) {
+      warning(sprintf("Batch %d failed: %s", batch_i, e$message))
+      return(NULL)
+    })
+    
+    results[[batch_i]] <- batch_result
+    
+    # Periodic cleanup
+    if (batch_i %% 5 == 0) {
+      gc()  # Force garbage collection
+    }
+  }
+  
+  # Combine successful batches
+  successful_results <- results[!sapply(results, is.null)]
+  return(do.call(rbind, successful_results))
+}
+```
+
+# Advanced Visualization
+
+## Custom Specification Curve Plots
+
+```{r custom-plots}
+# Create highly customized specification curve visualization
+create_advanced_spec_plot <- function(spec_results, 
+                                     highlight_specs = NULL,
+                                     color_by = "shap_values",
+                                     facet_by = NULL) {
+  
+  # Extract plotting data
+  plot_data <- spec_results$results[unit_type == "treated" & post_period == TRUE]
+  
+  # Base plot
+  p <- ggplot(plot_data, aes(x = reorder(full_spec_id, tau), y = tau))
+  
+  # Color scheme based on user choice
+  if (color_by == "shap_values" && "shap_feature_importance" %in% names(plot_data)) {
+    p <- p + geom_point(aes(color = shap_feature_importance), alpha = 0.7, size = 1.5)
+    p <- p + scale_color_gradient2(
+      low = "blue", mid = "white", high = "red",
+      name = "SHAP\nImportance"
+    )
+  } else if (color_by == "rmse") {
+    p <- p + geom_point(aes(color = rmse), alpha = 0.7, size = 1.5)
+    p <- p + scale_color_gradient(low = "darkgreen", high = "darkred", name = "RMSE")
+  } else {
+    p <- p + geom_point(alpha = 0.6, size = 1.2, color = "steelblue")
+  }
+  
+  # Highlight specific specifications
+  if (!is.null(highlight_specs)) {
+    highlight_data <- plot_data[full_spec_id %in% highlight_specs]
+    p <- p + geom_point(data = highlight_data, color = "red", size = 3, shape = 1, stroke = 2)
+  }
+  
+  # Add reference lines
+  p <- p + geom_hline(yintercept = 0, linetype = "dashed", alpha = 0.5)
+  p <- p + geom_hline(yintercept = median(plot_data$tau, na.rm = TRUE), 
+                      color = "darkred", linetype = "solid", alpha = 0.7)
+  
+  # Faceting if requested
+  if (!is.null(facet_by) && facet_by %in% names(plot_data)) {
+    p <- p + facet_wrap(as.formula(paste("~", facet_by)), scales = "free_x")
+  }
+  
+  # Styling
+  p <- p + theme_minimal() +
+    theme(
+      axis.text.x = element_blank(),
+      axis.ticks.x = element_blank(),
+      panel.grid.minor = element_blank(),
+      plot.title = element_text(size = 14, hjust = 0.5),
+      plot.subtitle = element_text(size = 12, hjust = 0.5, color = "gray50")
+    ) +
+    labs(
+      x = "Specifications (ordered by effect size)",
+      y = "Treatment Effect Estimate",
+      title = "Advanced Specification Curve Analysis",
+      subtitle = paste("Distribution of treatment effects across", 
+                      nrow(plot_data), "specifications")
+    )
+  
+  return(p)
+}
+
+# Example usage (with mock data)
+mock_results <- list(
+  results = data.table(
+    full_spec_id = paste0("spec_", 1:200),
+    unit_type = "treated",
+    post_period = TRUE,
+    tau = rnorm(200, -8, 3),
+    rmse = runif(200, 0.8, 2.5),
+    outcome_model = sample(c("none", "ridge", "lasso"), 200, replace = TRUE),
+    const = sample(c("simplex", "lasso", "ridge"), 200, replace = TRUE)
+  )
+)
+
+# Create custom plot
+advanced_plot <- create_advanced_spec_plot(
+  mock_results,
+  color_by = "rmse",
+  facet_by = "outcome_model"
+)
+
+print(advanced_plot)
+```
+
+## SHAP Value Analysis and Visualization
+
+```{r shap-analysis}
+# Advanced SHAP analysis functions
+analyze_shap_patterns <- function(shap_data, specification_data) {
+  
+  if (is.null(shap_data) || nrow(shap_data) == 0) {
+    warning("No SHAP data available for analysis")
+    return(NULL)
+  }
+  
+  # Merge SHAP values with specification results
+  merged_data <- merge(shap_data, specification_data, by = "full_spec_id")
+  
+  # Calculate feature importance statistics
+  feature_importance <- merged_data[, .(
+    mean_abs_shap = mean(abs(shap_value), na.rm = TRUE),
+    sd_shap = sd(shap_value, na.rm = TRUE),
+    positive_proportion = mean(shap_value > 0, na.rm = TRUE),
+    correlation_with_effect = cor(shap_value, tau, use = "complete.obs")
+  ), by = feature_name][order(-mean_abs_shap)]
+  
+  return(list(
+    feature_importance = feature_importance,
+    merged_data = merged_data
+  ))
+}
+
+# Create SHAP interaction plots
+plot_shap_interactions <- function(shap_analysis_result) {
+  
+  if (is.null(shap_analysis_result)) return(NULL)
+  
+  merged_data <- shap_analysis_result$merged_data
+  
+  # Create interaction heatmap
+  interaction_plot <- ggplot(merged_data, 
+                            aes(x = feature_name, y = reorder(full_spec_id, tau))) +
+    geom_tile(aes(fill = shap_value)) +
+    scale_fill_gradient2(low = "blue", mid = "white", high = "red",
+                        name = "SHAP\nValue") +
+    theme_minimal() +
+    theme(axis.text.y = element_blank(),
+          axis.ticks.y = element_blank(),
+          axis.text.x = element_text(angle = 45, hjust = 1)) +
+    labs(x = "Features", y = "Specifications (ordered by effect size)",
+         title = "SHAP Value Heatmap Across Specifications")
+  
+  return(interaction_plot)
+}
+```
+
+# Methodological Extensions
+
+## Custom Inference Methods
+
+```{r custom-inference}
+# Implement custom inference procedure
+custom_bootstrap_inference <- function(scdata_obj, n_bootstrap = 1000, 
+                                      confidence_level = 0.95) {
+  
+  # Extract data components
+  Y_treated_pre <- scdata_obj$Y.pre
+  Y_donors_pre <- scdata_obj$Y.donors
+  
+  n_pre_periods <- length(Y_treated_pre)
+  n_donors <- ncol(Y_donors_pre)
+  
+  # Bootstrap procedure
+  bootstrap_effects <- replicate(n_bootstrap, {
+    
+    # Resample time periods with replacement
+    bootstrap_periods <- sample(1:n_pre_periods, n_pre_periods, replace = TRUE)
+    
+    # Create bootstrap data
+    Y_boot_treated <- Y_treated_pre[bootstrap_periods]
+    Y_boot_donors <- Y_donors_pre[bootstrap_periods, , drop = FALSE]
+    
+    # Estimate synthetic control on bootstrap sample
+    bootstrap_scdata <- scdata_obj
+    bootstrap_scdata$Y.pre <- Y_boot_treated
+    bootstrap_scdata$Y.donors <- Y_boot_donors
+    
+    # Estimate effect (simplified for demonstration)
+    tryCatch({
+      boot_result <- scest(bootstrap_scdata, w.constr = list(name = "simplex"))
+      boot_effect <- mean(boot_result$est.results$Y.post.fit - scdata_obj$Y.post)
+      return(boot_effect)
+    }, error = function(e) {
+      return(NA)
+    })
+  })
+  
+  # Calculate confidence intervals
+  bootstrap_effects <- bootstrap_effects[!is.na(bootstrap_effects)]
+  
+  alpha <- 1 - confidence_level
+  ci_lower <- quantile(bootstrap_effects, alpha/2, na.rm = TRUE)
+  ci_upper <- quantile(bootstrap_effects, 1 - alpha/2, na.rm = TRUE)
+  
+  return(list(
+    bootstrap_distribution = bootstrap_effects,
+    confidence_interval = c(ci_lower, ci_upper),
+    p_value = 2 * min(mean(bootstrap_effects >= 0, na.rm = TRUE),
+                     mean(bootstrap_effects <= 0, na.rm = TRUE))
+  ))
+}
+```
+
+## Custom Feature Engineering
+
+```{r feature-engineering}
+# Advanced feature engineering for synthetic control
+engineer_advanced_features <- function(data, outcome_var, time_var, id_var,
+                                      feature_specs = list()) {
+  
+  setDT(data)
+  
+  # Create polynomial time trends
+  if ("polynomial_trends" %in% names(feature_specs)) {
+    degree <- feature_specs$polynomial_trends$degree
+    data[, paste0("time_poly_", 1:degree) := lapply(1:degree, function(d) {
+      (get(time_var) - min(get(time_var)))^d
+    })]
+  }
+  
+  # Create interaction terms between covariates
+  if ("interactions" %in% names(feature_specs)) {
+    interaction_pairs <- feature_specs$interactions$pairs
+    for (pair in interaction_pairs) {
+      new_var <- paste(pair, collapse = "_x_")
+      data[, (new_var) := get(pair[1]) * get(pair[2])]
+    }
+  }
+  
+  # Create rolling averages of outcomes
+  if ("rolling_outcomes" %in% names(feature_specs)) {
+    window_sizes <- feature_specs$rolling_outcomes$windows
+    for (window in window_sizes) {
+      new_var <- paste0(outcome_var, "_roll_", window)
+      data[, (new_var) := frollmean(get(outcome_var), window), by = get(id_var)]
+    }
+  }
+  
+  # Create volatility measures
+  if ("volatility" %in% names(feature_specs)) {
+    window <- feature_specs$volatility$window
+    vol_var <- paste0(outcome_var, "_volatility")
+    data[, (vol_var) := frollapply(get(outcome_var), window, sd, na.rm = TRUE), 
+         by = get(id_var)]
+  }
+  
+  return(data)
+}
+
+# Example feature engineering specification
+advanced_features <- list(
+  polynomial_trends = list(degree = 3),
+  interactions = list(pairs = list(c("income", "price"), c("age", "education"))),
+  rolling_outcomes = list(windows = c(3, 5)),
+  volatility = list(window = 5)
+)
+
+# Apply feature engineering (example with mock data)
+# engineered_data <- engineer_advanced_features(
+#   large_panel, "outcome_1", "year", "unit", advanced_features
+# )
+```
+
+# Integration with External Tools
+
+## CatBoost and SHAP Integration
+
+```{r catboost-integration, eval=FALSE}
+# Advanced SHAP analysis with CatBoost
+run_advanced_shap_analysis <- function(spec_results, catboost_config = NULL) {
+  
+  if (is.null(catboost_config)) {
+    catboost_config <- create_catboost_config(
+      iterations = 1000,
+      learning_rate = 0.1,
+      depth = 6,
+      l2_leaf_reg = 3
+    )
+  }
+  
+  # Prepare data for CatBoost
+  analysis_data <- prepare_catboost_data(spec_results)
+  
+  # Train CatBoost model
+  catboost_model <- catboost::catboost.train(
+    learn_pool = analysis_data$train_pool,
+    test_pool = analysis_data$test_pool,
+    params = catboost_config
+  )
+  
+  # Calculate SHAP values
+  shap_values <- catboost::catboost.get_feature_importance(
+    catboost_model,
+    pool = analysis_data$train_pool,
+    type = "ShapValues"
+  )
+  
+  # Analyze SHAP results
+  shap_analysis <- analyze_shap_patterns(shap_values, spec_results$results)
+  
+  # Create visualizations
+  shap_plots <- list(
+    importance = plot_shap_importance(shap_analysis$feature_importance),
+    interactions = plot_shap_interactions(shap_analysis),
+    distributions = plot_shap_distributions(shap_values)
+  )
+  
+  return(list(
+    model = catboost_model,
+    shap_values = shap_values,
+    analysis = shap_analysis,
+    plots = shap_plots
+  ))
+}
+```
+
+## Database Integration for Large Datasets
+
+```{r database-integration, eval=FALSE}
+# Integration with database backends for very large datasets
+setup_database_backend <- function(connection_string, table_name) {
+  
+  require(DBI)
+  require(RSQLite)  # or appropriate database driver
+  
+  # Establish connection
+  con <- dbConnect(RSQLite::SQLite(), connection_string)
+  
+  # Create optimized table structure
+  dbExecute(con, sprintf("
+    CREATE TABLE IF NOT EXISTS %s (
+      unit_id TEXT,
+      time_period INTEGER,
+      outcome_value REAL,
+      covariate_1 REAL,
+      covariate_2 REAL,
+      /* ... additional columns ... */
+      INDEX(unit_id, time_period)
+    )
+  ", table_name))
+  
+  return(con)
+}
+
+# Query data efficiently for specification curve analysis
+query_specification_data <- function(db_connection, specification_params) {
+  
+  # Build optimized query based on specification
+  query <- sprintf("
+    SELECT unit_id, time_period, outcome_value, %s
+    FROM panel_data
+    WHERE time_period BETWEEN %d AND %d
+      AND unit_id IN (%s)
+  ", 
+    paste(specification_params$covariates, collapse = ", "),
+    specification_params$min_period,
+    specification_params$max_period,
+    paste0("'", specification_params$units, "'", collapse = ", ")
+  )
+  
+  # Execute query and return data.table
+  result <- dbGetQuery(db_connection, query)
+  return(as.data.table(result))
+}
+```
+
+# Computational Considerations
+
+## Memory Profiling
+
+```{r memory-profiling}
+# Monitor memory usage during large analyses
+monitor_memory_usage <- function(analysis_function, ...) {
+  
+  # Baseline memory
+  baseline_memory <- pryr::mem_used()
+  
+  cat(sprintf("Baseline memory usage: %s\n", 
+              format(baseline_memory, units = "auto")))
+  
+  # Run analysis with memory monitoring
+  start_time <- Sys.time()
+  
+  result <- tryCatch({
+    analysis_function(...)
+  }, error = function(e) {
+    cat(sprintf("Analysis failed: %s\n", e$message))
+    return(NULL)
+  })
+  
+  end_time <- Sys.time()
+  peak_memory <- pryr::mem_used()
+  
+  # Report results
+  cat(sprintf("Analysis completed in: %s\n", 
+              format(end_time - start_time)))
+  cat(sprintf("Peak memory usage: %s\n", 
+              format(peak_memory, units = "auto")))
+  cat(sprintf("Additional memory used: %s\n", 
+              format(peak_memory - baseline_memory, units = "auto")))
+  
+  # Cleanup
+  gc()
+  
+  return(result)
+}
+```
+
+## Optimization Recommendations
+
+```{r optimization-tips}
+# Provide optimization recommendations based on data characteristics
+recommend_optimizations <- function(n_units, n_periods, n_specifications, 
+                                   available_memory_gb = 8) {
+  
+  # Estimate memory requirements
+  estimated_memory_gb <- (n_units * n_periods * n_specifications * 8) / (1024^3)
+  
+  recommendations <- list()
+  
+  # Memory recommendations
+  if (estimated_memory_gb > available_memory_gb) {
+    recommendations$memory <- c(
+      "Consider batch processing",
+      "Use disk-based storage manager",
+      "Increase compression level",
+      "Reduce specification space if possible"
+    )
+  }
+  
+  # Computational recommendations
+  if (n_specifications > 500) {
+    recommendations$computation <- c(
+      "Enable parallel processing",
+      "Consider distributed computing",
+      "Use faster solvers if available"
+    )
+  }
+  
+  # Data structure recommendations
+  if (n_units > 100) {
+    recommendations$data_structure <- c(
+      "Use data.table for all operations",
+      "Consider database backend",
+      "Implement sparse matrix representations where possible"
+    )
+  }
+  
+  return(recommendations)
+}
+
+# Example usage
+opts <- recommend_optimizations(
+  n_units = 200,
+  n_periods = 40, 
+  n_specifications = 1000,
+  available_memory_gb = 16
+)
+
+cat("Optimization recommendations:\n")
+str(opts)
+```
+
+# Conclusion
+
+This vignette covered advanced features that enable:
+
+1. **Scalability**: Handle large datasets and specification spaces efficiently
+2. **Customization**: Tailor methods to specific research questions
+3. **Performance**: Optimize computational resources and memory usage
+4. **Extensibility**: Integrate with external tools and methodologies
+5. **Robustness**: Implement custom inference and validation procedures
+
+The SCMs package provides a flexible framework that can be adapted to diverse research contexts while maintaining statistical rigor and computational efficiency.
+
+For specific implementation questions or feature requests, please refer to the package documentation or submit issues to the project repository.
+
+# References
+
+- Lundberg, S. M., & Lee, S. I. (2017). A unified approach to interpreting model predictions. *Advances in Neural Information Processing Systems*, 30.
+
+- Diamond, A., & Sekhon, J. S. (2013). Genetic matching for estimating causal effects: A general multivariate matching method for achieving balance in observational studies. *Review of Economics and Statistics*, 95(3), 932-945.
+
+- Chernozhukov, V., Wuthrich, K., & Zhu, Y. (2021). An exact and robust conformal inference method for counterfactual and synthetic controls. *Journal of the American Statistical Association*, 116(536), 1849-1864.

@@ -40,7 +40,10 @@ scdata(
 
 \item{anticipation}{Numeric. Number of pre-treatment periods to exclude due to anticipation effects. Default is 0.}
 
-\item{constant}{Logical. Whether to include a constant term in the synthetic control weights. Default is FALSE.}
+\item{constant}{Logical. Whether to include a global constant (intercept) term in synthetic control estimation.
+When TRUE, adds a constant feature that allows the synthetic control to have a level shift relative to donors.
+Requires multiple features (more than one covariate specification). The constant term is estimated alongside
+donor weights and can be positive or negative. Default is FALSE.}
 
 \item{verbose}{Logical. Whether to print diagnostic messages and warnings. Default is TRUE.}
 
@@ -171,6 +174,22 @@ scm_data_mixed <- scdata(df = germany_data,
                          ),
                          covagg = list(
                            schooling_custom = list(var = "schooling", last = 5)
+                         ))
+                         
+# With constant term (requires multiple features)
+scm_data_const <- scdata(df = germany_data,
+                         id.var = "country",
+                         time.var = "year", 
+                         outcome.var = "gdp",
+                         period.pre = 1960:1990,
+                         period.post = 1991:2003,
+                         unit.tr = "West Germany",
+                         unit.co = c("USA", "UK", "France"),
+                         constant = TRUE,  # Enable constant term
+                         covagg = list(
+                           gdp_avg = list(var = "gdp", average = "full_pre"),
+                           investment_avg = list(var = "investment", average = "full_pre"),
+                           trade_periods = list(var = "trade", periods = c(1985, 1990))
                          ))
 }
 }

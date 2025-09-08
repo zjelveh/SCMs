@@ -139,7 +139,7 @@
 #'   col_name_unit_name = "state",
 #'   name_treated_unit = "California",
 #'   covagg = list(
-#'     "Traditional SCM" = list(label = "Traditional SCM"),
+#'     "Outcome Only per period" = list(label = "Outcome Only per period"),
 #'     "GDP Analysis" = list(
 #'       label = "GDP Analysis",
 #'       per_period = c("gdp", "outcome_var"),
@@ -163,7 +163,7 @@
 #'   col_name_unit_name = "country",
 #'   name_treated_unit = "Germany",
 #'   covagg = list(
-#'     "Traditional SCM" = list(label = "Traditional SCM"),
+#'     "Outcome Only per period" = list(label = "Outcome Only per period"),
 #'     "All Mean" = list(
 #'       label = "All Mean",
 #'       pre_period_mean = c("population", "trade", "investment", "outcome_var")
@@ -224,6 +224,7 @@ spec_curve <- function(
       list(name='ridge'),
       list(name='L1-L2')
     ),
+    constants = c(FALSE, TRUE),
     cores = 1,
     verbose = TRUE,
     inference_type = "placebo",
@@ -331,7 +332,8 @@ spec_curve <- function(
       constraint = lapply(constraints, function(x) x$name),
       feature_weight = feature_weights,
       covariate_agg = seq_along(covagg),
-      donor = donor_sample
+      donor = donor_sample,
+      constant = constants
     )
 
     # Create all combinations
@@ -341,6 +343,7 @@ spec_curve <- function(
       feature_weight = param_list$feature_weight,
       covariate_agg = param_list$covariate_agg,
       donor = param_list$donor,
+      constant = param_list$constant,
       stringsAsFactors = FALSE
     )
   }
@@ -399,7 +402,7 @@ spec_curve <- function(
 
   # Function to process a single specification
   process_spec <- function(
-    outc, const_idx, fw, ca_idx, ds, spec_number,
+    outc, const_idx, fw, ca_idx, ds, constant, spec_number,
     constraints, covagg, donor_samples, dataset,
     min_period, treated_period, end_period,
     col_name_unit_name, name_treated_unit, col_name_period,
@@ -453,7 +456,7 @@ spec_curve <- function(
         ca_formatted <- ca[setdiff(names(ca), "label")]
         
       } else if (format_type == "empty") {
-        # Empty specification (traditional SCM - outcome only)
+        # Empty specification (outcome only per period)
         ca_formatted <- list()
         
       } else {
@@ -476,7 +479,8 @@ spec_curve <- function(
         end_period,
         outcome_models = outcome_models,
         feature_weights = fw,
-        w.constr = const
+        w.constr = const,
+        constant = constant
       )
     }, error = function(e) {
       message(sprintf("ERROR in estimate_sc for spec %s: %s", spec_name, e$message))
@@ -658,6 +662,7 @@ spec_curve <- function(
       fw = fw,
       feature_names = feature_names,
       ds = ds,
+      constant = constant,
       result = result
     ))
   }
@@ -732,6 +737,7 @@ spec_curve <- function(
         fw = p$feature_weight,
         ca_idx = p$covariate_agg,
         ds = p$donor,
+        constant = p$constant,
         spec_number = p$spec_number,
         constraints = constraints,
         covagg = covagg,
@@ -759,6 +765,7 @@ spec_curve <- function(
         fw = p$feature_weight,
         ca_idx = p$covariate_agg,
         ds = p$donor,
+        constant = p$constant,
         spec_number = p$spec_number,
         constraints = constraints,
         covagg = covagg,
@@ -816,6 +823,7 @@ spec_curve <- function(
         combined$data_sample <- res$ds
         combined$feat <- res$feature_names
         combined$spec_number <- res$spec_number
+        combined$constant <- res$constant
         combined$rmse <- combined$pre_rmse
 
         ## FIX: Create a new, fully unique specification ID
@@ -982,7 +990,9 @@ spec_curve <- function(
     stop("No valid results found")
   }
 
-
+  # Assign S3 class for proper method dispatch
+  class(final_results) <- c("spec_curve", "list")
+  
   if (verbose) message("Specification curve generation complete")
   return(final_results)
 }

@@ -19,7 +19,8 @@ estimate_sc(
   w.constr = NULL,
   V = "separate",
   V.mat = NULL,
-  solver = "ECOS"
+  solver = "ECOS",
+  constant = FALSE
 )
 }
 \arguments{
@@ -53,6 +54,8 @@ estimate_sc(
 
 \item{solver}{Character. Solver to use for the optimization problem. Default is "ECOS".}
 
+\item{constant}{Logical. Whether to include a constant term in synthetic control weights. Default is FALSE.}
+
 \item{P}{Optional. Number of factors to use (for AugSynth).}
 }
 \value{
@@ -63,7 +66,9 @@ This function processes and estimates a Synthetic Control Model (SCM) based on t
 }
 \examples{
 # Example usage (replace with actual example when available)
-# result <- estimate_sc(dataset = my_data, outcome = "gdp", covagg = c("population", "unemployment"),
+# result <- estimate_sc(dataset = my_data, outcome = "gdp", 
+#                       covagg = c("population", "unemployment"),
 #                       col_name_unit_name = "state", name_treated_unit = "California",
-#                       col_name_period = "year", treated_period = 2000, min_period = 1990, end_period = 2010)
+#                       col_name_period = "year", treated_period = 2000, 
+#                       min_period = 1990, end_period = 2010)
 }

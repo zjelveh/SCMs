@@ -9,7 +9,8 @@ create_catboost_config(
   treated_unit_name,
   outcome_filter = NULL,
   spec_features = c("outcome_model", "const", "fw", "feat", "data_sample"),
-  treated_unit_only = TRUE
+  treated_unit_only = TRUE,
+  catboost_params = NULL
 )
 }
 \arguments{

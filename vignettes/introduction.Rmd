@@ -1,0 +1,255 @@
+---
+title: "Introduction to SCMs: Synthetic Control Methods with Specification Curve Analysis"
+author: "SCMs Package Authors"
+date: "`r Sys.Date()`"
+output: 
+  rmarkdown::html_vignette:
+    toc: true
+    toc_depth: 3
+    fig_width: 8
+    fig_height: 6
+vignette: >
+  %\VignetteIndexEntry{Introduction to SCMs}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.path = "figures/intro-",
+  warning = FALSE,
+  message = FALSE
+)
+```
+
+# Introduction
+
+The **SCMs** package provides a comprehensive implementation of synthetic control methods with advanced specification curve analysis and machine learning integration. This vignette introduces the key concepts and basic usage patterns.
+
+## What are Synthetic Control Methods?
+
+Synthetic control methods allow researchers to estimate the causal effect of an intervention on a treated unit by constructing a "synthetic" version of the treated unit using a weighted combination of control units. The method is particularly useful for:
+
+- Policy evaluation with a single treated unit (e.g., a state, country, or firm)
+- Settings where randomized experiments are not feasible
+- Time series data with pre- and post-treatment periods
+
+## Why Specification Curve Analysis?
+
+Traditional synthetic control studies typically present results from a single specification. However, researchers must make many modeling choices:
+
+- Which pre-treatment characteristics to match on?
+- How to aggregate covariates over time?
+- Which optimization constraints to use?
+- What feature weighting scheme to employ?
+
+**Specification curve analysis** systematically varies these choices and examines the distribution of treatment effect estimates across all reasonable specifications. This approach:
+
+1. **Increases transparency** by showing the full range of plausible estimates
+2. **Assesses robustness** by revealing whether conclusions depend on specific choices
+3. **Identifies drivers** of variation in results through SHAP value analysis
+
+## Package Highlights
+
+The SCMs package offers several innovations:
+
+- **Comprehensive specification spaces**: Systematically vary modeling choices
+- **SHAP integration**: Use machine learning to understand what drives variation in results
+- **Advanced inference**: Both Abadie placebo tests and bootstrap methods
+- **Performance optimization**: Handle large specification curves efficiently
+- **Professional visualization**: Publication-ready plots with ggplot2
+
+## Basic Workflow
+
+A typical analysis follows this pattern:
+
+1. **Prepare data**: Panel data in long format
+2. **Run specification curve**: Systematically vary modeling choices
+3. **Visualize results**: Examine the distribution of treatment effects
+4. **Interpret patterns**: Use SHAP values to understand variation
+5. **Draw conclusions**: Assess robustness and policy implications
+
+# Quick Start Example
+
+Let's demonstrate the package with a simple example using simulated data.
+
+```{r load-packages}
+library(SCMs)
+library(data.table)
+library(ggplot2)
+
+# For reproducibility
+set.seed(123)
+```
+
+## Create Example Data
+
+```{r create-data}
+# Create panel data for demonstration
+states <- c("California", "Texas", "New York", "Florida", "Illinois")
+years <- 1990:2010
+
+# Generate full panel
+panel_data <- expand.grid(
+  state = states,
+  year = years,
+  stringsAsFactors = FALSE
+)
+
+# Convert to data.table for efficiency
+setDT(panel_data)
+
+# Add outcome variable with treatment effect for California after 2000
+panel_data[, gdp := 100 + (year - 1990) * 1.5 + rnorm(.N, 0, 3)]
+panel_data[state == "California" & year > 2000, gdp := gdp + 8]
+
+# Add covariates
+panel_data[, population := 1000 + (year - 1990) * 50 + rnorm(.N, 0, 100)]
+panel_data[, investment := 20 + gdp * 0.15 + rnorm(.N, 0, 5)]
+
+# Display sample of data
+head(panel_data, 10)
+```
+
+## Basic Synthetic Control Analysis
+
+Let's start with a single specification to understand the core methodology:
+
+```{r basic-scdata, eval=FALSE}
+# Prepare synthetic control data
+scdata_result <- scdata(
+  df = panel_data,
+  id.var = "state",
+  time.var = "year", 
+  outcome.var = "gdp",
+  period.pre = 1990:2000,
+  period.post = 2001:2010,
+  unit.tr = "California",
+  unit.co = c("Texas", "New York", "Florida", "Illinois"),
+  covagg = list(
+    list(var = "population", average = TRUE),
+    list(var = "investment", average = TRUE)
+  )
+)
+
+# Estimate synthetic control weights
+scest_result <- scest(
+  data = scdata_result,
+  w.constr = list(name = "simplex"),
+  feature_weights = "uniform"
+)
+
+# View results
+print(scest_result)
+summary(scest_result)
+```
+
+## Specification Curve Analysis
+
+Now let's examine robustness by varying multiple modeling choices:
+
+```{r spec-curve, eval=FALSE}
+# Define covariate specifications to test
+covariate_specs <- list(
+  # Basic specification
+  list(
+    label = "basic",
+    pre_period_mean = c("population", "investment")
+  ),
+  
+  # Include outcome lags
+  list(
+    label = "with_lags", 
+    pre_period_mean = c("population", "investment"),
+    per_period = c("outcome_var")
+  ),
+  
+  # Population only
+  list(
+    label = "population_only",
+    pre_period_mean = c("population")
+  )
+)
+
+# Run specification curve analysis
+spec_results <- run_spec_curve_analysis(
+  dataset = panel_data,
+  outcomes = "gdp",
+  covagg_list = covariate_specs,
+  col_name_unit_name = "state",
+  name_treated_unit = "California", 
+  treated_period = 2001,
+  min_period = 1990,
+  end_period = 2010,
+  col_name_period = "year",
+  
+  # Modeling choices to vary
+  feature_weights = c("uniform", "optimize"),
+  outcome_models = c("none", "ridge"),
+  constraints = list(
+    list(name = "simplex"),
+    list(name = "lasso", Q = 0.1)
+  ),
+  
+  # Inference settings
+  inference_type = "placebo",
+  cores = 1,  # Use 1 core for vignette
+  verbose = TRUE
+)
+
+# View specification curve
+plot(spec_results)
+```
+
+# Understanding the Output
+
+## Treatment Effect Distribution
+
+The specification curve shows:
+
+- **X-axis**: Individual specifications (sorted by effect size)
+- **Y-axis**: Treatment effect estimates
+- **Points**: Each specification's estimate
+- **Colors**: SHAP values indicating which features drive the estimates
+
+## Key Interpretations
+
+1. **Central tendency**: Where do most estimates cluster?
+2. **Range**: How wide is the distribution of plausible effects?
+3. **Outliers**: Are there specifications with very different results?
+4. **Patterns**: Do certain modeling choices systematically affect results?
+
+## Statistical Inference
+
+The package provides two inference approaches:
+
+1. **Abadie Placebo Tests**: Compare treated unit's post/pre RMSPE ratio to control units
+2. **Bootstrap Methods**: Construct null distributions for hypothesis testing
+
+## SHAP Value Interpretation
+
+SHAP (SHapley Additive exPlanations) values help understand:
+
+- Which pre-treatment features are most predictive
+- How feature importance varies across specifications
+- Whether results are driven by specific covariates
+
+# Next Steps
+
+This introduction covered the basic concepts and workflow. To learn more:
+
+- **Complete Workflow** vignette: Step-by-step analysis with real data
+- **Advanced Features** vignette: Customization, optimization, and extensions
+- **Package documentation**: `help(package = "SCMs")`
+
+The synthetic control method with specification curve analysis provides a powerful framework for causal inference with observational data. The SCMs package makes these advanced methods accessible while maintaining statistical rigor and computational efficiency.
+
+# References
+
+- Abadie, A., Diamond, A., & Hainmueller, J. (2010). Synthetic control methods for comparative case studies. *Journal of the American Statistical Association*, 105(490), 493-505.
+
+- Simonsohn, U., Simmons, J. P., & Nelson, L. D. (2020). Specification curve analysis. *Nature Human Behaviour*, 4(11), 1208-1214.
+
+- Ben-Michael, E., Feller, A., & Rothstein, J. (2021). The augmented synthetic control method. *Journal of the American Statistical Association*, 116(536), 1789-1803.

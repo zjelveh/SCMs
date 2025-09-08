@@ -648,7 +648,7 @@ shrinkage.EST <- function(method, A, Z, V, J, KM) {
 
 # Auxiliary function that solves the (un)constrained problem to estimate b
 # depending on the desired method
-b.est <- function(A, Z, J, KM, w.constr, V, CVXR.solver = "ECOS") {
+b.est <- function(A, Z, C = NULL, J, KM, w.constr, V, CVXR.solver = "ECOS") {
   
   # Check for global clarabel preference for all constraint types
   use_clarabel <- getOption("SCMs.prefer_clarabel", FALSE)
@@ -656,20 +656,20 @@ b.est <- function(A, Z, J, KM, w.constr, V, CVXR.solver = "ECOS") {
   if (use_clarabel && requireNamespace("clarabel", quietly = TRUE)) {
     # Use clarabel for all constraint types (including pensynth)
     if (w.constr[["p"]] == "pensynth") {
-      result <- b.est.clarabel(A, Z, J, KM, w.constr, V)
+      result <- b.est.clarabel(A, Z, C, J, KM, w.constr, V)
       attr(result, "solver_used") <- "clarabel"
       attr(result, "constraint_type") <- "pensynth"
       return(result)
     } else {
       tryCatch({
-        result <- b.est.clarabel.unified(A, Z, J, KM, w.constr, V)
+        result <- b.est.clarabel.unified(A, Z, C, J, KM, w.constr, V)
         attr(result, "solver_used") <- "clarabel"
         attr(result, "constraint_type") <- w.constr[["p"]]
         return(result)
       }, error = function(e) {
         # If clarabel fails, fall back to CVXR but log the fallback
         warning(paste0("Clarabel failed for constraint '", w.constr[["p"]], "', falling back to CVXR: ", e$message))
-        result <- b.est.cvxr.fallback(A, Z, J, KM, w.constr, V, CVXR.solver)
+        result <- b.est.cvxr.fallback(A, Z, C, J, KM, w.constr, V, CVXR.solver)
         attr(result, "solver_used") <- "CVXR"
         attr(result, "constraint_type") <- w.constr[["p"]]
         attr(result, "fallback_reason") <- e$message
@@ -680,7 +680,7 @@ b.est <- function(A, Z, J, KM, w.constr, V, CVXR.solver = "ECOS") {
   
   # Fallback to CVXR/specialized functions
   if (w.constr[["p"]] == "pensynth") {
-    result <- b.est.cvxr.pensynth(A, Z, J, KM, w.constr, V, CVXR.solver)
+    result <- b.est.cvxr.pensynth(A, Z, C, J, KM, w.constr, V, CVXR.solver)
     attr(result, "solver_used") <- "CVXR"
     attr(result, "constraint_type") <- "pensynth"
     return(result)
@@ -688,7 +688,7 @@ b.est <- function(A, Z, J, KM, w.constr, V, CVXR.solver = "ECOS") {
   
 
   # Use CVXR solver (default path)
-  result <- b.est.cvxr.fallback(A, Z, J, KM, w.constr, V, CVXR.solver)
+  result <- b.est.cvxr.fallback(A, Z, C, J, KM, w.constr, V, CVXR.solver)
   attr(result, "solver_used") <- "CVXR"
   attr(result, "constraint_type") <- w.constr[["p"]]
   return(result)
@@ -704,7 +704,7 @@ b.est <- function(A, Z, J, KM, w.constr, V, CVXR.solver = "ECOS") {
 #' @param V Feature weighting matrix
 #' @param CVXR.solver CVXR solver to use
 #' @return Numeric vector of weights
-b.est.cvxr.fallback <- function(A, Z, J, KM, w.constr, V, CVXR.solver) {
+b.est.cvxr.fallback <- function(A, Z, C = NULL, J, KM, w.constr, V, CVXR.solver) {
   dire <- w.constr[["dir"]]
   lb <- w.constr[["lb"]]
   p <- w.constr[["p"]]
@@ -717,8 +717,20 @@ b.est.cvxr.fallback <- function(A, Z, J, KM, w.constr, V, CVXR.solver) {
     Q2 <- NULL
   }
   
-  x <- CVXR::Variable(J + KM)
-  objective <- CVXR::Minimize(CVXR::quad_form(A - Z %*% x, V))
+  # Determine problem dimensions
+  if (!is.null(C)) {
+    # Include constant terms - optimize over both w (J+KM weights) and γ (constant coefficients)
+    n_const <- ncol(C)
+    x <- CVXR::Variable(J + KM + n_const)
+    # Split variables: w = x[1:(J+KM)], γ = x[(J+KM+1):(J+KM+n_const)]
+    w_vars <- x[1:(J+KM)]
+    gamma_vars <- x[(J+KM+1):(J+KM+n_const)]
+    objective <- CVXR::Minimize(CVXR::quad_form(A - Z %*% w_vars - C %*% gamma_vars, V))
+  } else {
+    # No constant terms - original formulation
+    x <- CVXR::Variable(J + KM)
+    objective <- CVXR::Minimize(CVXR::quad_form(A - Z %*% x, V))
+  }
   
   if (p == "no norm") {
     # least squares
@@ -776,13 +788,27 @@ b.est.cvxr.fallback <- function(A, Z, J, KM, w.constr, V, CVXR.solver) {
   }
   
   b <- b[, 1, drop = TRUE]
-  names(b) <- colnames(Z)
   
-  return(b)
+  if (!is.null(C)) {
+    # When C is present, return both donor weights and constant coefficients
+    n_const <- ncol(C)
+    donor_weights <- b[1:(J+KM)]
+    constant_coeffs <- b[(J+KM+1):(J+KM+n_const)]
+    
+    names(donor_weights) <- colnames(Z)
+    names(constant_coeffs) <- colnames(C)
+    
+    # Return list with both components
+    return(list(w = donor_weights, gamma = constant_coeffs))
+  } else {
+    # Original case - return only donor weights
+    names(b) <- colnames(Z)
+    return(b)
+  }
 }
 
 # CVXR implementation for pensynth (current)
-b.est.cvxr.pensynth <- function(A, Z, J, KM, w.constr, V, CVXR.solver) {
+b.est.cvxr.pensynth <- function(A, Z, C = NULL, J, KM, w.constr, V, CVXR.solver) {
   lambda <- w.constr[["lambda"]]
   
   # Extract V weights for penalty calculation  
@@ -830,7 +856,7 @@ b.est.cvxr.pensynth <- function(A, Z, J, KM, w.constr, V, CVXR.solver) {
 }
 
 # Clarabel implementation for pensynth (future)
-b.est.clarabel <- function(A, Z, J, KM, w.constr, V) {
+b.est.clarabel <- function(A, Z, C = NULL, J, KM, w.constr, V) {
   # High-performance clarabel implementation for pensynth
   
   # Only handle pensynth constraint for now
@@ -912,15 +938,24 @@ b.est.clarabel <- function(A, Z, J, KM, w.constr, V) {
 #' @param w.constr Constraint specification
 #' @param V Feature weighting matrix
 #' @return Numeric vector of weights
-b.est.clarabel.ols <- function(A, Z, J, KM, w.constr, V) {
+b.est.clarabel.ols <- function(A, Z, C = NULL, J, KM, w.constr, V) {
   # QP formulation: minimize 0.5 * x'Px + q'x
-  # P = 2 * Z'VZ, q = -2 * Z'VA
-  P <- 2 * t(Z) %*% V %*% Z
-  q <- -2 * as.vector(t(Z) %*% V %*% A)
+  if (!is.null(C)) {
+    # With constant terms: minimize ||A - Z*w - C*γ||_V^2
+    # Combined matrix [Z C], variables [w; γ]
+    ZC <- cbind(Z, C)
+    P <- 2 * t(ZC) %*% V %*% ZC
+    q <- -2 * as.vector(t(ZC) %*% V %*% A)
+    n_vars <- J + KM + ncol(C)
+  } else {
+    # Original case: minimize ||A - Z*w||_V^2
+    P <- 2 * t(Z) %*% V %*% Z
+    q <- -2 * as.vector(t(Z) %*% V %*% A)
+    n_vars <- J + KM
+  }
   
   # For unconstrained QP, clarabel might not accept empty constraint matrices
   # Let's add a dummy constraint that doesn't restrict anything: 0*x = 0
-  n_vars <- J + KM
   A_constraints <- matrix(0, nrow = 1, ncol = n_vars)  # All zeros
   b_constraints <- 0  # RHS = 0
   
@@ -947,7 +982,24 @@ b.est.clarabel.ols <- function(A, Z, J, KM, w.constr, V) {
     stop(paste0("Clarabel OLS optimization failed! Status: ", result$status, " (", status_desc, ")"))
   }
   
-  return(as.numeric(result$x))
+  solution <- as.numeric(result$x)
+  
+  if (!is.null(C)) {
+    # When C is present, return both donor weights and constant coefficients
+    n_const <- ncol(C)
+    donor_weights <- solution[1:(J+KM)]
+    constant_coeffs <- solution[(J+KM+1):(J+KM+n_const)]
+    
+    names(donor_weights) <- colnames(Z)
+    names(constant_coeffs) <- colnames(C)
+    
+    # Return list with both components
+    return(list(w = donor_weights, gamma = constant_coeffs))
+  } else {
+    # Original case - return only donor weights
+    names(solution) <- colnames(Z)
+    return(solution)
+  }
 }
 
 #' @title Clarabel W Optimization - Simplex
@@ -959,10 +1011,21 @@ b.est.clarabel.ols <- function(A, Z, J, KM, w.constr, V) {
 #' @param w.constr Constraint specification
 #' @param V Feature weighting matrix
 #' @return Numeric vector of weights
-b.est.clarabel.simplex <- function(A, Z, J, KM, w.constr, V) {
+b.est.clarabel.simplex <- function(A, Z, C = NULL, J, KM, w.constr, V) {
   # QP formulation: minimize 0.5 * x'Px + q'x
-  P <- 2 * t(Z) %*% V %*% Z
-  q <- -2 * as.vector(t(Z) %*% V %*% A)
+  if (!is.null(C)) {
+    # With constant terms: minimize ||A - Z*w - C*γ||_V^2
+    # Combined matrix [Z C], variables [w; γ]
+    ZC <- cbind(Z, C)
+    P <- 2 * t(ZC) %*% V %*% ZC
+    q <- -2 * as.vector(t(ZC) %*% V %*% A)
+    n_vars <- J + KM + ncol(C)
+  } else {
+    # Original case: minimize ||A - Z*w||_V^2
+    P <- 2 * t(Z) %*% V %*% Z
+    q <- -2 * as.vector(t(Z) %*% V %*% A)
+    n_vars <- J + KM
+  }
   
   # Get constraint parameters
   QQ <- w.constr[["Q"]]  # Should be 1 for simplex
@@ -970,7 +1033,7 @@ b.est.clarabel.simplex <- function(A, Z, J, KM, w.constr, V) {
   
   # Constraint matrices for simplex: sum(x[1:J]) = QQ, x[1:J] >= lb
   # A_constraints * x + s = b_constraints, s in cones
-  n_vars <- J + KM
+  # Note: constraints only apply to donor weights (first J variables), not constant coefficients
   
   # Equality constraint: sum(x[1:J]) = QQ
   A_eq <- matrix(0, nrow = 1, ncol = n_vars)
@@ -1007,7 +1070,24 @@ b.est.clarabel.simplex <- function(A, Z, J, KM, w.constr, V) {
     stop(paste0("Clarabel simplex optimization failed! Status: ", result$status, " (", status_desc, ")"))
   }
   
-  return(as.numeric(result$x))
+  solution <- as.numeric(result$x)
+  
+  if (!is.null(C)) {
+    # When C is present, return both donor weights and constant coefficients
+    n_const <- ncol(C)
+    donor_weights <- solution[1:(J+KM)]
+    constant_coeffs <- solution[(J+KM+1):(J+KM+n_const)]
+    
+    names(donor_weights) <- colnames(Z)
+    names(constant_coeffs) <- colnames(C)
+    
+    # Return list with both components
+    return(list(w = donor_weights, gamma = constant_coeffs))
+  } else {
+    # Original case - return only donor weights
+    names(solution) <- colnames(Z)
+    return(solution)
+  }
 }
 
 #' @title Clarabel W Optimization - Ridge
@@ -1081,17 +1161,17 @@ b.est.clarabel.ridge <- function(A, Z, J, KM, w.constr, V) {
 #' @param w.constr Constraint specification
 #' @param V Feature weighting matrix
 #' @return Numeric vector of weights
-b.est.clarabel.unified <- function(A, Z, J, KM, w.constr, V) {
+b.est.clarabel.unified <- function(A, Z, C = NULL, J, KM, w.constr, V) {
   # Extract constraint parameters
   p <- w.constr[["p"]]
   dire <- w.constr[["dir"]]
   
   # Dispatch to appropriate constraint-specific function
   if (p == "no norm") {
-    return(b.est.clarabel.ols(A, Z, J, KM, w.constr, V))
+    return(b.est.clarabel.ols(A, Z, C, J, KM, w.constr, V))
     
   } else if (p == "L1" && dire == "==") {
-    return(b.est.clarabel.simplex(A, Z, J, KM, w.constr, V))
+    return(b.est.clarabel.simplex(A, Z, C, J, KM, w.constr, V))
     
   } else if (p == "L1" && dire == "<=") {
     # Lasso - not implemented yet

@@ -852,96 +852,95 @@ plot_categorical_main_vs_interactions <- function(categorical_decomposition, top
   # Convert to data.frame to avoid data.table issues with ggplot
   plot_data <- as.data.frame(plot_data)
   
-  # Choose absolute or non-absolute values
+  # Choose absolute or non-absolute values and calculate percentages
   if(use_abs) {
-    plot_data$main_effect_value <- plot_data$true_abs_main_effect
-    plot_data$total_shap_value <- plot_data$total_abs_shap_value
+    plot_data$main_effect_raw <- plot_data$true_abs_main_effect
+    plot_data$total_shap_raw <- plot_data$total_abs_shap_value
     value_type <- "absolute"
   } else {
-    plot_data$main_effect_value <- plot_data$true_main_effect
-    plot_data$total_shap_value <- plot_data$total_shap_value
+    plot_data$main_effect_raw <- plot_data$true_main_effect
+    plot_data$total_shap_raw <- plot_data$total_shap_value
     value_type <- "signed"
   }
   
+  # Calculate percentages (avoid division by zero)
+  plot_data$main_effect_percent <- ifelse(plot_data$total_shap_raw != 0, 
+                                         (plot_data$main_effect_raw / plot_data$total_shap_raw) * 100, 
+                                         0)
+  plot_data$interaction_percent <- ifelse(plot_data$total_shap_raw != 0, 
+                                         (plot_data$top_interaction_contribution / plot_data$total_shap_raw) * 100, 
+                                         0)
+  
   # Create plot title
   if(is.null(title)) {
-    title <- paste0("SHAP Decomposition: Feature Categories - Main Effects vs Top Interactions (", value_type, ")")
+    title <- paste0("SHAP Decomposition: Main Effects vs Top Interactions (% of Total SHAP)")
   }
   
   # Filter out any problematic values
-  plot_data <- plot_data[!is.na(plot_data$main_effect_value) & 
-                        !is.na(plot_data$top_interaction_contribution) &
-                        !is.infinite(plot_data$main_effect_value) &
-                        !is.infinite(plot_data$top_interaction_contribution), ]
+  plot_data <- plot_data[!is.na(plot_data$main_effect_percent) & 
+                        !is.na(plot_data$interaction_percent) &
+                        !is.infinite(plot_data$main_effect_percent) &
+                        !is.infinite(plot_data$interaction_percent) &
+                        plot_data$total_shap_raw > 0, ]  # Ensure positive total SHAP
   
   if(nrow(plot_data) == 0) {
     stop("No valid data points after filtering")
   }
   
-  # Create clean category labels (remove feature prefix for readability)
-  plot_data$clean_category <- gsub("^[^_]+_", "", plot_data$category)
+  # Create clean interaction partner labels (remove feature prefix for readability)
+  plot_data$clean_interaction_partner <- gsub("^[^_]+_", "", plot_data$top_interaction_partner)
   
-  # Add labels for top categories (sort by total SHAP impact)
+  # Add labels for top categories showing interaction partners
   plot_data$label <- ""
-  plot_data$label[1:min(top_n, nrow(plot_data))] <- plot_data$clean_category[1:min(top_n, nrow(plot_data))]
+  plot_data$label[1:min(top_n, nrow(plot_data))] <- plot_data$clean_interaction_partner[1:min(top_n, nrow(plot_data))]
   
-  # Calculate axis limits with padding - handle zero range case
-  x_range <- range(plot_data$main_effect_value, na.rm = TRUE)
-  y_range <- range(plot_data$top_interaction_contribution, na.rm = TRUE)
+  # Calculate axis limits with padding for percentage values
+  x_range <- range(plot_data$main_effect_percent, na.rm = TRUE)
+  y_range <- range(plot_data$interaction_percent, na.rm = TRUE)
   
   # Handle zero range case by adding minimum padding
   if(diff(x_range) == 0) {
-    x_padding <- max(0.1, abs(x_range[1]) * 0.1)
+    x_padding <- max(5, abs(x_range[1]) * 0.1)  # At least 5% padding
     x_range <- c(x_range[1] - x_padding, x_range[1] + x_padding)
   } else {
     x_padding <- diff(x_range) * 0.1
   }
   
   if(diff(y_range) == 0) {
-    y_padding <- max(0.1, abs(y_range[1]) * 0.1)
+    y_padding <- max(5, abs(y_range[1]) * 0.1)  # At least 5% padding
     y_range <- c(y_range[1] - y_padding, y_range[1] + y_padding)
   } else {
     y_padding <- diff(y_range) * 0.1
   }
   
-  # Create the plot with robust axis limits
-  p <- ggplot(plot_data, aes(x = main_effect_value, y = top_interaction_contribution)) +
-    # Add points colored by original feature, sized by total SHAP impact
-    geom_point(aes(color = original_feature, size = total_shap_value), alpha = 0.7) +
+  # Create the plot using percentage values
+  p <- ggplot(plot_data, aes(x = main_effect_percent, y = interaction_percent)) +
+    # Add points colored by original feature, uniform size
+    geom_point(aes(color = original_feature), alpha = 0.7, size = 3) +
     
     # Add reference lines
     geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "gray50", alpha = 0.5) +
     geom_hline(yintercept = 0, color = "gray30", alpha = 0.3) +
     geom_vline(xintercept = 0, color = "gray30", alpha = 0.3) +
     
-    # Add simple text labels (avoiding ggrepel issues)
-    geom_text(aes(label = label), hjust = 0, vjust = 0, 
-              nudge_x = max(abs(plot_data$main_effect_value)) * 0.02, 
-              nudge_y = max(plot_data$top_interaction_contribution) * 0.02, 
-              size = 3) +
+    # Add interaction partner labels over the points
+    geom_text(aes(label = label), hjust = 0.5, vjust = -0.8, 
+              size = 3, color = "black", fontface = "bold") +
     
-    # Set safe axis limits based on value type
-    {if(use_abs) {
-      list(
-        scale_x_continuous(limits = c(0, max(plot_data$main_effect_value) * 1.1)),
-        scale_y_continuous(limits = c(0, max(plot_data$top_interaction_contribution) * 1.1))
-      )
-    } else {
-      list(
-        scale_x_continuous(limits = c(x_range[1] - x_padding, x_range[2] + x_padding)),
-        scale_y_continuous(limits = c(y_range[1] - y_padding, y_range[2] + y_padding))
-      )
-    }} +
+    # Set axis limits with padding
+    scale_x_continuous(limits = c(x_range[1] - x_padding, x_range[2] + x_padding),
+                       labels = function(x) paste0(x, "%")) +
+    scale_y_continuous(limits = c(y_range[1] - y_padding, y_range[2] + y_padding),
+                       labels = function(x) paste0(x, "%")) +
     
-    # Scales and labels
-    scale_size_continuous(name = "Total SHAP\nImpact", range = c(2, 8), guide = "legend") +
+    # Color scale only (no size scale)
     scale_color_discrete(name = "Feature\nGroup") +
     
     labs(
       title = title,
-      subtitle = "Each point = categorical value | Size = Total SHAP Impact | Color = Feature Group",
-      x = paste0("True Main Effect (", value_type, ") - Feature in isolation"),
-      y = "Top Interaction Contribution (absolute)",
+      subtitle = "Each point = categorical value | Labels = top interaction partners | Color = Feature Group",
+      x = "Main Effect (% of Total SHAP) - Feature in isolation",
+      y = "Top Interaction Contribution (% of Total SHAP)",
       caption = "Diagonal line: Main Effect = Top Interaction\nPoints above line: Interaction-dominated\nPoints below line: Main effect-dominated"
     ) +
     
@@ -1306,5 +1305,303 @@ save_visualization_plots <- function(plots, base_path, width = 10, height = 8) {
     file_path <- paste0(base_path, "_", plot_name, ".pdf")
     ggsave(file_path, plot, width = width, height = height)
   }
+}
+
+#' SHAP Bar Plot for Treated Unit
+#'
+#' @title Signed SHAP Values for Treated Unit
+#' @description Creates a horizontal bar chart displaying signed SHAP values 
+#' for specification features. Shows the directional impact of each feature
+#' on treatment effect estimates. Features are grouped by specification dimension 
+#' (software package, V-weights, bias correction, etc.).
+#'
+#' @param plot_spec_curve_result List. Result object from \code{plot_spec_curve()} call.
+#'   Must contain \code{plot_data_p2} element with SHAP data.
+#' @param title Character or NULL. Plot title. If NULL, generates automatic title.
+#' @param top_n Integer or NULL. Number of top features to display (ranked by absolute impact). If NULL, shows all.
+#' @param color_by Character. Coloring scheme: "feature_group" (default) or "magnitude".
+#'   - "feature_group": Different color for each specification dimension
+#'   - "magnitude": Red-blue gradient based on signed SHAP values
+#'
+#' @return ggplot2 object with horizontal bar chart showing signed SHAP values.
+#'
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' # Run specification curve with SHAP analysis
+#' spec_result <- plot_spec_curve(data, name_treated_unit = "Philadelphia", show_shap = TRUE)
+#' 
+#' # Signed SHAP values (default)
+#' p1 <- plot_treated_unit_shap_bars(spec_result)
+#' 
+#' # Top 10 features with magnitude coloring
+#' p2 <- plot_treated_unit_shap_bars(spec_result, top_n = 10, color_by = "magnitude")
+#' 
+#' # Custom title
+#' p3 <- plot_treated_unit_shap_bars(spec_result, title = "Feature Impact Analysis")
+#' }
+plot_treated_unit_shap_bars <- function(plot_spec_curve_result, 
+                                        title = NULL,
+                                        top_n = NULL,
+                                        color_by = "feature_group") {
+  
+  # Validate inputs
+  if (is.null(plot_spec_curve_result) || !is.list(plot_spec_curve_result)) {
+    stop("plot_spec_curve_result must be a result object from plot_spec_curve()")
+  }
+  
+  if (!"plot_data_p2" %in% names(plot_spec_curve_result)) {
+    stop("plot_spec_curve_result must contain plot_data_p2 element. Ensure plot_spec_curve() was called with show_shap = TRUE")
+  }
+  
+  if (!color_by %in% c("feature_group", "magnitude")) {
+    stop("color_by must be either 'feature_group' or 'magnitude'")
+  }
+  
+  # Extract SHAP data
+  shap_data <- plot_spec_curve_result$plot_data_p2
+  
+  if (is.null(shap_data) || nrow(shap_data) == 0) {
+    stop("No SHAP data found in plot_spec_curve_result. Ensure show_shap = TRUE was used")
+  }
+  
+  # Check for required columns
+  required_cols <- c("Unit Name", "feature_group", "feature", "shapley_value")
+  missing_cols <- setdiff(required_cols, names(shap_data))
+  if (length(missing_cols) > 0) {
+    stop(paste("Missing required columns in SHAP data:", paste(missing_cols, collapse = ", ")))
+  }
+  
+  # Filter to treated unit and remove missing SHAP values
+  treated_unit_name <- unique(shap_data$`Unit Name`)[1]  # Get first unit name (should be treated unit)
+  treated_shap <- shap_data[`Unit Name` == treated_unit_name & !is.na(shapley_value)]
+  
+  if (nrow(treated_shap) == 0) {
+    stop("No SHAP values found for treated unit")
+  }
+  
+  cat("Processing SHAP data for treated unit:", treated_unit_name, "\n")
+  cat("Total SHAP observations:", nrow(treated_shap), "\n")
+  
+  # Calculate signed SHAP values (the main story)
+  agg_data <- treated_shap[, .(
+    mean_shap = mean(shapley_value, na.rm = TRUE),
+    n_specs = .N
+  ), by = .(feature_group, feature)]
+  
+  # Remove any remaining NA values
+  agg_data <- agg_data[!is.na(mean_shap)]
+  
+  if (nrow(agg_data) == 0) {
+    stop("No valid SHAP values after aggregation")
+  }
+  
+  # Apply top_n filter if specified (based on absolute SHAP values for ranking)
+  if (!is.null(top_n) && is.numeric(top_n) && top_n > 0) {
+    # Sort by absolute SHAP value and take top N
+    agg_data <- agg_data[order(-abs(mean_shap))][1:min(top_n, nrow(agg_data))]
+  }
+  
+  # Sort features alphabetically within each feature group for better readability
+  agg_data <- agg_data[order(feature_group, feature)]
+  
+  # Create ordered factor levels for features alphabetically within each group
+  feature_order <- agg_data[order(feature_group, feature), feature]
+  agg_data[, feature := factor(feature, levels = feature_order)]
+  
+  # Generate title if not provided
+  if (is.null(title)) {
+    title <- paste0("SHAP Values for ", treated_unit_name, ": Feature Impact Analysis")
+  }
+  
+  cat("Creating signed SHAP bar plot with", nrow(agg_data), "features across", 
+      length(unique(agg_data$feature_group)), "feature groups\n")
+  
+  # Create the base plot with signed SHAP values
+  if (color_by == "feature_group") {
+    # Color by feature group
+    p <- ggplot(agg_data, aes(x = mean_shap, y = feature, fill = feature_group)) +
+      geom_col(alpha = 0.8, width = 0.6) +
+      scale_fill_discrete(name = "Feature Group")
+  } else {
+    # Color by magnitude using signed values
+    p <- ggplot(agg_data, aes(x = mean_shap, y = feature, fill = mean_shap)) +
+      geom_col(alpha = 0.8, width = 0.6) +
+      scale_fill_gradient2(low = "red", mid = "white", high = "blue", midpoint = 0, name = "SHAP Value")
+  }
+  
+  # Add faceting like Panel B in plot_spec_curve
+  p <- p +
+    facet_grid(feature_group ~ ., scales = "free_y", space = "free_y", switch = "y") +
+    geom_vline(xintercept = 0, linetype = "dashed", color = "gray50", alpha = 0.7) +
+    labs(
+      title = title,
+      subtitle = paste0("Based on ", sum(agg_data$n_specs), " total specifications | Grouped by feature dimension"),
+      x = expression(Delta~TE),
+      y = ""
+    ) +
+    theme_minimal() +
+    theme(
+      plot.title = element_text(hjust = 0, size = 14, face = "bold"),
+      plot.subtitle = element_text(hjust = 0, size = 11),
+      axis.line.x = element_line(color = "black", linewidth = 0.5),
+      axis.text.y = element_text(colour = "black", size = 10),
+      strip.placement = "outside",
+      strip.text.y.left = element_text(angle = 0, hjust = 1, face = "bold"),
+      panel.spacing = unit(.25, "lines"),
+      panel.grid.major.y = element_blank(),
+      panel.grid.minor = element_blank(),
+      legend.position = "none",
+#      legend.key.width = unit(1.5, "cm"),
+      plot.caption = element_text(size = 9, color = "gray60")
+    )
+  
+  # Add value labels on bars if not too many
+  if (nrow(agg_data) <= 15) {
+    p <- p + geom_text(aes(label = round(mean_shap, 3)), 
+                       hjust = ifelse(agg_data$mean_shap >= 0, -0.1, 1.1),
+                       size = 3, color = "black")
+  }
+  
+  return(p)
+}
+
+#' Extract and Display Panel A from Specification Curve Results
+#'
+#' @title Show Panel A (Treatment Effects) Only
+#' @description Extracts Panel A (treatment effects plot) from plot_spec_curve results
+#' and optionally saves it to a file. Useful for presentations where you want to focus
+#' only on the treatment effects without the specification details.
+#'
+#' @param plot_spec_curve_result List. Result object from plot_spec_curve().
+#' @param file_path Character or NULL. File path to save the plot. If NULL, plot is not saved.
+#' @param width Numeric. Width of the saved plot in inches. Default is 8.
+#' @param height Numeric. Height of the saved plot in inches. Default is 6.
+#'
+#' @return ggplot object for Panel A (treatment effects).
+#'
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' # Generate specification curve
+#' spec_result <- plot_spec_curve(data, name_treated_unit = "Philadelphia")
+#' 
+#' # Show only Panel A
+#' panel_a_plot <- extract_panel_a(spec_result)
+#' 
+#' # Save Panel A to file
+#' extract_panel_a(spec_result, file_path = "treatment_effects.png", width = 10, height = 6)
+#' }
+extract_panel_a <- function(plot_spec_curve_result, 
+                           file_path = NULL,
+                           width = 8,
+                           height = 6) {
+  
+  # Validate inputs
+  if (is.null(plot_spec_curve_result) || !is.list(plot_spec_curve_result)) {
+    stop("plot_spec_curve_result must be a result object from plot_spec_curve()")
+  }
+  
+  if (!"panel_a" %in% names(plot_spec_curve_result)) {
+    stop("plot_spec_curve_result must contain panel_a element. Ensure you're using updated plot_spec_curve() function.")
+  }
+  
+  # Extract Panel A and modify font sizes for presentations
+  panel_a_plot <- plot_spec_curve_result$panel_a + 
+    theme(axis.text.x = element_text(size = 12),  # increased x-axis text (specification numbers)
+          axis.text.y = element_text(size = 12),  # increased y-axis text (treatment effect values)
+          axis.title.x = element_text(size = 13),  # increased x-axis title
+          axis.title.y = element_text(size = 13),  # increased y-axis title
+          legend.text = element_text(size = 11),   # increased legend text
+          legend.title = element_text(size = 12),  # increased legend title
+          plot.subtitle = element_text(size = 11)) # increased subtitle if present
+  
+  # Save if file path provided
+  if (!is.null(file_path)) {
+    ggplot2::ggsave(file_path, plot = panel_a_plot, width = width, height = height)
+    message("Panel A saved to: ", file_path)
+  }
+  
+  return(panel_a_plot)
+}
+
+#' Extract and Display Panel B from Specification Curve Results
+#'
+#' @title Show Panel B (Specification Features/SHAP) Only
+#' @description Extracts Panel B (specification features and SHAP values plot) from 
+#' plot_spec_curve results and optionally saves it to a file. Useful for presentations
+#' where you want to focus on the specification details without the treatment effects.
+#'
+#' @param plot_spec_curve_result List. Result object from plot_spec_curve().
+#' @param file_path Character or NULL. File path to save the plot. If NULL, plot is not saved.
+#' @param width Numeric. Width of the saved plot in inches. Default is 8.
+#' @param height Numeric. Height of the saved plot in inches. Default is 8.
+#' @param legend_position Character. Position of the legend: "right" (default), "left", "bottom", "top", or "none".
+#'
+#' @return ggplot object for Panel B (specification features/SHAP).
+#'
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' # Generate specification curve with SHAP
+#' spec_result <- plot_spec_curve(data, name_treated_unit = "Philadelphia", show_shap = TRUE)
+#' 
+#' # Show only Panel B (legend on right by default)
+#' panel_b_plot <- extract_panel_b(spec_result)
+#' 
+#' # Save Panel B with legend on bottom for presentations
+#' extract_panel_b(spec_result, file_path = "specification_features.png", 
+#'                 width = 10, height = 8, legend_position = "bottom")
+#'                 
+#' # Save Panel B with no legend for clean slides
+#' extract_panel_b(spec_result, file_path = "specification_features_clean.png", 
+#'                 width = 10, height = 8, legend_position = "none")
+#' }
+extract_panel_b <- function(plot_spec_curve_result, 
+                           file_path = NULL,
+                           width = 8,
+                           height = 8,
+                           legend_position = "right") {
+  
+  # Validate inputs
+  if (is.null(plot_spec_curve_result) || !is.list(plot_spec_curve_result)) {
+    stop("plot_spec_curve_result must be a result object from plot_spec_curve()")
+  }
+  
+  if (!"panel_b" %in% names(plot_spec_curve_result)) {
+    stop("plot_spec_curve_result must contain panel_b element. Ensure you're using updated plot_spec_curve() function.")
+  }
+  
+  # Extract Panel B and modify legend position, font sizes, and legend title
+  # Check if the plot has SHAP values (and thus needs HTML rendering for colored text)
+  has_shap <- "plot_data_p2" %in% names(plot_spec_curve_result) && 
+              !is.null(plot_spec_curve_result$plot_data_p2) &&
+              "shapley_value" %in% names(plot_spec_curve_result$plot_data_p2)
+  
+  panel_b_plot <- plot_spec_curve_result$panel_b + 
+    theme(legend.position = legend_position,
+          legend.box = "vertical",
+          axis.text.y = if (has_shap) {
+            ggtext::element_markdown(colour = "black", size = 12)  # preserve HTML rendering for colored SHAP values
+          } else {
+            element_text(colour = "black", size = 12)  # standard text for non-SHAP plots
+          },
+          strip.text.y.left = element_text(angle = 0, hjust = 1, face = "bold", size = 12),  # increased from default
+          legend.text = element_text(size = 11),  # increased legend text
+          legend.title = element_text(size = 12),  # increased legend title
+          axis.text.x = element_text(size = 11)) +  # increased x-axis text
+    guides(color = guide_colorbar(title = expression(Delta~TE), title.position = "top"),
+           alpha = guide_legend(title = expression("SHAP Significance"), title.position = "top"))
+  
+  # Save if file path provided
+  if (!is.null(file_path)) {
+    ggplot2::ggsave(file_path, plot = panel_b_plot, width = width, height = height)
+    message("Panel B saved to: ", file_path)
+  }
+  
+  return(panel_b_plot)
 }
 

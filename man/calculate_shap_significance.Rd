@@ -33,7 +33,7 @@ feature importance against control units for each specification and feature grou
 \details{
 Calculate SHAP Significance via Placebo Inference
 
-For each specification × feature_group combination:
+For each specification x feature_group combination:
 \itemize{
 \item Extracts relevant SHAP values for all units
 \item Ranks units based on the chosen pvalue_method ("absolute" or "signed")

@@ -12,7 +12,10 @@
 #' @param unit.tr Character. Name or identifier of the treated unit.
 #' @param unit.co Character vector. Names or identifiers of the potential control units (donor pool).
 #' @param anticipation Numeric. Number of pre-treatment periods to exclude due to anticipation effects. Default is 0.
-#' @param constant Logical. Whether to include a constant term in the synthetic control weights. Default is FALSE.
+#' @param constant Logical. Whether to include a global constant (intercept) term in synthetic control estimation. 
+#'   When TRUE, adds a constant feature that allows the synthetic control to have a level shift relative to donors.
+#'   Requires multiple features (more than one covariate specification). The constant term is estimated alongside 
+#'   donor weights and can be positive or negative. Default is FALSE.
 #' @param verbose Logical. Whether to print diagnostic messages and warnings. Default is TRUE.
 #' @param covagg List. Flexible specification for covariate aggregation.
 #'   Each element is a list with \code{var} and aggregation type:
@@ -135,6 +138,22 @@
 #'                          ),
 #'                          covagg = list(
 #'                            schooling_custom = list(var = "schooling", last = 5)
+#'                          ))
+#'                          
+#' # With constant term (requires multiple features)
+#' scm_data_const <- scdata(df = germany_data,
+#'                          id.var = "country",
+#'                          time.var = "year", 
+#'                          outcome.var = "gdp",
+#'                          period.pre = 1960:1990,
+#'                          period.post = 1991:2003,
+#'                          unit.tr = "West Germany",
+#'                          unit.co = c("USA", "UK", "France"),
+#'                          constant = TRUE,  # Enable constant term
+#'                          covagg = list(
+#'                            gdp_avg = list(var = "gdp", average = "full_pre"),
+#'                            investment_avg = list(var = "investment", average = "full_pre"),
+#'                            trade_periods = list(var = "trade", periods = c(1985, 1990))
 #'                          ))
 #' }
 
@@ -333,18 +352,18 @@ scdata <- function(df,
   
   # Handle covariate aggregation with nested specifications
   if (length(covagg) > 0) {
-    # Extract features from nested specifications
+    # Extract features from specifications
     features = c()
     for (spec_name in names(covagg)) {
       spec <- covagg[[spec_name]]
-      # Skip the label and process each feature within the specification
-      for (feat_name in names(spec)) {
-        if (feat_name != "label") {
-          feat_spec <- spec[[feat_name]]
-          if (is.list(feat_spec) && !is.null(feat_spec$var)) {
-            features = c(features, feat_spec$var)
-          }
-        }
+      # Skip the label
+      if (spec_name == "label") {
+        next
+      }
+      
+      # The spec itself contains the var element
+      if (!is.null(spec$var)) {
+        features = c(features, spec$var)
       }
     }
     features = unique(features)
@@ -363,8 +382,9 @@ scdata <- function(df,
   }
   
   
+  # Prevent constant term with single feature (mathematical non-identifiability)
   if ((length(features) == 1) && (constant == TRUE)) {
-    stop("When specifying just one feature you cannot specify constant == TRUE")
+    stop("Cannot use constant=TRUE with only one feature. Please specify multiple features in covagg to enable constant term estimation.")
   }
 
   period.pre  <- sort(period.pre, decreasing = FALSE)
@@ -639,7 +659,12 @@ scdata <- function(df,
               # Remove trailing underscores to match Y.donors
               final_clean_names <- gsub('_+$', '', final_clean_names)
               
-              colnames(B) <- final_clean_names
+              # Only set column names if dimensions match
+              if (length(final_clean_names) == ncol(B)) {
+                colnames(B) <- final_clean_names
+              } else {
+                warning(paste("Column name dimension mismatch: B has", ncol(B), "columns but", length(final_clean_names), "names"))
+              }
               
               idx2 = length(B_list) + 1
               B_list[[idx2]] = B
@@ -679,8 +704,13 @@ scdata <- function(df,
           clean_unit_tr <- gsub('[^A-Za-z0-9_]', '_', unit.tr)
           clean_unit_tr <- gsub('_{2,}', '_', clean_unit_tr)
           
-          # B matrix columns should match Y.donors exactly  
-          colnames(B) <- final_clean_names
+          # B matrix columns should match Y.donors exactly
+          # Only set column names if dimensions match
+          if (length(final_clean_names) == ncol(B)) {
+            colnames(B) <- final_clean_names
+          } else {
+            warning(paste("Column name dimension mismatch in aggregation: B has", ncol(B), "columns but", length(final_clean_names), "names"))
+          }
           rownames(B) <- paste(clean_unit_tr, cov_name, aggfunc, sep='.')
           
           idx2 = length(B_list) + 1
@@ -791,11 +821,7 @@ scdata <- function(df,
   # P is composed by the outcome variable of the donors only
   
   if (out.in.features == TRUE) {
-    # Check that global constant is required by the user
-    if (constant == TRUE) {
-      P <- cbind(P, rep(1, length(rows.tr.post)))
-      colnames(P) <- c(colnames(P[, 1:(dim(P)[2] - 1), drop = FALSE]), paste(unit.tr,"0.constant", sep = "."))
-    }
+    # No additional modifications needed - constant terms handled via C matrix
   }
   
   T1 <- length(period.post)
@@ -844,6 +870,8 @@ scdata <- function(df,
     A = A_outcome
   }
   
+  # Matrix A kept unchanged - constant terms now handled in separate C matrix
+  
   B_outcome = B[grepl(outcome.var, rownames(B)), , drop=F]
   B_nonoutcome = B[!(grepl(outcome.var, rownames(B))), ,drop=F]
   # Only order if B_outcome has rows and rownames
@@ -862,7 +890,22 @@ scdata <- function(df,
   
   
   
-  X <- cbind(A, B)
+  # Matrix B kept unchanged - constant terms now handled in separate C matrix
+
+  # Create C matrix for covariate adjustments (following SCPI approach)
+  C <- NULL
+  if (constant == TRUE) {
+    C <- matrix(1, nrow = nrow(B), ncol = 1)
+    colnames(C) <- paste(unit.tr, "0.constant", sep = ".")
+    rownames(C) <- rownames(B)
+  }
+
+  # Combine matrices following SCPI structure: X = [A, B, C]
+  if (!is.null(C)) {
+    X <- cbind(A, B, C)
+  } else {
+    X <- cbind(A, B)
+  }
   
   # Create rownames that match the actual dimensions of X
   if (nrow(X) > 0) {
@@ -886,10 +929,11 @@ scdata <- function(df,
   
   j1   <- dim(as.matrix(A))[2]  # Columns of A
   j2   <- j1 + dim(B)[2]        # Columns of B
-  j3   <- j2
+  j3   <- j2 + if(!is.null(C)) dim(C)[2] else 0  # Columns of C
   
   A.na           <- X.na[, 1:j1, drop = FALSE]
   B.na           <- X.na[, (j1+1):j2, drop = FALSE]
+  C.na           <- if(!is.null(C)) X.na[, (j2+1):j3, drop = FALSE] else NULL
   
   feature.na.vec <- feature.vec[select]
   time.na.vec    <- time.vec[select]
@@ -935,9 +979,22 @@ scdata <- function(df,
     nK <- names(K)
     K <- rep(0, length(K))
     names(K) <- nK
-    colnames(P) <- colnames(B.na)
+    # Safely set P column names
+    if (length(colnames(B.na)) == ncol(P)) {
+      colnames(P) <- colnames(B.na)
+    } else {
+      warning(paste("Final P matrix column name mismatch: P has", ncol(P), "columns but B.na has", length(colnames(B.na)), "column names"))
+    }
   } else {
-    colnames(P) <- c(colnames(B.na))
+    # Handle column names for P matrix, accounting for potential constant term
+    if (constant == TRUE && ncol(P) == length(colnames(B.na)) + 1) {
+      # P matrix has extra column for constant term
+      colnames(P) <- c(colnames(B.na), paste(unit.tr, "constant", sep = "."))
+    } else if (length(colnames(B.na)) == ncol(P)) {
+      colnames(P) <- c(colnames(B.na))
+    } else {
+      warning(paste("Final P matrix column name mismatch (else): P has", ncol(P), "columns but B.na has", length(colnames(B.na)), "column names"))
+    }
   }
   
   specs <- list(J = J,
@@ -964,6 +1021,7 @@ scdata <- function(df,
   
   df.sc <- list(A = A.na,
                 B = B.na,
+                C = C.na,
                 P = P,
                 P.diff = NULL,
                 Y.pre = Y.pre,

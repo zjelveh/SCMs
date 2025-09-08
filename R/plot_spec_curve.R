@@ -1,9 +1,12 @@
 #' Plot Specification Curve Using Direct Long Format Data
 #'
-#' @title Plot Specification Curve with Perfect SHAP Alignment
-#' @description Creates specification curve plots directly from long format data,
-#' ensuring perfect alignment between SHAP values and specifications through
-#' shared full_spec_id identifiers.
+#' @title Plot Specification Curve with Internal SHAP Computation and Filtering
+#' @description Creates specification curve plots directly from long format data with integrated
+#' SHAP analysis and flexible filtering capabilities. Key features:
+#' - Internal SHAP computation using CatBoost (automatic when show_shap=TRUE)
+#' - Specification filtering BEFORE SHAP computation and p-value calculation
+#' - Perfect alignment between SHAP values and specifications via full_spec_id
+#' - FAIL HARD error handling with specific guidance when requirements aren't met
 #'
 #' @param long_data Data.table or List. Long format data from spec_curve().
 #'   Can be either the results data.table directly, or the full structured results
@@ -17,8 +20,9 @@
 #'   - "standardized": tau / sd(control_effects)
 #'   - "rmspe_ratio": post_RMSPE / pre_RMSPE (Abadie-style)
 #' @param rmse_threshold Numeric. Threshold for root mean square error to filter results. Default is Inf.
-#' @param shap_values Data.table or NULL. SHAP values from run_catboost_shap_analysis().
-#'   Should contain full_spec_id column for perfect alignment. Default is NULL.
+#' @param shap_values Data.table or NULL. External SHAP values from run_catboost_shap_analysis().
+#'   Should contain columns: unit, full_spec_id, feature_group, feature, shapley_value.
+#'   If NULL and show_shap=TRUE, SHAP values will be computed internally. Default is NULL.
 #' @param file_path_save Character or NA. File path to save the plot. If NA, plot is not saved. Default is NA.
 #' @param width Numeric. Width of the saved plot in inches. Default is 6.
 #' @param height Numeric. Height of the saved plot in inches. Default is 10.
@@ -38,100 +42,192 @@
 #'   Options: "none" (default), "percentile", "iqr", "mad", or numeric vector c(ymin, ymax).
 #'   - "percentile": Crop to 1st-99th percentile of treated unit effects
 #'   - "iqr": Crop to Q1 - 1.5*IQR to Q3 + 1.5*IQR
-#'   - "mad": Crop to median ± 3*MAD (robust outlier detection)
+#'   - "mad": Crop to median +/- 3*MAD (robust outlier detection)
 #'   - c(ymin, ymax): Manual y-axis limits
 #' @param sort_by Character. Method for sorting specifications on x-axis.
 #'   Options: "tau" (default), "pvalue", "rmspe_ratio".
 #'   - "tau": Sort by treatment effect magnitude (original behavior)
 #'   - "pvalue": Sort by statistical significance (most significant first)
 #'   - "rmspe_ratio": Sort by post/pre RMSPE ratio
-#' @param calculate_shap_pvalues Logical. Whether to automatically calculate SHAP significance when
-#'   multi-unit SHAP data is available. When TRUE (default), if SHAP values for control units are
-#'   found, calculates p-values for treated unit's feature importance and displays significance via
-#'   point transparency. Set to FALSE to disable SHAP significance testing.
-#' @param shap_pvalue_type Character. Method for calculating SHAP p-values.
-#'   Options: "absolute" (default) or "signed".
-#'   - "absolute": Calculates p-values based on the absolute magnitude of SHAP values.
-#'   - "signed": Calculates p-values based on the signed magnitude, considering positive and negative effects separately.
+#' @param filter_specs Named list or NULL. Filters to apply to specifications BEFORE SHAP computation and p-value calculation.
+#'   Each element should be named by the feature group column and contain allowed values.
+#'   Available filters: "constant" (TRUE/FALSE), "const" (simplex/lasso/ridge/pensynth), 
+#'   "outcome_model" (none/augsynth/lasso/ridge/ols), "fw" (uniform/optimize), 
+#'   "feat" (covariate aggregation labels), "data_sample" (all/most_similar).
+#'   Examples: list(constant = "TRUE"), list(const = c("simplex", "lasso")), 
+#'   list(constant = "TRUE", outcome_model = c("none", "augsynth")). Default is NULL (no filtering).
+#' @param show_shap Logical. Whether to compute and display SHAP values. When TRUE:
+#'   - If shap_values is provided: uses external SHAP values
+#'   - If shap_values is NULL: computes SHAP values internally using CatBoost
+#'   - Requires at least 3 unique specifications for internal computation
+#'   - Automatically detects available specification features (outcome_model, const, fw, feat, data_sample, constant)
+#'   Default is TRUE.
+#' @param shap_config List. Configuration for SHAP computation and significance testing with elements:
+#'   - compute_pvalues: Logical. Whether to calculate SHAP significance via placebo inference.
+#'     Requires multi-unit SHAP data (treated_unit_only = FALSE in CatBoost config). Default is TRUE.
+#'   - pvalue_type: Character. Method for SHAP significance testing: "absolute" or "signed".
+#'     "absolute" ranks by |SHAP| values, "signed" uses two-sided rank-based test. Default is "absolute".
+#' @param shap_label_type Character. How to display SHAP values in y-axis labels: "absolute" or "signed".
+#'   - "absolute": Shows mean |SHAP| values, e.g., "ridge (0.123)"
+#'   - "signed": Shows mean SHAP values with sign, e.g., "ridge (+0.089)" or "lasso (-0.045)"
+#'   Default is "absolute".
+#' @param show_predictions Logical. Whether to display predicted treatment effects from CatBoost models
+#'   alongside actual treatment effects in Panel A. Uses leave-one-out cross-validation predictions
+#'   for robust evaluation. Only available when SHAP is computed internally (show_shap=TRUE).
+#'   Default is FALSE.
+#' @param catboost_params List. Custom parameters for CatBoost model training. If NULL, uses defaults:
+#'   list(loss_function='RMSE', iterations=100, depth=4, learning_rate=0.1, random_seed=42,
+#'   verbose=0, bootstrap_type='Bayesian', bagging_temperature=1). Common parameters to modify:
+#'   iterations (more = better fit but slower), depth (complexity), learning_rate (step size).
+#'   Default is NULL.
 #'
-#' @return A ggplot object representing the specification curve.
+#' @return List containing:
+#' \itemize{
+#'   \item final_plot: ggplot object representing the complete specification curve with Panel A (treatment effects) and Panel B (feature groups/SHAP)
+#'   \item panel_a: ggplot object for Panel A only (treatment effects)
+#'   \item panel_b: ggplot object for Panel B only (feature groups/SHAP)
+#'   \item plot_data_p1: data.table with Panel A plotting data including columns: Unit Name, Estimate, RMSE, Specification, unit_type, p_value (if available)
+#'   \item plot_data_p2: data.table with Panel B plotting data including columns: Specification, feature_group, feature, shapley_value (if SHAP computed), shap_pvalue (if significance computed)
+#'   \item computed_shap: Complete results from internal SHAP computation (NULL if external shap_values provided or show_shap=FALSE). 
+#'     Contains: results (feature importance), shapley (SHAP values), predictions (model predictions), models (trained CatBoost models), config (SHAP configuration)
+#'   \item spec_curve_pvals: List with specification curve-level p-values calculated on filtered data:
+#'     median_tau_pvalues (median treatment effect ranks), stouffer_pvalues (Stouffer's Z-method ranks). NULL if no inference data available
+#'   \item filtered_specs: Integer count of specifications remaining after filtering (before filtering if filter_specs=NULL)
+#'   \item feature_groups_displayed: Character vector of feature groups shown in Panel B (only groups with variation in filtered data)
+#' }
 #'
 #' @export
 #'
 #' @examples
 #' \dontrun{
-#' # New recommended workflow with perfect alignment
-#'
-#' # 1. Generate long format data with bootstrap inference
-#' spec_results_long <- run_spec_curve_analysis(
-#'   dataset,
-#'   params = params,
-#'   inference_type = "bootstrap"
+#' # ===== RECOMMENDED WORKFLOW: Internal SHAP Computation =====
+#' 
+#' # 1. Generate specification curve data
+#' spec_results <- run_spec_curve_analysis(
+#'   dataset = your_data,
+#'   params = your_params,
+#'   inference_type = "placebo"
 #' )
 #'
-#' # 2. Run SHAP analysis
-#' shap_results <- run_catboost_shap_analysis(spec_results_long, config)
-#'
-#' # 3. Plot using placebo null with continuous p-values (default - RMSE ratio)
-#' plot_rmse_ratio <- plot_spec_curve(
-#'   long_data = spec_results_long,
+#' # 2. Basic plot with internal SHAP computation (most common use case)
+#' plot_basic <- plot_spec_curve(
+#'   long_data = spec_results,
 #'   name_treated_unit = "TREATED_ID",
-#'   shap_values = shap_results$shapley,
-#'   test_statistic = "rmse_ratio"
+#'   show_shap = TRUE,  # Automatically computes SHAP internally
+#'   shap_config = list(
+#'     compute_pvalues = TRUE,
+#'     pvalue_type = "absolute"
+#'   )
 #' )
 #'
-#' # 4. Plot using treatment effect test statistic p-values
+#' # ===== SPECIFICATION FILTERING EXAMPLES =====
+#'
+#' # Filter by constant terms only
+#' plot_constant_only <- plot_spec_curve(
+#'   long_data = spec_results,
+#'   name_treated_unit = "TREATED_ID",
+#'   filter_specs = list(constant = "TRUE"),
+#'   show_shap = TRUE
+#' )
+#'
+#' # Filter by multiple criteria (AND logic)
+#' plot_filtered <- plot_spec_curve(
+#'   long_data = spec_results,
+#'   name_treated_unit = "TREATED_ID",
+#'   filter_specs = list(
+#'     constant = "TRUE",
+#'     const = c("simplex", "lasso"),
+#'     outcome_model = c("none", "augsynth")
+#'   ),
+#'   show_shap = TRUE
+#' )
+#'
+#' # Compare specific constraint methods
+#' plot_constraints <- plot_spec_curve(
+#'   long_data = spec_results,
+#'   name_treated_unit = "TREATED_ID",
+#'   filter_specs = list(const = c("simplex", "lasso", "ridge")),
+#'   show_shap = TRUE,
+#'   shap_config = list(compute_pvalues = FALSE)  # Disable SHAP significance
+#' )
+#'
+#' # ===== DIFFERENT TEST STATISTICS =====
+#'
+#' # Using treatment effect p-values
 #' plot_treatment_effect <- plot_spec_curve(
-#'   long_data = spec_results_long,
+#'   long_data = spec_results,
 #'   name_treated_unit = "TREATED_ID",
-#'   shap_values = shap_results$shapley,
-#'   test_statistic = "treatment_effect"
+#'   test_statistic = "treatment_effect",
+#'   show_shap = TRUE
 #' )
 #'
-#' # 5. Plot using normalized treatment effect test statistic p-values
-#' plot_normalized_te <- plot_spec_curve(
-#'   long_data = spec_results_long,
+#' # Using RMSE ratio p-values (default)
+#' plot_rmse_ratio <- plot_spec_curve(
+#'   long_data = spec_results,
 #'   name_treated_unit = "TREATED_ID",
-#'   shap_values = shap_results$shapley,
-#'   test_statistic = "normalized_te"
+#'   test_statistic = "rmse_ratio",
+#'   show_shap = TRUE
 #' )
 #'
-#' # 6. Plot with SHAP significance testing (requires multi-unit SHAP data)
-#' # Run CatBoost analysis on all units
-#' config_all_units <- create_catboost_config(
+#' # ===== SHAP SIGNIFICANCE TESTING =====
+#'
+#' # SHAP with signed significance testing
+#' plot_shap_signed <- plot_spec_curve(
+#'   long_data = spec_results,
+#'   name_treated_unit = "TREATED_ID",
+#'   show_shap = TRUE,
+#'   shap_config = list(
+#'     compute_pvalues = TRUE,
+#'     pvalue_type = "signed"  # Two-sided SHAP significance
+#'   )
+#' )
+#'
+#' # ===== EXTERNAL SHAP WORKFLOW (Advanced) =====
+#'
+#' # For advanced users who want external control over SHAP computation
+#' shap_config_external <- create_catboost_config(
 #'   dataset_name = "example",
 #'   treated_unit_name = "TREATED_ID",
-#'   treated_unit_only = FALSE   # Analyze all units for significance testing
+#'   treated_unit_only = FALSE  # Multi-unit for significance testing
 #' )
-#' shap_all_units <- run_catboost_shap_analysis(spec_results_long, config_all_units)
+#' external_shap <- run_catboost_shap_analysis(spec_results, shap_config_external)
 #'
-#' # Plot with automatic SHAP significance testing (absolute method, default)
-#' plot_with_shap_significance_abs <- plot_spec_curve(
-#'   long_data = spec_results_long,
+#' plot_external_shap <- plot_spec_curve(
+#'   long_data = spec_results,
 #'   name_treated_unit = "TREATED_ID",
-#'   shap_values = shap_all_units$shapley,   # Multi-unit SHAP data
-#'   calculate_shap_pvalues = TRUE   # Enable significance testing (default)
-#' )
-#' # Displays SHAP values with transparency indicating statistical significance (absolute)
-#'
-#' # Plot with SHAP significance testing using signed p-values
-#' plot_with_shap_significance_signed <- plot_spec_curve(
-#'   long_data = spec_results_long,
-#'   name_treated_unit = "TREATED_ID",
-#'   shap_values = shap_all_units$shapley,
-#'   calculate_shap_pvalues = TRUE,
-#'   shap_pvalue_type = "signed" # New option
+#'   shap_values = external_shap$shapley,  # Provide external SHAP
+#'   show_shap = TRUE
 #' )
 #'
-#' # 7. Disable SHAP significance testing if not wanted
-#' plot_no_shap_significance <- plot_spec_curve(
-#'   long_data = spec_results_long,
+#' # ===== OTHER OPTIONS =====
+#'
+#' # Disable SHAP entirely
+#' plot_no_shap <- plot_spec_curve(
+#'   long_data = spec_results,
 #'   name_treated_unit = "TREATED_ID",
-#'   shap_values = shap_all_units$shapley,
-#'   calculate_shap_pvalues = FALSE   # Disable significance testing
+#'   show_shap = FALSE
 #' )
+#'
+#' # Crop outliers and sort by p-values
+#' plot_customized <- plot_spec_curve(
+#'   long_data = spec_results,
+#'   name_treated_unit = "TREATED_ID",
+#'   show_shap = TRUE,
+#'   crop_outliers = "percentile",
+#'   sort_by = "pvalue",
+#'   normalize_outcomes = "standardized"
+#' )
+#'
+#' # ===== EXTRACTING INDIVIDUAL PANELS =====
+#'
+#' # Extract and display only Panel A (treatment effects)
+#' panel_a <- extract_panel_a(plot_customized)
+#' 
+#' # Extract and save Panel B (specification features/SHAP)
+#' extract_panel_b(plot_customized, file_path = "shap_features.png", width = 10, height = 8)
 #'
 #' }
+#' @importFrom ggtext element_markdown
 plot_spec_curve <- function(
     long_data,
     name_treated_unit,
@@ -149,20 +245,151 @@ plot_spec_curve <- function(
     null_distribution = "placebo",
     crop_outliers = "none",
     sort_by = "tau",
-    calculate_shap_pvalues = TRUE,
-    shap_pvalue_type = "absolute" # NEW PARAMETER
+    filter_specs = NULL,
+    show_shap = TRUE,
+    shap_config = list(
+        compute_pvalues = TRUE,
+        pvalue_type = "absolute"
+    ),
+    shap_label_type = "absolute",
+    show_predictions = FALSE,
+    catboost_params = NULL
 ) {
 
     # Libraries imported via NAMESPACE
+    
+    # Define color constants to avoid redundancy
+    SHAP_COLORS <- list(
+        red = "#CA0020",      # Red for negative SHAP
+        gray = "#969696",     # Gray for near-zero SHAP
+        blue = "#0571B0",     # Blue for positive SHAP
+        light_gray = "#F0F0F0" # Light gray for low absolute SHAP
+    )
+    
+    # Helper function to map SHAP values to colors using same scale as legend
+    map_shap_to_color <- function(shap_values, shap_label_type, all_shap_values = NULL) {
+        if (is.null(all_shap_values)) {
+            all_shap_values <- shap_values
+        }
+        
+        if (shap_label_type == "absolute") {
+            # Map absolute values using same scale as gradient: light_gray to blue
+            abs_values <- abs(shap_values)
+            abs_range <- range(abs(all_shap_values), na.rm = TRUE)
+            if (abs_range[2] == abs_range[1]) {
+                return(rep(SHAP_COLORS$gray, length(shap_values)))
+            }
+            # Normalize to 0-1 range
+            normalized <- (abs_values - abs_range[1]) / (abs_range[2] - abs_range[1])
+            # Interpolate between light_gray and blue
+            colors <- grDevices::colorRamp(c(SHAP_COLORS$light_gray, SHAP_COLORS$blue))(normalized)
+            return(grDevices::rgb(colors[,1], colors[,2], colors[,3], maxColorValue = 255))
+        } else {
+            # Map signed values using same scale as gradient2: red to gray to blue (midpoint = 0)
+            shap_range <- range(all_shap_values, na.rm = TRUE)
+            if (shap_range[2] == shap_range[1]) {
+                return(rep(SHAP_COLORS$gray, length(shap_values)))
+            }
+            
+            # Create symmetric range around 0 for proper gradient2 behavior
+            max_abs <- max(abs(shap_range), na.rm = TRUE)
+            
+            # Vectorized color mapping for signed values
+            result_colors <- character(length(shap_values))
+            
+            for (i in seq_along(shap_values)) {
+                val <- shap_values[i]
+                if (is.na(val)) {
+                    result_colors[i] <- SHAP_COLORS$gray
+                } else if (val == 0) {
+                    result_colors[i] <- SHAP_COLORS$gray
+                } else if (val < 0) {
+                    # Map negative values from red to gray
+                    proportion <- abs(val) / max_abs
+                    color_matrix <- grDevices::colorRamp(c(SHAP_COLORS$gray, SHAP_COLORS$red))(proportion)
+                    result_colors[i] <- grDevices::rgb(color_matrix[1], color_matrix[2], color_matrix[3], maxColorValue = 255)
+                } else {
+                    # Map positive values from gray to blue
+                    proportion <- val / max_abs
+                    color_matrix <- grDevices::colorRamp(c(SHAP_COLORS$gray, SHAP_COLORS$blue))(proportion)
+                    result_colors[i] <- grDevices::rgb(color_matrix[1], color_matrix[2], color_matrix[3], maxColorValue = 255)
+                }
+            }
+            
+            return(result_colors)
+        }
+    }
+
+    # Helper function for filtering specifications
+    apply_spec_filters <- function(data, filter_specs) {
+        if (!data.table::is.data.table(data)) {
+            data <- data.table::as.data.table(data)
+        }
+        
+        filtered_data <- data.table::copy(data)
+        
+        # Apply each filter sequentially
+        for (filter_col in names(filter_specs)) {
+            filter_values <- filter_specs[[filter_col]]
+            
+            # Check if the filter column exists in the data
+            if (!filter_col %in% names(filtered_data)) {
+                warning(paste("Filter column", filter_col, "not found in data. Available columns:",
+                             paste(names(filtered_data), collapse = ", ")))
+                next
+            }
+            
+            # Apply the filter
+            initial_rows <- nrow(filtered_data)
+            filtered_data <- filtered_data[get(filter_col) %in% filter_values]
+            final_rows <- nrow(filtered_data)
+            
+            # Provide feedback about filtering effect
+            message(paste("Filter", filter_col, ":", initial_rows, "->", final_rows, "specifications"))
+            
+            # Check if filtering eliminated all data
+            if (nrow(filtered_data) == 0) {
+                stop(paste("Filter", filter_col, "eliminated all specifications. No data remaining."))
+            }
+        }
+        
+        message(paste("Total specifications after filtering:", nrow(filtered_data)))
+        return(filtered_data)
+    }
 
     # Input validation
     valid_test_statistics <- c("rmse_ratio", "treatment_effect", "normalized_te")
     if (!test_statistic %in% valid_test_statistics) {
         stop("test_statistic must be one of: ", paste(valid_test_statistics, collapse = ", "))
     }
-    valid_shap_pvalue_types <- c("absolute", "signed") # NEW VALIDATION
-    if (!shap_pvalue_type %in% valid_shap_pvalue_types) {
-        stop("shap_pvalue_type must be one of: ", paste(valid_shap_pvalue_types, collapse = ", "))
+    # Validate filter_specs structure
+    if (!is.null(filter_specs) && !is.list(filter_specs)) {
+        stop("filter_specs must be a named list or NULL")
+    }
+    
+    # Validate shap_config structure
+    if (!is.list(shap_config)) {
+        stop("shap_config must be a list")
+    }
+    
+    # Set default shap_config values
+    if (is.null(shap_config$compute_pvalues)) {
+        shap_config$compute_pvalues <- TRUE
+    }
+    if (is.null(shap_config$pvalue_type)) {
+        shap_config$pvalue_type <- "absolute"
+    }
+    
+    # Validate shap_config$pvalue_type
+    valid_shap_pvalue_types <- c("absolute", "signed")
+    if (!shap_config$pvalue_type %in% valid_shap_pvalue_types) {
+        stop("shap_config$pvalue_type must be one of: ", paste(valid_shap_pvalue_types, collapse = ", "))
+    }
+    
+    # Validate shap_label_type
+    valid_shap_label_types <- c("absolute", "signed")
+    if (!shap_label_type %in% valid_shap_label_types) {
+        stop("shap_label_type must be one of: ", paste(valid_shap_label_types, collapse = ", "))
     }
 
     # Input validation and data extraction
@@ -294,16 +521,22 @@ plot_spec_curve <- function(
 
     p_value_column <- if (use_bootstrap_pvalues) "p_value_two_tailed" else "p_value"
 
-    # Filter by outcomes (if specified)
-    if (!is.null(outcomes) && "outcome" %in% names(main_data)) {
-        sc_results_df <- main_data[outcome %in% outcomes]
-    } else {
-        sc_results_df <- main_data
+    # Apply filtering pipeline in proper order
+    sc_results_df <- main_data
+    
+    # 1. Filter by outcomes (if specified)
+    if (!is.null(outcomes) && "outcome" %in% names(sc_results_df)) {
+        sc_results_df <- sc_results_df[outcome %in% outcomes]
     }
 
-    # Filter by RMSE if threshold provided
+    # 2. Filter by RMSE if threshold provided
     if ("rmse" %in% names(sc_results_df) && rmse_threshold < Inf) {
         sc_results_df <- sc_results_df[rmse < rmse_threshold]
+    }
+    
+    # 3. Apply specification filters BEFORE p-value calculations
+    if (!is.null(filter_specs)) {
+        sc_results_df <- apply_spec_filters(sc_results_df, filter_specs)
     }
 
     if (nrow(sc_results_df) == 0) {
@@ -311,24 +544,22 @@ plot_spec_curve <- function(
     }
 
     # Calculate average effects for plotting (post-treatment period only)
-    # Check if post_pre_ratio exists before trying to aggregate it
+    # Define common grouping variables for aggregation
+    agg_grouping_vars <- c('unit_name', 'unit_type', 'full_spec_id', 'outcome',
+                          'outcome_model', 'const', 'fw', 'feat', 'data_sample', 'constant')
+    
+    # Perform aggregation with conditional columns
     if ("post_pre_ratio" %in% names(sc_results_df)) {
-        average_effect_df <- sc_results_df[
-            post_period == TRUE,
-            .(tau = mean(tau, na.rm = TRUE),
-              rmse = mean(rmse, na.rm = TRUE),
-              post_pre_ratio = mean(post_pre_ratio, na.rm = TRUE)),
-            by = c('unit_name', 'unit_type', 'full_spec_id', 'outcome',
-            'outcome_model', 'const', 'fw', 'feat', 'data_sample')
-        ]
+        average_effect_df <- sc_results_df[post_period == TRUE, 
+                                         list(tau = mean(tau, na.rm = TRUE),
+                                              rmse = mean(rmse, na.rm = TRUE),
+                                              post_pre_ratio = mean(post_pre_ratio, na.rm = TRUE)), 
+                                         by = agg_grouping_vars]
     } else {
-        average_effect_df <- sc_results_df[
-            post_period == TRUE,
-            .(tau = mean(tau, na.rm = TRUE),
-              rmse = mean(rmse, na.rm = TRUE)),
-            by = c('unit_name', 'unit_type', 'full_spec_id', 'outcome',
-            'outcome_model', 'const', 'fw', 'feat', 'data_sample')
-        ]
+        average_effect_df <- sc_results_df[post_period == TRUE, 
+                                         list(tau = mean(tau, na.rm = TRUE),
+                                              rmse = mean(rmse, na.rm = TRUE)), 
+                                         by = agg_grouping_vars]
     }
 
 
@@ -395,7 +626,7 @@ plot_spec_curve <- function(
             y_limits <- c(q1 - 1.5 * iqr, q3 + 1.5 * iqr)
 
         } else if (crop_outliers == "mad") {
-            # Median ± 3 * Median Absolute Deviation
+            # Median +/- 3 * Median Absolute Deviation
             med <- median(treated_effects, na.rm = TRUE)
             mad_val <- mad(treated_effects, na.rm = TRUE)
             y_limits <- c(med - 3 * mad_val, med + 3 * mad_val)
@@ -426,12 +657,19 @@ plot_spec_curve <- function(
 
         panel_a_data <- merge(panel_a_data, p_value_data[, .(Specification, p_value)], by = "Specification", all.x = TRUE)
     }
+    
 
 
     # B. Prepare data for Panel B (SHAP & Specification Details)
     if ("post_pre_ratio" %in% names(average_effect_df)) {
         average_effect_df[, post_pre_ratio := NULL]
     }
+    
+    # Convert constant column to character to avoid melt type warning
+    if ("constant" %in% names(average_effect_df)) {
+        average_effect_df[, constant := as.character(constant)]
+    }
+    
     panel_b_data <- melt(average_effect_df[unit_name == name_treated_unit],
                          id.vars = c('unit_name', 'full_spec_id', 'tau', 'rmse', 'unit_type'),
                          variable.name = 'feature_group', value.name = 'feature')
@@ -439,52 +677,229 @@ plot_spec_curve <- function(
     # Apply the same specification numbering
     panel_b_data <- merge(panel_b_data, spec_mapping, by = "full_spec_id", all.x = TRUE)
 
-    # Merge SHAP values if provided
+    # Handle SHAP computation and merging
+    computed_shap <- NULL
+    
+    # Check if we need to compute SHAP internally
+    if (show_shap && is.null(shap_values)) {
+        message("Internal SHAP computation requested. Running CatBoost SHAP analysis...")
+        
+        # Create default configuration for internal SHAP computation
+        # Use the most common specifications for internal analysis
+        default_spec_features <- c("outcome_model", "const", "fw", "feat", "data_sample")
+        
+        # Add 'constant' to spec features if it exists in the data and has variation
+        if ("constant" %in% names(sc_results_df)) {
+            constant_variation <- data.table::uniqueN(sc_results_df$constant) > 1
+            if (constant_variation) {
+                default_spec_features <- c(default_spec_features, "constant")
+                message("Adding 'constant' to SHAP features - detected variation in constant terms")
+            }
+        }
+        
+        # Filter to available spec features only
+        available_spec_features <- intersect(default_spec_features, names(sc_results_df))
+        
+        if (length(available_spec_features) == 0) {
+            stop("Internal SHAP computation failed: No valid specification features found in data. ",
+                 "Available columns: ", paste(names(sc_results_df), collapse = ", "), ". ",
+                 "Either provide shap_values parameter or ensure data contains specification features.")
+        }
+        
+        # Detect outcome filter from filtered data  
+        outcome_filter <- NULL
+        if ("outcome" %in% names(sc_results_df)) {
+            unique_outcomes <- unique(sc_results_df$outcome)
+            if (length(unique_outcomes) == 1) {
+                outcome_filter <- unique_outcomes[1]
+            }
+        }
+        
+        # Create configuration for internal SHAP computation
+        shap_config_internal <- create_catboost_config(
+            dataset_name = paste0("internal_shap_", Sys.time()),
+            treated_unit_name = name_treated_unit,
+            outcome_filter = outcome_filter,
+            spec_features = available_spec_features,
+            treated_unit_only = TRUE,  # Default to treated unit only for efficiency
+            catboost_params = catboost_params  # Pass custom CatBoost parameters
+        )
+        
+        # Create long format data structure expected by run_catboost_shap_analysis
+        # Add spec_number for proper alignment 
+        long_format_data <- copy(sc_results_df)
+        
+        # Check minimum specifications required for CatBoost
+        treated_unit_specs <- unique(sc_results_df[unit_name == name_treated_unit, full_spec_id])
+        n_unique_specs <- length(treated_unit_specs)
+        
+        if (n_unique_specs < 3) {
+            stop("Internal SHAP computation failed: Insufficient specifications for CatBoost analysis. ",
+                 "Found ", n_unique_specs, " unique specifications, but at least 3 are required. ",
+                 "Either provide external shap_values, set show_shap=FALSE, or run with more specification variations.")
+        }
+        
+        # Add spec_number if not present (based on treated unit ordering like in plot creation)
+        if (!"spec_number" %in% names(long_format_data)) {
+            treated_specs <- long_format_data[unit_name == name_treated_unit & post_period == TRUE]
+            if (nrow(treated_specs) > 0) {
+                treated_specs_ordered <- treated_specs[order(tau)]
+                treated_specs_ordered[, spec_number := 1:.N]
+                spec_number_mapping <- treated_specs_ordered[, .(full_spec_id, spec_number)]
+                
+                # Apply to all data
+                long_format_data <- merge(long_format_data, spec_number_mapping, 
+                                        by = "full_spec_id", all.x = TRUE)
+            } else {
+                stop("Internal SHAP computation failed: No treated unit data found for spec_number creation")
+            }
+        }
+        
+        # Run internal SHAP analysis
+        shap_results_internal <- tryCatch({
+            run_catboost_shap_analysis(long_format_data, shap_config_internal)
+        }, error = function(e) {
+            stop("Internal SHAP computation failed: ", e$message, ". ",
+                 "Either provide shap_values parameter or set show_shap=FALSE.")
+        })
+        
+        # Extract SHAP values and store computed results
+        if (!is.null(shap_results_internal) && !is.null(shap_results_internal$shapley)) {
+            shap_values <- shap_results_internal$shapley
+            computed_shap <- shap_results_internal
+            message("Internal SHAP computation completed successfully. ", 
+                    nrow(shap_values), " SHAP observations computed.")
+        } else {
+            stop("Internal SHAP computation failed: No SHAP values returned. ",
+                 "Either provide shap_values parameter or set show_shap=FALSE.")
+        }
+    }
+    
+    # Merge SHAP values if available (either provided or computed)
     if (!is.null(shap_values)) {
-        # Validate SHAP data structure
+        # Validate SHAP data structure - FAIL HARD if incorrect
         required_shap_cols <- c('unit', 'full_spec_id', 'feature_group', 'feature', 'shapley_value')
         missing_shap_cols <- setdiff(required_shap_cols, names(shap_values))
         if (length(missing_shap_cols) > 0) {
-            warning(paste("Missing SHAP columns:", paste(missing_shap_cols, collapse = ", "),
-                          "- SHAP values will not be displayed"))
-        } else {
-            # Check for multi-unit SHAP data and calculate significance if requested
-            unique_units <- unique(shap_values$unit)
-            has_control_shaps <- length(unique_units) > 1 && any(unique_units != name_treated_unit)
+            stop("Invalid SHAP data structure. Missing required columns: ", 
+                 paste(missing_shap_cols, collapse = ", "), ". ",
+                 "SHAP data must contain columns: ", paste(required_shap_cols, collapse = ", "))
+        }
+        
+        # Check for multi-unit SHAP data and calculate significance if requested
+        unique_units <- unique(shap_values$unit)
+        has_control_shaps <- length(unique_units) > 1 && any(unique_units != name_treated_unit)
 
-            if (has_control_shaps && calculate_shap_pvalues) {
-                message("Found SHAP values for ", length(unique_units), " units (",
-                        sum(unique_units != name_treated_unit), " controls). Calculating SHAP significance using '", shap_pvalue_type, "' method...")
-                message("To disable SHAP significance testing, set calculate_shap_pvalues = FALSE")
+        if (has_control_shaps && shap_config$compute_pvalues) {
+            message("Found SHAP values for ", length(unique_units), " units (",
+                    sum(unique_units != name_treated_unit), " controls). Calculating SHAP significance using '", shap_config$pvalue_type, "' method...")
+            message("To disable SHAP significance testing, set shap_config$compute_pvalues = FALSE")
 
-                # Calculate SHAP significance on filtered data - PASS NEW PARAM
-                shap_significance <- calculate_shap_significance(shap_values, name_treated_unit, pvalue_method = shap_pvalue_type)
-                # Merge significance data with SHAP values
-                shap_values <- merge(shap_values, shap_significance,
-                                     by = c("full_spec_id", "feature_group"), all.x = TRUE)
+            # Calculate SHAP significance on filtered data
+            shap_significance <- calculate_shap_significance(shap_values, name_treated_unit, pvalue_method = shap_config$pvalue_type)
+            # Merge significance data with SHAP values
+            shap_values <- merge(shap_values, shap_significance,
+                                 by = c("full_spec_id", "feature_group"), all.x = TRUE)
 
-                # Provide user feedback about significance results
-                treated_significance <- shap_significance[!is.na(shap_pvalue)]
-                if (nrow(treated_significance) > 0) {
-                    n_significant <- sum(treated_significance$shap_pvalue < 0.05, na.rm = TRUE)
-                    n_marginal <- sum(treated_significance$shap_pvalue >= 0.05 & treated_significance$shap_pvalue < 0.10, na.rm = TRUE)
-                    total_tests <- nrow(treated_significance)
-                    message("SHAP significance: ", n_significant, " significant (p<0.05), ",
-                            n_marginal, " marginal (p<0.10) out of ", total_tests, " tests")
-                }
-            } else if (has_control_shaps && !calculate_shap_pvalues) {
-                message("Multi-unit SHAP data found but significance testing disabled by calculate_shap_pvalues = FALSE")
+            # Provide user feedback about significance results
+            treated_significance <- shap_significance[!is.na(shap_pvalue)]
+            if (nrow(treated_significance) > 0) {
+                n_significant <- sum(treated_significance$shap_pvalue < 0.05, na.rm = TRUE)
+                n_marginal <- sum(treated_significance$shap_pvalue >= 0.05 & treated_significance$shap_pvalue < 0.10, na.rm = TRUE)
+                total_tests <- nrow(treated_significance)
+                message("SHAP significance: ", n_significant, " significant (p<0.05), ",
+                        n_marginal, " marginal (p<0.10) out of ", total_tests, " tests")
             }
+        } else if (has_control_shaps && !shap_config$compute_pvalues) {
+            message("Multi-unit SHAP data found but significance testing disabled by shap_config$compute_pvalues = FALSE")
+        }
 
-            panel_b_data <- merge(panel_b_data, shap_values,
-                                  by.x = c('unit_name', 'full_spec_id', 'feature_group', 'feature'),
-                                  by.y = c('unit', 'full_spec_id', 'feature_group', 'feature'),
-                                  all.x = TRUE)
+        # Debug: Show data structures before merging
+        message("DEBUG: SHAP merging diagnostics...")
+        message("Panel B data structure (first 5 rows for treated unit):")
+        panel_b_treated <- panel_b_data[unit_name == name_treated_unit][1:min(5, .N)]
+        if (nrow(panel_b_treated) > 0) {
+            message("  Feature groups: ", paste(unique(panel_b_treated$feature_group), collapse = ", "))
+            message("  Sample features: ", paste(head(panel_b_treated$feature, 5), collapse = ", "))
+        }
+        
+        message("SHAP values structure (first 5 rows for treated unit):")
+        shap_treated <- shap_values[unit == name_treated_unit][1:min(5, .N)]
+        if (nrow(shap_treated) > 0) {
+            message("  Feature groups: ", paste(unique(shap_treated$feature_group), collapse = ", "))
+            message("  Sample features: ", paste(head(shap_treated$feature, 5), collapse = ", "))
+        }
+
+        # FIXED: Aggregate SHAP values to specification level before merging
+        # SHAP values are at individual feature level, but panel_b needs them at specification level
+        message("Aggregating SHAP values to specification level...")
+        
+        # Aggregate SHAP values by specification (full_spec_id) and feature_group 
+        # This sums up all SHAP contributions within each specification dimension
+        shap_aggregated <- shap_values[, .(
+            shapley_value = sum(shapley_value, na.rm = TRUE),
+            n_features = .N
+        ), by = .(unit, full_spec_id, feature_group)]
+        
+        message("SHAP aggregation: ", nrow(shap_values), " individual feature SHAP values -> ", 
+                nrow(shap_aggregated), " specification-level SHAP values")
+        
+        # For each aggregated SHAP value, we need to determine the corresponding 'feature' value
+        # This is the actual categorical value for that specification dimension
+        panel_b_treated <- panel_b_data[unit_name == name_treated_unit]
+        
+        if (nrow(panel_b_treated) > 0) {
+            # Create lookup for feature values by full_spec_id and feature_group
+            feature_lookup <- unique(panel_b_treated[, .(full_spec_id, feature_group, feature)])
+            
+            # Merge feature values into aggregated SHAP data
+            shap_aggregated <- merge(shap_aggregated, feature_lookup,
+                                   by = c("full_spec_id", "feature_group"),
+                                   all.x = TRUE)
+        }
+        
+        # Perform the merge with aggregated SHAP values
+        panel_b_data_before_merge <- copy(panel_b_data)
+        panel_b_data <- merge(panel_b_data, shap_aggregated,
+                              by.x = c('unit_name', 'full_spec_id', 'feature_group', 'feature'),
+                              by.y = c('unit', 'full_spec_id', 'feature_group', 'feature'),
+                              all.x = TRUE)
+        
+        # Debug: Check merge success rate
+        treated_rows_before <- nrow(panel_b_data_before_merge[unit_name == name_treated_unit])
+        treated_rows_with_shap <- nrow(panel_b_data[unit_name == name_treated_unit & !is.na(shapley_value)])
+        merge_success_rate <- treated_rows_with_shap / treated_rows_before * 100
+        message("SHAP merge success: ", treated_rows_with_shap, "/", treated_rows_before, 
+                " (", round(merge_success_rate, 1), "%) rows got SHAP values")
+        
+        if (merge_success_rate < 50) {
+            warning("Low SHAP merge success rate (", round(merge_success_rate, 1), "%). ",
+                    "Feature name mismatch may still exist between panel_b_data and aggregated SHAP values.")
+        } else {
+            message("SHAP merging successful - aggregation approach resolved feature granularity mismatch")
         }
     }
 
     setnames(panel_b_data, c('tau', 'unit_name', 'rmse'),
              c('Estimate', 'Unit Name', 'RMSE'))
+
+    # Add predicted treatment effects if requested and available (after SHAP computation)
+    if (show_predictions && !is.null(computed_shap) && !is.null(computed_shap$predictions)) {
+        # Extract predictions for treated unit
+        predictions_data <- computed_shap$predictions[unit == name_treated_unit]
+        
+        if (nrow(predictions_data) > 0 && "predicted_loo" %in% names(predictions_data)) {
+            # Merge predictions with specification mapping
+            if ("full_spec_id" %in% names(predictions_data)) {
+                pred_with_spec <- merge(predictions_data[, list(full_spec_id, predicted_loo)], 
+                                      spec_mapping, by = "full_spec_id", all.x = TRUE)
+                
+                # Add to panel data
+                panel_a_data <- merge(panel_a_data, pred_with_spec[, list(Specification, Predicted = predicted_loo)], 
+                                    by = "Specification", all.x = TRUE)
+            }
+        }
+    }
 
     # C. Re-sort specifications if requested (default is by tau, which is already done)
     if (sort_by != "tau") {
@@ -533,18 +948,33 @@ plot_spec_curve <- function(
     panel_b_data[feature_group== 'fw', feature_group:= 'V Weights']
     panel_b_data[feature_group== 'feat', feature_group:= 'Features']
     panel_b_data[feature_group== 'data_sample', feature_group:='Donor Pool']
+    panel_b_data[feature_group== 'const', feature_group:= 'Weight\nMethod']
+    panel_b_data[feature_group== 'constant', feature_group:= 'Constant\nTerm']
     
     # Transform constraint names for display (preserve descriptive names in Features group)
     panel_b_data[feature == 'simplex' & feature_group=='Weight\nMethod', feature := "Original"]
-    panel_b_data[feature == 'lasso' & feature_group=='Weight\nMethod', feature := "Original + Penalty Lasso"]
-    panel_b_data[feature == 'ridge' & feature_group=='Weight\nMethod', feature := "Original + Penalty Ridge"]
+    panel_b_data[feature == 'lasso' & feature_group=='Weight\nMethod', feature := "Penalty Lasso"]
+    panel_b_data[feature == 'ridge' & feature_group=='Weight\nMethod', feature := "Penalty Ridge"]
     panel_b_data[feature == 'ols' & feature_group=='Weight\nMethod', feature := "OLS Weights"]
+    
+    # Transform constant term display values
+    panel_b_data[feature == 'FALSE' & feature_group=='Constant\nTerm', feature := "No Constant"]
+    panel_b_data[feature == 'TRUE' & feature_group=='Constant\nTerm', feature := "With Constant"]
     
     # DO NOT transform feature names in the 'Features' group - preserve descriptive names as-is
 
-    # Filter out feature_groups with only one unique feature value
-    feature_counts <- panel_b_data[, .(n_unique = uniqueN(feature)), by = feature_group]
+    # Dynamic feature group detection - only show groups with variation in filtered data
+    feature_counts <- panel_b_data[, .(n_unique = data.table::uniqueN(feature)), by = feature_group]
     groups_to_keep <- feature_counts[n_unique > 1, feature_group]
+    
+    # Validate that feature groups have variation - FAIL HARD if not
+    if (length(groups_to_keep) == 0) {
+        stop("No feature groups have variation in filtered data. This indicates insufficient specification diversity. ",
+             "Available feature groups: ", paste(unique(panel_b_data$feature_group), collapse = ", "), ". ",
+             "Either expand your specification parameters or remove restrictive filters.")
+    }
+    
+    message("Displaying feature groups with variation: ", paste(groups_to_keep, collapse = ", "))
     plot_data_p2 <- panel_b_data[feature_group %in% groups_to_keep]
 
 
@@ -621,6 +1051,34 @@ plot_spec_curve <- function(
             scale_alpha_manual(name = "Unit Type", values = c(treated = 0.8, control = 0.3, bootstrap = 0.3))
     }
 
+    # Add predicted treatment effects if available (BEFORE actual points so they're underneath)
+    if (show_predictions && "Predicted" %in% names(plot_data_p1)) {
+        # Add predicted values for treated unit only
+        treated_predictions <- plot_data_p1[unit_type == "treated" & !is.na(Predicted)]
+        
+        if (nrow(treated_predictions) > 0) {
+            p1 <- p1 +
+                # Add subtle connecting lines first (so they're in background)
+                geom_segment(data = treated_predictions, 
+                           aes(x = Specification, xend = Specification, 
+                               y = Estimate, yend = Predicted),
+                           color = "red", alpha = 0.2, linetype = "dotted") +
+                # Add predicted points (more transparent, underneath actual points)
+                geom_point(data = treated_predictions, aes(x = Specification, y = Predicted),
+                          color = "red", shape = 4, size = 2.5, stroke = 1.2, alpha = 0.4)
+        }
+    }
+    
+    # Re-plot actual treated unit points on top to ensure they're visible
+    if (show_predictions && "Predicted" %in% names(plot_data_p1)) {
+        treated_actual <- plot_data_p1[unit_type == "treated"]
+        if (nrow(treated_actual) > 0) {
+            p1 <- p1 +
+                geom_point(data = treated_actual, aes(x = Specification, y = Estimate),
+                          color = "#1f78b4", shape = 21, size = 2.2, fill = "#1f78b4", alpha = 0.9, stroke = 0.5)
+        }
+    }
+
     # Add common elements to both plot types
     p1 <- p1 +
 
@@ -635,7 +1093,13 @@ plot_spec_curve <- function(
             axis.line = element_line(color = "black", linewidth = 0.5),
             axis.text = element_text(colour = "black")
         ) +
-        labs(x = NULL, y = y_label)
+        labs(x = NULL, y = y_label) +
+        # Add subtitle explaining predictions if shown
+        {if (show_predictions && "Predicted" %in% names(plot_data_p1))
+            labs(subtitle = paste0(y_label, " | Red x = CatBoost predictions (LOO-CV)"))
+        else
+            NULL
+        }
 
     # Calculate specification curve p-values on filtered data
     # This ensures p-values reflect the actual data being plotted
@@ -648,17 +1112,12 @@ plot_spec_curve <- function(
         abadie_inference <- if (!is.null(long_data$abadie_inference)) long_data$abadie_inference else NULL
 
         # Calculate p-values on the filtered data (sc_results_df after all filtering)
-        spec_curve_pvals <- tryCatch({
-            calculate_spec_curve_pvalues_filtered(
-                filtered_results = sc_results_df,
-                abadie_inference = abadie_inference,
-                expected_direction = expected_direction,
-                name_treated_unit = name_treated_unit
-            )
-        }, error = function(e) {
-            warning("Could not calculate specification curve p-values: ", e$message)
-            NULL
-        })
+        spec_curve_pvals <- calculate_spec_curve_pvalues_filtered(
+            filtered_results = sc_results_df,
+            abadie_inference = abadie_inference,
+            expected_direction = expected_direction,
+            name_treated_unit = name_treated_unit
+        )
     }
 
     # Add specification curve p-values annotation if calculated
@@ -722,43 +1181,115 @@ plot_spec_curve <- function(
         p1 <- p1 + ylim(y_limits[1], y_limits[2])
     }
 
-    # Now you can print p1 and combine it with p2 using plot_grid as before.
-    # p2: Specification Choices and Shapley Values (Bottom)
+    # Create Panel B (Specification Choices and Shapley Values)
     # Panel B: SHAP visualization with optional significance transparency
     has_shap_significance <- "shap_pvalue" %in% names(plot_data_p2) && "shap_significance_level" %in% names(plot_data_p2)
 
-    if (has_shap_significance) {
-        # Create p-value-based alpha mapping for continuous significance scale
-        # Lower p-value = more significant = more solid (higher alpha)
-        # Map p-values: p=0 -> alpha=1.0 (solid), p=1 -> alpha=0.2 (transparent)
-        plot_data_p2[, shap_alpha_value := pmax(0.2, 1.0 - pmin(shap_pvalue, 1.0))]
-    
+    # Add SHAP values to feature labels if SHAP values are available
+    if ("shapley_value" %in% names(plot_data_p2)) {
+        # Calculate SHAP summary values for each individual feature for treated unit
+        if (shap_label_type == "absolute") {
+            feature_shap_summary <- plot_data_p2[`Unit Name` == name_treated_unit & !is.na(shapley_value), 
+                                               .(shap_summary = mean(abs(shapley_value), na.rm = TRUE)), 
+                                               by = .(feature_group, feature)]
+        } else {  # signed
+            feature_shap_summary <- plot_data_p2[`Unit Name` == name_treated_unit & !is.na(shapley_value), 
+                                               .(shap_summary = mean(shapley_value, na.rm = TRUE)), 
+                                               by = .(feature_group, feature)]
+        }
+        
+        # Get all SHAP values for proper color scaling
+        all_treated_shap <- plot_data_p2[`Unit Name` == name_treated_unit & !is.na(shapley_value), shapley_value]
+        
+        # Map SHAP summary values to colors using the same scale as the legend
+        feature_shap_summary[, shap_color := map_shap_to_color(shap_summary, shap_label_type, all_treated_shap)]
+        
+        # Create enhanced feature labels with colored SHAP values in HTML format
+        feature_shap_summary[, feature_with_shap := paste0(
+            feature, " (<span style='color:", shap_color, "'>", 
+            ifelse(shap_summary >= 0, "+", ""), 
+            round(shap_summary, 3), "</span>)"
+        )]
+        
+        # Merge back with plot data to add enhanced labels
+        plot_data_p2 <- merge(plot_data_p2, 
+                             feature_shap_summary[, .(feature_group, feature, feature_with_shap)], 
+                             by = c("feature_group", "feature"), 
+                             all.x = TRUE)
+        
+        # Use enhanced labels where available, fallback to original feature names
+        plot_data_p2[, feature_display := ifelse(!is.na(feature_with_shap), feature_with_shap, feature)]
+        
+        # Sort features alphabetically within each feature group for better readability
+        plot_data_p2[, feature_display := factor(feature_display, levels = sort(unique(feature_display)))]
+        
+        # Create color variable that matches the label type
+        if (shap_label_type == "absolute") {
+            plot_data_p2[, shap_color_value := abs(shapley_value)]
+        } else {  # signed
+            plot_data_p2[, shap_color_value := shapley_value]
+        }
+    } else {
+        # No SHAP values - use original feature names
+        plot_data_p2[, feature_display := feature]
+        
+        # Sort features alphabetically within each feature group for better readability
+        plot_data_p2[, feature_display := factor(feature_display, levels = sort(unique(feature_display)))]
+        
+        plot_data_p2[, shap_color_value := NA]  # No SHAP coloring
+    }
 
-        p2 <- ggplot(plot_data_p2, aes(x = Specification, y = feature)) +
-            geom_point(aes(color = shapley_value, alpha = shap_alpha_value), shape = 15, size = 2.5) +
-            scale_color_gradient2(
-                name = "Shapley Value",
-                low = "#CA0020",    # Red (better contrast)
-                mid = "#969696",    # Medium gray instead of light gray
-                high = "#0571B0",   # Blue (better contrast)
-                midpoint = 0
-            ) +
-            scale_alpha_continuous(
+    # Check if SHAP values are available in the data
+    if ("shapley_value" %in% names(plot_data_p2)) {
+        # Prepare alpha mapping if significance is available
+        if (has_shap_significance) {
+            # Create p-value-based alpha mapping for continuous significance scale
+            # Lower p-value = more significant = more solid (higher alpha)
+            # Map p-values: p=0 -> alpha=1.0 (solid), p=1 -> alpha=0.2 (transparent)
+            plot_data_p2[, shap_alpha_value := pmax(0.2, 1.0 - pmin(shap_pvalue, 1.0))]
+        }
+        
+        # Create base plot with appropriate aesthetics
+        if (has_shap_significance) {
+            p2 <- ggplot(plot_data_p2, aes(x = Specification, y = feature_display)) +
+                geom_point(aes(color = shap_color_value, alpha = shap_alpha_value), shape = 15, size = 2.5)
+        } else {
+            p2 <- ggplot(plot_data_p2, aes(x = Specification, y = feature_display)) +
+                geom_point(aes(color = shap_color_value), shape = 15, size = 2.5)
+        }
+        
+        # Add color scale based on shap_label_type
+        if (shap_label_type == "absolute") {
+            p2 <- p2 + scale_color_gradient(
+                name = "|SHAP Value| = Change in Treatment Effect",
+                low = SHAP_COLORS$light_gray,
+                high = SHAP_COLORS$blue,
+                guide = guide_colorbar(title.position = "top")
+            )
+        } else {  # signed
+            p2 <- p2 + scale_color_gradient2(
+                name = "SHAP Value = Change in Treatment Effect",
+                low = SHAP_COLORS$red,
+                mid = SHAP_COLORS$gray,
+                high = SHAP_COLORS$blue,
+                midpoint = 0,
+                guide = guide_colorbar(title.position = "top")
+            )
+        }
+        
+        # Add alpha scale if significance is available
+        if (has_shap_significance) {
+            p2 <- p2 + scale_alpha_continuous(
                 name = "SHAP Significance\n(Solid = Low p-value)",
                 range = c(0.2, 1.0),
                 breaks = c(0.2, 0.5, 0.95, 0.99, 0.999),
                 labels = c("p~1.0", "p~0.5", "p~0.05", "p~0.01", "p~0.0")
             )
+        }
     } else {
-        p2 <- ggplot(plot_data_p2, aes(x = Specification, y = feature)) +
-            geom_point(aes(color = shapley_value), shape = 15, size = 2.5) +
-            scale_color_gradient2(
-                name = "Shapley Value",
-                low = "#CA0020",    # Red (better contrast)
-                mid = "#969696",    # Medium gray instead of light gray
-                high = "#0571B0",   # Blue (better contrast)
-                midpoint = 0
-            )
+        # No SHAP values - create basic specification plot
+        p2 <- ggplot(plot_data_p2, aes(x = Specification, y = feature_display)) +
+            geom_point(color = "#666666", shape = 15, size = 2.5)
     }
 
     # Add remaining plot elements
@@ -767,7 +1298,11 @@ plot_spec_curve <- function(
         theme_minimal() +
         theme(
             axis.line.x = element_line(color = "black", linewidth = 0.5),
-            axis.text.y = element_text(colour = "black", size = 8),
+            axis.text.y = if ("shapley_value" %in% names(plot_data_p2)) {
+                ggtext::element_markdown(colour = "black", size = 8)
+            } else {
+                element_text(colour = "black", size = 8)
+            },
             strip.placement = "outside",
             strip.text.y.left = element_text(angle = 0, hjust = 1, face = "bold"),
             panel.spacing = unit(.25, "lines"),
@@ -778,7 +1313,7 @@ plot_spec_curve <- function(
         labs(x = "Specification Number", y = "")
 
 
-    # --- 3. Combine Plots (No changes) ---
+    # --- 3. Combine Plots ---
     final_plot <- plot_grid(
         p1,
         p2,
@@ -793,7 +1328,20 @@ plot_spec_curve <- function(
         ggplot2::ggsave(file_path_save, plot = final_plot, width = width, height = height)
     }
 
-    return(list(final_plot=final_plot, plot_data_p1=plot_data_p1, plot_data_p2=plot_data_p2))
+    # Prepare comprehensive return object
+    return_object <- list(
+        final_plot = final_plot,
+        panel_a = p1,
+        panel_b = p2,
+        plot_data_p1 = plot_data_p1,
+        plot_data_p2 = plot_data_p2,
+        computed_shap = computed_shap,
+        spec_curve_pvals = spec_curve_pvals,
+        filtered_specs = nrow(sc_results_df),
+        feature_groups_displayed = groups_to_keep
+    )
+    
+    return(return_object)
 }
 
 #' Calculate SHAP Significance via Placebo Inference
@@ -813,7 +1361,7 @@ plot_spec_curve <- function(
 #'   total_units, shap_significance_level
 #'
 #' @details
-#' For each specification × feature_group combination:
+#' For each specification x feature_group combination:
 #' \itemize{
 #'   \item Extracts relevant SHAP values for all units
 #'   \item Ranks units based on the chosen pvalue_method ("absolute" or "signed")
@@ -832,13 +1380,13 @@ calculate_shap_significance <- function(shap_data, treated_unit_name, pvalue_met
         stop("pvalue_method must be one of: ", paste(valid_pvalue_methods, collapse = ", "))
     }
 
-    # Calculate significance for each specification × feature_group combination
+    # Calculate significance for each specification x feature_group combination
     significance_results <- shap_data[, {
 
         treated_shap <- shapley_value[unit == treated_unit_name]
 
         if (length(treated_shap) == 0) {
-            # Treated unit not found for this spec × feature_group
+            # Treated unit not found for this spec x feature_group
             list(
                 shap_pvalue = NA_real_,
                 shap_rank = NA_integer_,
@@ -1049,3 +1597,5 @@ calculate_spec_curve_pvalues_filtered <- function(filtered_results, abadie_infer
         stouffer_pvalues = stouffer_results
     ))
 }
+
+

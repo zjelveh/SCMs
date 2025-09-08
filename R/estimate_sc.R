@@ -16,6 +16,7 @@
 #' @param V Character. Covariance matrix estimation method. Default is "separate".
 #' @param V.mat Optional. Pre-computed covariance matrix.
 #' @param solver Character. Solver to use for the optimization problem. Default is "ECOS".
+#' @param constant Logical. Whether to include a constant term in synthetic control weights. Default is FALSE.
 #' @param P Optional. Number of factors to use (for AugSynth).
 #'
 #' @return A list of class "scpi" containing the estimated SCM results and input parameters.
@@ -24,9 +25,11 @@
 #'
 #' @examples
 #' # Example usage (replace with actual example when available)
-#' # result <- estimate_sc(dataset = my_data, outcome = "gdp", covagg = c("population", "unemployment"),
+#' # result <- estimate_sc(dataset = my_data, outcome = "gdp", 
+#' #                       covagg = c("population", "unemployment"),
 #' #                       col_name_unit_name = "state", name_treated_unit = "California",
-#' #                       col_name_period = "year", treated_period = 2000, min_period = 1990, end_period = 2010)
+#' #                       col_name_period = "year", treated_period = 2000, 
+#' #                       min_period = 1990, end_period = 2010)
 estimate_sc <- function(dataset,           # Input dataset (panel data format)
                         outcome,           # Name of the outcome variable (column in dataset)
                         covagg,            # List of covariates used for matching (columns in dataset)
@@ -41,8 +44,41 @@ estimate_sc <- function(dataset,           # Input dataset (panel data format)
                         w.constr = NULL,    # Constraints on the weights (optional)
                         V = "separate",     # Covariance matrix estimation method (usually "separate")
                         V.mat = NULL,       # Pre-computed covariance matrix (optional)
-                        solver = "ECOS"){#,    # Solver to use for the optimization problem
-                        #P = NULL) {         # Number of factors to use (optional, for AugSynth)
+                        solver = "ECOS",    # Solver to use for the optimization problem
+                        constant = FALSE){  # Whether to include a constant term in synthetic control weights
+
+  # =============================================================================
+  # INPUT VALIDATION
+  # =============================================================================
+  
+  # Validate main inputs using utility functions
+  validate_dataframe(dataset, "dataset", required_cols = c(outcome, col_name_unit_name, col_name_period))
+  validate_character(outcome, "outcome")
+  validate_character(col_name_unit_name, "col_name_unit_name")
+  validate_character(name_treated_unit, "name_treated_unit")
+  validate_character(col_name_period, "col_name_period")
+  validate_character(solver, "solver")
+  validate_logical(constant, "constant")
+  
+  # Validate numeric periods
+  validate_numeric(treated_period, "treated_period")
+  validate_numeric(min_period, "min_period")
+  validate_numeric(end_period, "end_period")
+  validate_period_relationships(min_period, treated_period, end_period)
+  
+  # Validate outcome variable is numeric
+  validate_column_numeric(dataset, outcome, "outcome")
+  
+  # Check data contains specified units and periods
+  validate_values_in_column(dataset, col_name_unit_name, name_treated_unit, "name_treated_unit")
+  validate_values_in_column(dataset, col_name_period, treated_period, "treated_period")
+  
+  # Validate optional parameters
+  validate_list(covagg, "covagg", allow_null = TRUE)
+  validate_character(outcome_models, "outcome_models", length = length(outcome_models),
+                    choices = c("None", "OLS", "Ridge", "Lasso", "AugSynth"))
+  validate_character(feature_weights, "feature_weights", length = length(feature_weights),
+                    choices = c("uniform", "optimized"))
 
 
   data <- create_scm_dataset(       # Create a formatted dataset for SCM
@@ -54,7 +90,8 @@ estimate_sc <- function(dataset,           # Input dataset (panel data format)
     col_name_period = col_name_period,
     treated_period = treated_period,
     min_period = min_period,
-    end_period = end_period
+    end_period = end_period,
+    constant = constant
   )
 
   # Error handling: Check if data preparation was successful

@@ -46,14 +46,15 @@
 #'
 #' @return A list of class "scest" containing:
 #' \itemize{
-#'   \item \code{w.weights} - Vector of synthetic control weights
-#'   \item \code{Y.pre.fit} - Fitted pre-treatment outcomes
-#'   \item \code{Y.post.fit} - Fitted post-treatment outcomes  
-#'   \item \code{loss.v} - Pre-treatment fit loss
-#'   \item \code{specs} - Estimation specifications
-#'   \item \code{data} - Original data (if save.data = TRUE)
-#'   \item \code{V.mat} - Feature weighting matrix used
-#'   \item Additional estimation metadata
+#'   \item \code{est.results$w} - Vector of synthetic control weights for donor units
+#'   \item \code{est.results$constant_term} - Constant (intercept) coefficient if \code{constant=TRUE} was used in scdata, NULL otherwise
+#'   \item \code{est.results$b} - Full coefficient vector (donor weights + constant term)
+#'   \item \code{est.results$Y.pre.fit} - Fitted pre-treatment outcomes
+#'   \item \code{est.results$Y.post.fit} - Fitted post-treatment outcomes  
+#'   \item \code{est.results$V} - Feature weighting matrix used
+#'   \item \code{est.results$w.constr} - Weight constraint specification used
+#'   \item \code{data} - Original scdata object with estimation matrices
+#'   \item Additional estimation metadata and diagnostics
 #' }
 #'
 #' @export
@@ -78,6 +79,21 @@
 #' result_custom <- scest(data = scm_data,
 #'                        w.constr = list(name = "simplex"),
 #'                        V.mat = custom_V)
+#'                        
+#' # With constant term (requires scdata with constant=TRUE)
+#' scm_data_const <- scdata(df = data, ..., constant = TRUE, 
+#'                         covagg = list(...))  # Multiple features required
+#'                         
+#' # Simplex with constant - donor weights sum to 1, constant unconstrained
+#' result_const_simplex <- scest(data = scm_data_const,
+#'                               w.constr = list(name = "simplex"))
+#' print(result_const_simplex$est.results$w)            # Donor weights 
+#' print(result_const_simplex$est.results$constant_term) # Constant coefficient
+#' 
+#' # OLS with constant - no constraints on any coefficients
+#' result_const_ols <- scest(data = scm_data_const,
+#'                           w.constr = list(name = "ols"))
+#' print(result_const_ols$est.results$constant_term)     # Can be positive/negative
 #' }
 scest <- function(data,
                   w.constr  = NULL,
@@ -112,9 +128,14 @@ scest <- function(data,
   # Extract data matrices and specifications
   A <- data$A
   B <- data$B
+  C <- data$C  # Add C matrix extraction for constant terms
   P <- data$P
   Z <- copy(B)
   X0sd <- data$X0_sds
+  # Handle missing X0_sds (fallback to no scaling)
+  if (is.null(X0sd) || length(X0sd) == 0) {
+    X0sd <- rep(1, nrow(B))
+  }
   Y.donors <- data$Y.donors
   outcome.var <- data$specs$outcome.var
   Z0 <- Y.donors
@@ -244,22 +265,47 @@ scest <- function(data,
   # Estimate synthetic control
   w.constr <- w.constr.OBJ(w.constr, A, Z, V, J, KM, M)
   if (w.constr[["name"]] == "lasso") solver <- "OSQP"
-  b <- b.est(A = A, Z = Z, J = J, KM = KM, w.constr = w.constr, V = V, CVXR.solver = solver)
+  b <- b.est(A = A, Z = Z, C = C, J = J, KM = KM, w.constr = w.constr, V = V, CVXR.solver = solver)
 
-  # Process results
-  if (KMI == 0) {
-    w <- b
-    r <- NULL
+  # Process results - handle both vector and list return from b.est
+  if (is.list(b) && !is.null(C)) {
+    # When C matrix is present, b.est returns list(w = donor_weights, gamma = constant_coeffs)
+    w <- b$w[1:Jtot]  # Extract only donor weights, not additional variables
+    r <- if (KMI > 0) b$w[(Jtot + 1):length(b$w)] else NULL
+    constant_term <- b$gamma  # Constant coefficients
   } else {
-    w <- b[1:Jtot]
-    r <- b[(Jtot + 1):length(b)]
+    # Original vector return format
+    if (KMI == 0) {
+      w <- b
+      r <- NULL
+      constant_term <- NULL
+    } else {
+      w <- b[1:Jtot]
+      r <- b[(Jtot + 1):length(b)]
+      constant_term <- NULL  # No constant in original format
+    }
   }
 
   # Calculate fitted values and residuals
-  A.hat <- Z %*% b
+  if (is.list(b) && !is.null(C)) {
+    # When C matrix is present: A.hat = Z*w + C*gamma
+    A.hat <- Z %*% b$w + C %*% b$gamma
+  } else {
+    # Original case: A.hat = Z*w
+    A.hat <- Z %*% b
+  }
   res <- A - A.hat
   Z_scaled <- Z * X0sd
-  A.hat <- Z_scaled %*% b
+  
+  # Apply scaling to fitted values
+  if (is.list(b) && !is.null(C)) {
+    # When C matrix is present: A.hat = Z_scaled*w + C*gamma (C doesn't get scaled)
+    A.hat <- Z_scaled %*% b$w + C %*% b$gamma
+  } else {
+    # Original case: A.hat = Z_scaled*w (use w, not b, since w was extracted from b)
+    combined_weights <- if (is.null(r)) w else c(w, r)  # Reconstruct full weights vector
+    A.hat <- Z_scaled %*% combined_weights
+  }
 
   # Prepare pre-treatment fit
   # ALWAYS use time-varying predictions regardless of matching features
@@ -272,10 +318,20 @@ scest <- function(data,
   fit.pre <- Y.donors %*% w
 
   # Post-treatment prediction
-  fit.post <- P %*% b
+  if (is.list(b) && !is.null(C)) {
+    # When C matrix is present: fit.post = P*w + P_C*gamma
+    # Create post-treatment constant matrix with same structure as C
+    P_C <- matrix(1, nrow = nrow(P), ncol = ncol(C))
+    colnames(P_C) <- colnames(C)
+    fit.post <- P %*% b$w + P_C %*% b$gamma
+  } else {
+    # Original case: fit.post = P*w (reconstruct full weight vector)
+    combined_weights <- if (is.null(r)) w else c(w, r)
+    fit.post <- P %*% combined_weights
+  }
 
   # Prepare estimation results
-  est.results <- list(b = b, w = w, r = r, Y.pre.fit = fit.pre, Y.post.fit = fit.post,
+  est.results <- list(b = b, w = w, r = r, constant_term = constant_term, Y.pre.fit = fit.pre, Y.post.fit = fit.post,
                       A.hat = A.hat, res = res, V = V, w.constr = w.constr)
 
   # Prepare data frame to return

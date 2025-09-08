@@ -20,6 +20,7 @@ spec_curve(
   sim_function = most_similar,
   constraints = list(list(name = "ols"), list(name = "simplex"), list(name = "lasso"),
     list(name = "ridge"), list(name = "L1-L2")),
+  constants = c(FALSE, TRUE),
   cores = 1,
   verbose = TRUE,
   inference_type = "placebo",
@@ -179,7 +180,7 @@ results_simplified <- spec_curve(
   col_name_unit_name = "state",
   name_treated_unit = "California",
   covagg = list(
-    "Traditional SCM" = list(label = "Traditional SCM"),
+    "Outcome Only per period" = list(label = "Outcome Only per period"),
     "GDP Analysis" = list(
       label = "GDP Analysis",
       per_period = c("gdp", "outcome_var"),
@@ -202,7 +203,7 @@ results_mixed <- spec_curve(
   col_name_unit_name = "country",
   name_treated_unit = "Germany",
   covagg = list(
-    "Traditional SCM" = list(label = "Traditional SCM"),
+    "Outcome Only per period" = list(label = "Outcome Only per period"),
     "All Mean" = list(
       label = "All Mean",
       pre_period_mean = c("population", "trade", "investment", "outcome_var")

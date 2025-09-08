@@ -161,14 +161,30 @@ create_catboost_config <- function(dataset_name,
                                         treated_unit_name,
                                         outcome_filter = NULL,
                                         spec_features = c("outcome_model", "const", "fw", "feat", "data_sample"),
-                                        treated_unit_only = TRUE) {
+                                        treated_unit_only = TRUE,
+                                        catboost_params = NULL) {
+  
+  # Set default CatBoost parameters if not provided
+  if (is.null(catboost_params)) {
+    catboost_params <- list(
+      loss_function = 'RMSE',
+      iterations = 100,
+      depth = 4,
+      learning_rate = 0.1,
+      random_seed = 42,
+      verbose = 0,
+      bootstrap_type = 'Bayesian',
+      bagging_temperature = 1
+    )
+  }
   
   config <- list(
     dataset_name = dataset_name,
     treated_unit_name = treated_unit_name,
     outcome_filter = outcome_filter,
     spec_features = spec_features,
-    treated_unit_only = treated_unit_only
+    treated_unit_only = treated_unit_only,
+    catboost_params = catboost_params
   )
   
   return(config)
@@ -463,17 +479,8 @@ analyze_unit_catboost <- function(unit_data, unit, config,
       data = as.data.frame(X_test_fold)
     )
     
-    # Train CatBoost model - increased iterations and adjusted params for better feature learning
-    params <- list(
-      loss_function = 'RMSE',
-      iterations = 100,  # Increased from 10
-      depth = 4,         # Increased from 3 
-      learning_rate = 0.1, # Increased from 0.05
-      random_seed = 42,
-      verbose = 0,
-      bootstrap_type = 'Bayesian',  # Better for small datasets
-      bagging_temperature = 1
-    )
+    # Use CatBoost parameters from config
+    params <- config$catboost_params
     
     catboost_model_fold <- catboost.train(
       learn_pool = train_pool,
@@ -502,7 +509,7 @@ analyze_unit_catboost <- function(unit_data, unit, config,
     label = y_full
   )
   
-  # Train final CatBoost model
+  # Train final CatBoost model (reuse same params)
   catboost_model_final <- catboost.train(
     learn_pool = full_pool,
     params = params

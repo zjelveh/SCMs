@@ -2,7 +2,7 @@
 % Please edit documentation in R/plot_spec_curve.R
 \name{plot_spec_curve}
 \alias{plot_spec_curve}
-\title{Plot Specification Curve with Perfect SHAP Alignment}
+\title{Plot Specification Curve with Internal SHAP Computation and Filtering}
 \usage{
 plot_spec_curve(
   long_data,
@@ -21,8 +21,12 @@ plot_spec_curve(
   null_distribution = "placebo",
   crop_outliers = "none",
   sort_by = "tau",
-  calculate_shap_pvalues = TRUE,
-  shap_pvalue_type = "absolute"
+  filter_specs = NULL,
+  show_shap = TRUE,
+  shap_config = list(compute_pvalues = TRUE, pvalue_type = "absolute"),
+  shap_label_type = "absolute",
+  show_predictions = FALSE,
+  catboost_params = NULL
 )
 }
 \arguments{
@@ -45,8 +49,9 @@ Options: "none" (default), "percent_of_mean", "percent_of_preperiod", "standardi
 
 \item{rmse_threshold}{Numeric. Threshold for root mean square error to filter results. Default is Inf.}
 
-\item{shap_values}{Data.table or NULL. SHAP values from run_catboost_shap_analysis().
-Should contain full_spec_id column for perfect alignment. Default is NULL.}
+\item{shap_values}{Data.table or NULL. External SHAP values from run_catboost_shap_analysis().
+Should contain columns: unit, full_spec_id, feature_group, feature, shapley_value.
+If NULL and show_shap=TRUE, SHAP values will be computed internally. Default is NULL.}
 
 \item{file_path_save}{Character or NA. File path to save the plot. If NA, plot is not saved. Default is NA.}
 
@@ -78,7 +83,7 @@ Options: "none" (default), "percentile", "iqr", "mad", or numeric vector c(ymin,
 \itemize{
 \item "percentile": Crop to 1st-99th percentile of treated unit effects
 \item "iqr": Crop to Q1 - 1.5\emph{IQR to Q3 + 1.5}IQR
-\item "mad": Crop to median ± 3*MAD (robust outlier detection)
+\item "mad": Crop to median +/- 3*MAD (robust outlier detection)
 \item c(ymin, ymax): Manual y-axis limits
 }}
 
@@ -90,101 +95,205 @@ Options: "tau" (default), "pvalue", "rmspe_ratio".
 \item "rmspe_ratio": Sort by post/pre RMSPE ratio
 }}
 
-\item{calculate_shap_pvalues}{Logical. Whether to automatically calculate SHAP significance when
-multi-unit SHAP data is available. When TRUE (default), if SHAP values for control units are
-found, calculates p-values for treated unit's feature importance and displays significance via
-point transparency. Set to FALSE to disable SHAP significance testing.}
+\item{filter_specs}{Named list or NULL. Filters to apply to specifications BEFORE SHAP computation and p-value calculation.
+Each element should be named by the feature group column and contain allowed values.
+Available filters: "constant" (TRUE/FALSE), "const" (simplex/lasso/ridge/pensynth),
+"outcome_model" (none/augsynth/lasso/ridge/ols), "fw" (uniform/optimize),
+"feat" (covariate aggregation labels), "data_sample" (all/most_similar).
+Examples: list(constant = "TRUE"), list(const = c("simplex", "lasso")),
+list(constant = "TRUE", outcome_model = c("none", "augsynth")). Default is NULL (no filtering).}
 
-\item{shap_pvalue_type}{Character. Method for calculating SHAP p-values.
-Options: "absolute" (default) or "signed".
+\item{show_shap}{Logical. Whether to compute and display SHAP values. When TRUE:
 \itemize{
-\item "absolute": Calculates p-values based on the absolute magnitude of SHAP values.
-\item "signed": Calculates p-values based on the signed magnitude, considering positive and negative effects separately.
+\item If shap_values is provided: uses external SHAP values
+\item If shap_values is NULL: computes SHAP values internally using CatBoost
+\item Requires at least 3 unique specifications for internal computation
+\item Automatically detects available specification features (outcome_model, const, fw, feat, data_sample, constant)
+Default is TRUE.
 }}
+
+\item{shap_config}{List. Configuration for SHAP computation and significance testing with elements:
+\itemize{
+\item compute_pvalues: Logical. Whether to calculate SHAP significance via placebo inference.
+Requires multi-unit SHAP data (treated_unit_only = FALSE in CatBoost config). Default is TRUE.
+\item pvalue_type: Character. Method for SHAP significance testing: "absolute" or "signed".
+"absolute" ranks by |SHAP| values, "signed" uses two-sided rank-based test. Default is "absolute".
+}}
+
+\item{shap_label_type}{Character. How to display SHAP values in y-axis labels: "absolute" or "signed".
+\itemize{
+\item "absolute": Shows mean |SHAP| values, e.g., "ridge (0.123)"
+\item "signed": Shows mean SHAP values with sign, e.g., "ridge (+0.089)" or "lasso (-0.045)"
+Default is "absolute".
+}}
+
+\item{show_predictions}{Logical. Whether to display predicted treatment effects from CatBoost models
+alongside actual treatment effects in Panel A. Uses leave-one-out cross-validation predictions
+for robust evaluation. Only available when SHAP is computed internally (show_shap=TRUE).
+Default is FALSE.}
+
+\item{catboost_params}{List. Custom parameters for CatBoost model training. If NULL, uses defaults:
+list(loss_function='RMSE', iterations=100, depth=4, learning_rate=0.1, random_seed=42,
+verbose=0, bootstrap_type='Bayesian', bagging_temperature=1). Common parameters to modify:
+iterations (more = better fit but slower), depth (complexity), learning_rate (step size).
+Default is NULL.}
 }
 \value{
-A ggplot object representing the specification curve.
+List containing:
+\itemize{
+\item final_plot: ggplot object representing the complete specification curve with Panel A (treatment effects) and Panel B (feature groups/SHAP)
+\item panel_a: ggplot object for Panel A only (treatment effects)
+\item panel_b: ggplot object for Panel B only (feature groups/SHAP)
+\item plot_data_p1: data.table with Panel A plotting data including columns: Unit Name, Estimate, RMSE, Specification, unit_type, p_value (if available)
+\item plot_data_p2: data.table with Panel B plotting data including columns: Specification, feature_group, feature, shapley_value (if SHAP computed), shap_pvalue (if significance computed)
+\item computed_shap: Complete results from internal SHAP computation (NULL if external shap_values provided or show_shap=FALSE).
+Contains: results (feature importance), shapley (SHAP values), predictions (model predictions), models (trained CatBoost models), config (SHAP configuration)
+\item spec_curve_pvals: List with specification curve-level p-values calculated on filtered data:
+median_tau_pvalues (median treatment effect ranks), stouffer_pvalues (Stouffer's Z-method ranks). NULL if no inference data available
+\item filtered_specs: Integer count of specifications remaining after filtering (before filtering if filter_specs=NULL)
+\item feature_groups_displayed: Character vector of feature groups shown in Panel B (only groups with variation in filtered data)
+}
 }
 \description{
-Creates specification curve plots directly from long format data,
-ensuring perfect alignment between SHAP values and specifications through
-shared full_spec_id identifiers.
+Creates specification curve plots directly from long format data with integrated
+SHAP analysis and flexible filtering capabilities. Key features:
+\itemize{
+\item Internal SHAP computation using CatBoost (automatic when show_shap=TRUE)
+\item Specification filtering BEFORE SHAP computation and p-value calculation
+\item Perfect alignment between SHAP values and specifications via full_spec_id
+\item FAIL HARD error handling with specific guidance when requirements aren't met
+}
 }
 \details{
 Plot Specification Curve Using Direct Long Format Data
 }
 \examples{
 \dontrun{
-# New recommended workflow with perfect alignment
+# ===== RECOMMENDED WORKFLOW: Internal SHAP Computation =====
 
-# 1. Generate long format data with bootstrap inference
-spec_results_long <- run_spec_curve_analysis(
-  dataset,
-  params = params,
-  inference_type = "bootstrap"
+# 1. Generate specification curve data
+spec_results <- run_spec_curve_analysis(
+  dataset = your_data,
+  params = your_params,
+  inference_type = "placebo"
 )
 
-# 2. Run SHAP analysis
-shap_results <- run_catboost_shap_analysis(spec_results_long, config)
-
-# 3. Plot using placebo null with continuous p-values (default - RMSE ratio)
-plot_rmse_ratio <- plot_spec_curve(
-  long_data = spec_results_long,
+# 2. Basic plot with internal SHAP computation (most common use case)
+plot_basic <- plot_spec_curve(
+  long_data = spec_results,
   name_treated_unit = "TREATED_ID",
-  shap_values = shap_results$shapley,
-  test_statistic = "rmse_ratio"
+  show_shap = TRUE,  # Automatically computes SHAP internally
+  shap_config = list(
+    compute_pvalues = TRUE,
+    pvalue_type = "absolute"
+  )
 )
 
-# 4. Plot using treatment effect test statistic p-values
+# ===== SPECIFICATION FILTERING EXAMPLES =====
+
+# Filter by constant terms only
+plot_constant_only <- plot_spec_curve(
+  long_data = spec_results,
+  name_treated_unit = "TREATED_ID",
+  filter_specs = list(constant = "TRUE"),
+  show_shap = TRUE
+)
+
+# Filter by multiple criteria (AND logic)
+plot_filtered <- plot_spec_curve(
+  long_data = spec_results,
+  name_treated_unit = "TREATED_ID",
+  filter_specs = list(
+    constant = "TRUE",
+    const = c("simplex", "lasso"),
+    outcome_model = c("none", "augsynth")
+  ),
+  show_shap = TRUE
+)
+
+# Compare specific constraint methods
+plot_constraints <- plot_spec_curve(
+  long_data = spec_results,
+  name_treated_unit = "TREATED_ID",
+  filter_specs = list(const = c("simplex", "lasso", "ridge")),
+  show_shap = TRUE,
+  shap_config = list(compute_pvalues = FALSE)  # Disable SHAP significance
+)
+
+# ===== DIFFERENT TEST STATISTICS =====
+
+# Using treatment effect p-values
 plot_treatment_effect <- plot_spec_curve(
-  long_data = spec_results_long,
+  long_data = spec_results,
   name_treated_unit = "TREATED_ID",
-  shap_values = shap_results$shapley,
-  test_statistic = "treatment_effect"
+  test_statistic = "treatment_effect",
+  show_shap = TRUE
 )
 
-# 5. Plot using normalized treatment effect test statistic p-values
-plot_normalized_te <- plot_spec_curve(
-  long_data = spec_results_long,
+# Using RMSE ratio p-values (default)
+plot_rmse_ratio <- plot_spec_curve(
+  long_data = spec_results,
   name_treated_unit = "TREATED_ID",
-  shap_values = shap_results$shapley,
-  test_statistic = "normalized_te"
+  test_statistic = "rmse_ratio",
+  show_shap = TRUE
 )
 
-# 6. Plot with SHAP significance testing (requires multi-unit SHAP data)
-# Run CatBoost analysis on all units
-config_all_units <- create_catboost_config(
+# ===== SHAP SIGNIFICANCE TESTING =====
+
+# SHAP with signed significance testing
+plot_shap_signed <- plot_spec_curve(
+  long_data = spec_results,
+  name_treated_unit = "TREATED_ID",
+  show_shap = TRUE,
+  shap_config = list(
+    compute_pvalues = TRUE,
+    pvalue_type = "signed"  # Two-sided SHAP significance
+  )
+)
+
+# ===== EXTERNAL SHAP WORKFLOW (Advanced) =====
+
+# For advanced users who want external control over SHAP computation
+shap_config_external <- create_catboost_config(
   dataset_name = "example",
   treated_unit_name = "TREATED_ID",
-  treated_unit_only = FALSE   # Analyze all units for significance testing
+  treated_unit_only = FALSE  # Multi-unit for significance testing
 )
-shap_all_units <- run_catboost_shap_analysis(spec_results_long, config_all_units)
+external_shap <- run_catboost_shap_analysis(spec_results, shap_config_external)
 
-# Plot with automatic SHAP significance testing (absolute method, default)
-plot_with_shap_significance_abs <- plot_spec_curve(
-  long_data = spec_results_long,
+plot_external_shap <- plot_spec_curve(
+  long_data = spec_results,
   name_treated_unit = "TREATED_ID",
-  shap_values = shap_all_units$shapley,   # Multi-unit SHAP data
-  calculate_shap_pvalues = TRUE   # Enable significance testing (default)
-)
-# Displays SHAP values with transparency indicating statistical significance (absolute)
-
-# Plot with SHAP significance testing using signed p-values
-plot_with_shap_significance_signed <- plot_spec_curve(
-  long_data = spec_results_long,
-  name_treated_unit = "TREATED_ID",
-  shap_values = shap_all_units$shapley,
-  calculate_shap_pvalues = TRUE,
-  shap_pvalue_type = "signed" # New option
+  shap_values = external_shap$shapley,  # Provide external SHAP
+  show_shap = TRUE
 )
 
-# 7. Disable SHAP significance testing if not wanted
-plot_no_shap_significance <- plot_spec_curve(
-  long_data = spec_results_long,
+# ===== OTHER OPTIONS =====
+
+# Disable SHAP entirely
+plot_no_shap <- plot_spec_curve(
+  long_data = spec_results,
   name_treated_unit = "TREATED_ID",
-  shap_values = shap_all_units$shapley,
-  calculate_shap_pvalues = FALSE   # Disable significance testing
+  show_shap = FALSE
 )
+
+# Crop outliers and sort by p-values
+plot_customized <- plot_spec_curve(
+  long_data = spec_results,
+  name_treated_unit = "TREATED_ID",
+  show_shap = TRUE,
+  crop_outliers = "percentile",
+  sort_by = "pvalue",
+  normalize_outcomes = "standardized"
+)
+
+# ===== EXTRACTING INDIVIDUAL PANELS =====
+
+# Extract and display only Panel A (treatment effects)
+panel_a <- extract_panel_a(plot_customized)
+
+# Extract and save Panel B (specification features/SHAP)
+extract_panel_b(plot_customized, file_path = "shap_features.png", width = 10, height = 8)
 
 }
 }

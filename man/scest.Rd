@@ -50,14 +50,15 @@ Must be installed on system. Default is "ECOS".}
 \value{
 A list of class "scest" containing:
 \itemize{
-\item \code{w.weights} - Vector of synthetic control weights
-\item \code{Y.pre.fit} - Fitted pre-treatment outcomes
-\item \code{Y.post.fit} - Fitted post-treatment outcomes
-\item \code{loss.v} - Pre-treatment fit loss
-\item \code{specs} - Estimation specifications
-\item \code{data} - Original data (if save.data = TRUE)
-\item \code{V.mat} - Feature weighting matrix used
-\item Additional estimation metadata
+\item \code{est.results$w} - Vector of synthetic control weights for donor units
+\item \code{est.results$constant_term} - Constant (intercept) coefficient if \code{constant=TRUE} was used in scdata, NULL otherwise
+\item \code{est.results$b} - Full coefficient vector (donor weights + constant term)
+\item \code{est.results$Y.pre.fit} - Fitted pre-treatment outcomes
+\item \code{est.results$Y.post.fit} - Fitted post-treatment outcomes
+\item \code{est.results$V} - Feature weighting matrix used
+\item \code{est.results$w.constr} - Weight constraint specification used
+\item \code{data} - Original scdata object with estimation matrices
+\item Additional estimation metadata and diagnostics
 }
 }
 \description{
@@ -100,5 +101,20 @@ custom_V <- diag(nrow(scm_data$Y.pre))
 result_custom <- scest(data = scm_data,
                        w.constr = list(name = "simplex"),
                        V.mat = custom_V)
+                       
+# With constant term (requires scdata with constant=TRUE)
+scm_data_const <- scdata(df = data, ..., constant = TRUE, 
+                        covagg = list(...))  # Multiple features required
+                        
+# Simplex with constant - donor weights sum to 1, constant unconstrained
+result_const_simplex <- scest(data = scm_data_const,
+                              w.constr = list(name = "simplex"))
+print(result_const_simplex$est.results$w)            # Donor weights 
+print(result_const_simplex$est.results$constant_term) # Constant coefficient
+
+# OLS with constant - no constraints on any coefficients
+result_const_ols <- scest(data = scm_data_const,
+                          w.constr = list(name = "ols"))
+print(result_const_ols$est.results$constant_term)     # Can be positive/negative
 }
 }
