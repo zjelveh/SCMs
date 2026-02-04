@@ -2,12 +2,12 @@
 % Please edit documentation in R/visualization_advanced.R
 \name{check_interaction_feasibility}
 \alias{check_interaction_feasibility}
-\title{Check if CatBoost Results Have Sufficient Features for Interaction Analysis}
+\title{Check if XGBoost Results Have Sufficient Features for Interaction Analysis}
 \usage{
-check_interaction_feasibility(catboost_results, min_features = 2)
+check_interaction_feasibility(shap_results, min_features = 2)
 }
 \arguments{
-\item{catboost_results}{List. Results from run_catboost_shap_analysis.}
+\item{shap_results}{List. Results from run_xgboost_shap_analysis.}
 
 \item{min_features}{Integer. Minimum number of features required (default 2).}
 }
@@ -15,5 +15,5 @@ check_interaction_feasibility(catboost_results, min_features = 2)
 List with check results and available features.
 }
 \description{
-Check if CatBoost Results Have Sufficient Features for Interaction Analysis
+Check if XGBoost Results Have Sufficient Features for Interaction Analysis
 }

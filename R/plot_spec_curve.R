@@ -3,7 +3,7 @@
 #' @title Plot Specification Curve with Internal SHAP Computation and Filtering
 #' @description Creates specification curve plots directly from long format data with integrated
 #' SHAP analysis and flexible filtering capabilities. Key features:
-#' - Internal SHAP computation using CatBoost (automatic when show_shap=TRUE)
+#' - Internal SHAP computation using XGBoost (automatic when show_shap=TRUE)
 #' - Specification filtering BEFORE SHAP computation and p-value calculation
 #' - Perfect alignment between SHAP values and specifications via full_spec_id
 #' - FAIL HARD error handling with specific guidance when requirements aren't met
@@ -20,7 +20,7 @@
 #'   - "standardized": tau / sd(control_effects)
 #'   - "rmspe_ratio": post_RMSPE / pre_RMSPE (Abadie-style)
 #' @param rmse_threshold Numeric. Threshold for root mean square error to filter results. Default is Inf.
-#' @param shap_values Data.table or NULL. External SHAP values from run_catboost_shap_analysis().
+#' @param shap_values Data.table or NULL. External SHAP values from run_xgboost_shap_analysis().
 #'   Should contain columns: unit, full_spec_id, feature_group, feature, shapley_value.
 #'   If NULL and show_shap=TRUE, SHAP values will be computed internally. Default is NULL.
 #' @param file_path_save Character or NA. File path to save the plot. If NA, plot is not saved. Default is NA.
@@ -58,27 +58,29 @@
 #'   list(constant = "TRUE", outcome_model = c("none", "augsynth")). Default is NULL (no filtering).
 #' @param show_shap Logical. Whether to compute and display SHAP values. When TRUE:
 #'   - If shap_values is provided: uses external SHAP values
-#'   - If shap_values is NULL: computes SHAP values internally using CatBoost
+#'   - If shap_values is NULL: computes SHAP values internally using XGBoost
 #'   - Requires at least 3 unique specifications for internal computation
 #'   - Automatically detects available specification features (outcome_model, const, fw, feat, data_sample, constant)
 #'   Default is TRUE.
 #' @param shap_config List. Configuration for SHAP computation and significance testing with elements:
 #'   - compute_pvalues: Logical. Whether to calculate SHAP significance via placebo inference.
-#'     Requires multi-unit SHAP data (treated_unit_only = FALSE in CatBoost config). Default is TRUE.
+#'     Requires multi-unit SHAP data (treated_unit_only = FALSE in XGBoost config). Default is TRUE.
 #'   - pvalue_type: Character. Method for SHAP significance testing: "absolute" or "signed".
 #'     "absolute" ranks by |SHAP| values, "signed" uses two-sided rank-based test. Default is "absolute".
 #' @param shap_label_type Character. How to display SHAP values in y-axis labels: "absolute" or "signed".
 #'   - "absolute": Shows mean |SHAP| values, e.g., "ridge (0.123)"
 #'   - "signed": Shows mean SHAP values with sign, e.g., "ridge (+0.089)" or "lasso (-0.045)"
 #'   Default is "absolute".
-#' @param show_predictions Logical. Whether to display predicted treatment effects from CatBoost models
+#' @param show_predictions Logical. Whether to display predicted treatment effects from XGBoost models
 #'   alongside actual treatment effects in Panel A. Uses leave-one-out cross-validation predictions
-#'   for robust evaluation. Only available when SHAP is computed internally (show_shap=TRUE).
-#'   Default is FALSE.
-#' @param catboost_params List. Custom parameters for CatBoost model training. If NULL, uses defaults:
-#'   list(loss_function='RMSE', iterations=100, depth=4, learning_rate=0.1, random_seed=42,
-#'   verbose=0, bootstrap_type='Bayesian', bagging_temperature=1). Common parameters to modify:
-#'   iterations (more = better fit but slower), depth (complexity), learning_rate (step size).
+#'   for robust evaluation. Default is FALSE.
+#' @param predictions Data.table or NULL. External LOO predictions from run_xgboost_shap_analysis().
+#'   Should contain columns: unit, full_spec_id, predicted_loo, actual.
+#'   If NULL and show_predictions=TRUE, predictions will be computed internally. Default is NULL.
+#' @param xgboost_params List. Custom parameters for XGBoost model training. If NULL, uses defaults:
+#'   list(objective='reg:squarederror', max_depth=10, eta=0.05, nrounds=500, subsample=0.8,
+#'   colsample_bytree=0.8, nthread=1, seed=42, verbose=0). Common parameters to modify:
+#'   nrounds (more = better fit but slower), max_depth (complexity), eta (learning rate).
 #'   Default is NULL.
 #'
 #' @return List containing:
@@ -89,7 +91,7 @@
 #'   \item plot_data_p1: data.table with Panel A plotting data including columns: Unit Name, Estimate, RMSE, Specification, unit_type, p_value (if available)
 #'   \item plot_data_p2: data.table with Panel B plotting data including columns: Specification, feature_group, feature, shapley_value (if SHAP computed), shap_pvalue (if significance computed)
 #'   \item computed_shap: Complete results from internal SHAP computation (NULL if external shap_values provided or show_shap=FALSE). 
-#'     Contains: results (feature importance), shapley (SHAP values), predictions (model predictions), models (trained CatBoost models), config (SHAP configuration)
+#'     Contains: results (feature importance), shapley (SHAP values), predictions (model predictions), models (trained XGBoost models), config (SHAP configuration)
 #'   \item spec_curve_pvals: List with specification curve-level p-values calculated on filtered data:
 #'     median_tau_pvalues (median treatment effect ranks), stouffer_pvalues (Stouffer's Z-method ranks). NULL if no inference data available
 #'   \item filtered_specs: Integer count of specifications remaining after filtering (before filtering if filter_specs=NULL)
@@ -185,12 +187,12 @@
 #' # ===== EXTERNAL SHAP WORKFLOW (Advanced) =====
 #'
 #' # For advanced users who want external control over SHAP computation
-#' shap_config_external <- create_catboost_config(
+#' shap_config_external <- create_xgboost_config(
 #'   dataset_name = "example",
 #'   treated_unit_name = "TREATED_ID",
 #'   treated_unit_only = FALSE  # Multi-unit for significance testing
 #' )
-#' external_shap <- run_catboost_shap_analysis(spec_results, shap_config_external)
+#' external_shap <- run_xgboost_shap_analysis(spec_results, shap_config_external)
 #'
 #' plot_external_shap <- plot_spec_curve(
 #'   long_data = spec_results,
@@ -238,7 +240,7 @@ plot_spec_curve <- function(
     file_path_save = NA,
     width = 6,
     height = 10,
-    show_pvalues = TRUE,
+    show_pvalues = FALSE,
     p_threshold = 0.05,
     prefer_bootstrap_pvalues = FALSE,
     test_statistic = "rmse_ratio",
@@ -253,7 +255,8 @@ plot_spec_curve <- function(
     ),
     shap_label_type = "absolute",
     show_predictions = FALSE,
-    catboost_params = NULL
+    predictions = NULL,
+    xgboost_params = NULL
 ) {
 
     # Libraries imported via NAMESPACE
@@ -544,9 +547,10 @@ plot_spec_curve <- function(
     }
 
     # Calculate average effects for plotting (post-treatment period only)
-    # Define common grouping variables for aggregation
-    agg_grouping_vars <- c('unit_name', 'unit_type', 'full_spec_id', 'outcome',
+    # Define common grouping variables for aggregation (only include columns that exist)
+    agg_grouping_vars_candidates <- c('unit_name', 'unit_type', 'full_spec_id', 'outcome',
                           'outcome_model', 'const', 'fw', 'feat', 'data_sample', 'constant')
+    agg_grouping_vars <- intersect(agg_grouping_vars_candidates, names(sc_results_df))
     
     # Perform aggregation with conditional columns
     if ("post_pre_ratio" %in% names(sc_results_df)) {
@@ -682,7 +686,7 @@ plot_spec_curve <- function(
     
     # Check if we need to compute SHAP internally
     if (show_shap && is.null(shap_values)) {
-        message("Internal SHAP computation requested. Running CatBoost SHAP analysis...")
+        message("Internal SHAP computation requested. Running XGBoost SHAP analysis...")
         
         # Create default configuration for internal SHAP computation
         # Use the most common specifications for internal analysis
@@ -716,25 +720,25 @@ plot_spec_curve <- function(
         }
         
         # Create configuration for internal SHAP computation
-        shap_config_internal <- create_catboost_config(
+        shap_config_internal <- create_xgboost_config(
             dataset_name = paste0("internal_shap_", Sys.time()),
             treated_unit_name = name_treated_unit,
             outcome_filter = outcome_filter,
             spec_features = available_spec_features,
             treated_unit_only = TRUE,  # Default to treated unit only for efficiency
-            catboost_params = catboost_params  # Pass custom CatBoost parameters
+            xgboost_params = xgboost_params  # Pass custom XGBoost parameters
         )
         
-        # Create long format data structure expected by run_catboost_shap_analysis
+        # Create long format data structure expected by run_xgboost_shap_analysis
         # Add spec_number for proper alignment 
         long_format_data <- copy(sc_results_df)
         
-        # Check minimum specifications required for CatBoost
+        # Check minimum specifications required for XGBoost
         treated_unit_specs <- unique(sc_results_df[unit_name == name_treated_unit, full_spec_id])
         n_unique_specs <- length(treated_unit_specs)
         
         if (n_unique_specs < 3) {
-            stop("Internal SHAP computation failed: Insufficient specifications for CatBoost analysis. ",
+            stop("Internal SHAP computation failed: Insufficient specifications for XGBoost analysis. ",
                  "Found ", n_unique_specs, " unique specifications, but at least 3 are required. ",
                  "Either provide external shap_values, set show_shap=FALSE, or run with more specification variations.")
         }
@@ -757,7 +761,7 @@ plot_spec_curve <- function(
         
         # Run internal SHAP analysis
         shap_results_internal <- tryCatch({
-            run_catboost_shap_analysis(long_format_data, shap_config_internal)
+            run_xgboost_shap_analysis(long_format_data, shap_config_internal, compute_loo = show_predictions)
         }, error = function(e) {
             stop("Internal SHAP computation failed: ", e$message, ". ",
                  "Either provide shap_values parameter or set show_shap=FALSE.")
@@ -884,9 +888,13 @@ plot_spec_curve <- function(
              c('Estimate', 'Unit Name', 'RMSE'))
 
     # Add predicted treatment effects if requested and available (after SHAP computation)
-    if (show_predictions && !is.null(computed_shap) && !is.null(computed_shap$predictions)) {
+    # Use external predictions if provided, otherwise fall back to internally computed
+    predictions_source <- if (!is.null(predictions)) predictions
+                          else if (!is.null(computed_shap)) computed_shap$predictions
+                          else NULL
+    if (show_predictions && !is.null(predictions_source)) {
         # Extract predictions for treated unit
-        predictions_data <- computed_shap$predictions[unit == name_treated_unit]
+        predictions_data <- predictions_source[unit == name_treated_unit]
         
         if (nrow(predictions_data) > 0 && "predicted_loo" %in% names(predictions_data)) {
             # Merge predictions with specification mapping
@@ -1012,8 +1020,8 @@ plot_spec_curve <- function(
                     labels = c("1.0", "0.5", "0.1", "0.05", "0.01", "0.001"),
                     guide = guide_colorbar(
                         title.position = "top",
-                        barwidth = unit(4, "cm"),
-                        barheight = unit(0.5, "cm")
+                        barwidth = grid::unit(4, "cm"),
+                        barheight = grid::unit(0.5, "cm")
                     )
                 )
         } else {
@@ -1079,24 +1087,65 @@ plot_spec_curve <- function(
         }
     }
 
-    # Add common elements to both plot types
-    p1 <- p1 +
+    # Add treatment/control/prediction legend via dummy data
+    legend_data <- data.table::data.table(
+        x = NA_real_, y = NA_real_,
+        Legend = factor(c("Treated", "Control/Placebo"),
+                        levels = c("Treated", "Control/Placebo"))
+    )
+    if (show_predictions && "Predicted" %in% names(plot_data_p1)) {
+        legend_data <- rbind(legend_data, data.table::data.table(
+            x = NA_real_, y = NA_real_,
+            Legend = factor("XGBoost LOO-CV", levels = c("Treated", "Control/Placebo", "XGBoost LOO-CV"))
+        ))
+        legend_data[, Legend := factor(Legend, levels = c("Treated", "Control/Placebo", "XGBoost LOO-CV"))]
+    }
 
+    p1 <- p1 +
+        geom_point(data = legend_data[Legend == "Treated"],
+                   aes(x = x, y = y, shape = Legend), color = "#1f78b4", fill = "#1f78b4",
+                   size = 2, alpha = 0.8, na.rm = TRUE) +
+        geom_point(data = legend_data[Legend == "Control/Placebo"],
+                   aes(x = x, y = y, shape = Legend), color = "gray60",
+                   size = 2, alpha = 0.3, na.rm = TRUE) +
+        {if (show_predictions && "Predicted" %in% names(plot_data_p1))
+            geom_point(data = legend_data[Legend == "XGBoost LOO-CV"],
+                       aes(x = x, y = y, shape = Legend), color = "red",
+                       size = 2.5, stroke = 1.2, alpha = 0.4, na.rm = TRUE)
+        } +
+        scale_shape_manual(
+            name = NULL,
+            values = c("Treated" = 19, "Control/Placebo" = 19,
+                        "XGBoost LOO-CV" = 4),
+            drop = FALSE
+        ) +
         guides(
-            color = guide_legend(title.position = "top", override.aes = list(size = 4))
+            color = "none",
+            fill = "none",
+            alpha = "none",
+            shape = guide_legend(
+                override.aes = list(
+                    color = c("#1f78b4", "gray60", "red")[seq_len(nrow(legend_data))],
+                    fill = c("#1f78b4", "gray60", NA)[seq_len(nrow(legend_data))],
+                    alpha = c(0.8, 0.3, 0.4)[seq_len(nrow(legend_data))],
+                    size = c(2, 2, 2.5)[seq_len(nrow(legend_data))],
+                    stroke = c(0, 0, 1.2)[seq_len(nrow(legend_data))]
+                )
+            )
         ) +
 
         theme_minimal() +
         theme(
-            legend.position = "left",
-            legend.box = "vertical",
-            axis.line = element_line(color = "black", linewidth = 0.5),
-            axis.text = element_text(colour = "black")
+            legend.position = "none",
+            axis.line.x = element_line(color = "black", linewidth = 0.5),
+            axis.line.y = element_blank(),
+            axis.text = element_text(colour = "black"),
+            axis.title.y = element_text(margin = ggplot2::margin(r = 2))
         ) +
-        labs(x = NULL, y = y_label) +
+        labs(x = NULL, y = NULL) +
         # Add subtitle explaining predictions if shown
         {if (show_predictions && "Predicted" %in% names(plot_data_p1))
-            labs(subtitle = paste0(y_label, " | Red x = CatBoost predictions (LOO-CV)"))
+            labs(subtitle = paste0(y_label, " | Red x = XGBoost predictions (LOO-CV)"))
         else
             NULL
         }
@@ -1165,14 +1214,16 @@ plot_spec_curve <- function(
 
             spec_annotation_text <- paste(annotation_lines, collapse = "\n")
 
-            # Add annotation to lower-left of Panel A (treatment effects plot)
+            # Add annotation to upper-right of Panel A with semi-transparent background
             p1 <- p1 +
-                annotate("text",
-                        x = -Inf, y = -Inf,
+                annotate("label",
+                        x = Inf, y = Inf,
                         label = spec_annotation_text,
-                        hjust = -0.1, vjust = -0.5,   # Left-align and move up slightly
-                        size = 3, color = "#000000",
-                        fontface = "plain")
+                        hjust = 1.05, vjust = 1.2,
+                        size = 2.8, color = "#000000",
+                        fontface = "plain",
+                        fill = "white", alpha = 0.8,
+                        linewidth = 0.3)
         }
     }
 
@@ -1208,7 +1259,7 @@ plot_spec_curve <- function(
         feature_shap_summary[, feature_with_shap := paste0(
             feature, " (<span style='color:", shap_color, "'>", 
             ifelse(shap_summary >= 0, "+", ""), 
-            round(shap_summary, 3), "</span>)"
+            round(shap_summary, 1), "</span>)"
         )]
         
         # Merge back with plot data to add enhanced labels
@@ -1239,25 +1290,86 @@ plot_spec_curve <- function(
         plot_data_p2[, shap_color_value := NA]  # No SHAP coloring
     }
 
+    # --- Build numeric y-position mapping for flat Panel B ---
+    # Assign sequential y positions within each feature group, with gaps between groups.
+    # Groups are built bottom-to-top (rev of alphabetical) so first group appears at top.
+    fg_order <- sort(unique(as.character(plot_data_p2$feature_group)))
+
+    y_pos <- 1.0
+    within_group_step <- 0.55  # tighter spacing within categories
+    between_group_gap <- 1.8   # wider gap between categories
+    group_boundaries <- list()
+    y_mapping <- data.table::data.table(
+        feature_group = character(0),
+        feature_display_chr = character(0),
+        y_numeric = numeric(0)
+    )
+
+    for (fg in rev(fg_order)) {
+        features_in_group <- sort(unique(as.character(
+            plot_data_p2[feature_group == fg, feature_display]
+        )))
+        y_start <- y_pos
+        for (i in seq_along(features_in_group)) {
+            y_mapping <- rbind(y_mapping, data.table::data.table(
+                feature_group = fg,
+                feature_display_chr = features_in_group[i],
+                y_numeric = y_pos
+            ))
+            if (i < length(features_in_group)) y_pos <- y_pos + within_group_step
+        }
+        y_end <- y_pos
+        group_boundaries[[fg]] <- list(start = y_start, end = y_end,
+                                       mid = (y_start + y_end) / 2)
+        y_pos <- y_pos + between_group_gap  # wider gap between groups
+    }
+
+    # Merge y_numeric into plot_data_p2
+    plot_data_p2[, feature_display_chr := as.character(feature_display)]
+    plot_data_p2 <- merge(plot_data_p2,
+                          y_mapping[, .(feature_group, feature_display_chr, y_numeric)],
+                          by = c("feature_group", "feature_display_chr"),
+                          all.x = TRUE)
+
+    # Create ordered factor for discrete y-axis (element_markdown works with discrete scales)
+    ordered_levels <- y_mapping[order(y_numeric), feature_display_chr]
+    plot_data_p2[, feature_display_ordered := factor(feature_display_chr, levels = ordered_levels)]
+
+    # Compute separator positions midway between adjacent groups (in y_numeric space)
+    sorted_mapping <- y_mapping[order(y_numeric)]
+    n_levels <- nrow(sorted_mapping)
+    separator_positions <- numeric(0)
+    for (i in seq_len(n_levels - 1)) {
+        if (sorted_mapping$feature_group[i] != sorted_mapping$feature_group[i + 1]) {
+            separator_positions <- c(separator_positions,
+                                     (sorted_mapping$y_numeric[i] + sorted_mapping$y_numeric[i + 1]) / 2)
+        }
+    }
+
+    # Group midpoints in y_numeric space (for category label NPC coords)
+    group_disc_boundaries <- list()
+    for (fg in fg_order) {
+        y_vals <- sorted_mapping[feature_group == fg, y_numeric]
+        group_disc_boundaries[[fg]] <- list(start = min(y_vals), end = max(y_vals),
+                                            mid = (min(y_vals) + max(y_vals)) / 2)
+    }
+
     # Check if SHAP values are available in the data
     if ("shapley_value" %in% names(plot_data_p2)) {
         # Prepare alpha mapping if significance is available
         if (has_shap_significance) {
-            # Create p-value-based alpha mapping for continuous significance scale
-            # Lower p-value = more significant = more solid (higher alpha)
-            # Map p-values: p=0 -> alpha=1.0 (solid), p=1 -> alpha=0.2 (transparent)
             plot_data_p2[, shap_alpha_value := pmax(0.2, 1.0 - pmin(shap_pvalue, 1.0))]
         }
-        
-        # Create base plot with appropriate aesthetics
+
+        # Create base plot with continuous y-axis (tighter within-group, wider between-group)
         if (has_shap_significance) {
-            p2 <- ggplot(plot_data_p2, aes(x = Specification, y = feature_display)) +
+            p2 <- ggplot(plot_data_p2, aes(x = Specification, y = y_numeric)) +
                 geom_point(aes(color = shap_color_value, alpha = shap_alpha_value), shape = 15, size = 2.5)
         } else {
-            p2 <- ggplot(plot_data_p2, aes(x = Specification, y = feature_display)) +
+            p2 <- ggplot(plot_data_p2, aes(x = Specification, y = y_numeric)) +
                 geom_point(aes(color = shap_color_value), shape = 15, size = 2.5)
         }
-        
+
         # Add color scale based on shap_label_type
         if (shap_label_type == "absolute") {
             p2 <- p2 + scale_color_gradient(
@@ -1276,7 +1388,7 @@ plot_spec_curve <- function(
                 guide = guide_colorbar(title.position = "top")
             )
         }
-        
+
         # Add alpha scale if significance is available
         if (has_shap_significance) {
             p2 <- p2 + scale_alpha_continuous(
@@ -1288,51 +1400,185 @@ plot_spec_curve <- function(
         }
     } else {
         # No SHAP values - create basic specification plot
-        p2 <- ggplot(plot_data_p2, aes(x = Specification, y = feature_display)) +
+        p2 <- ggplot(plot_data_p2, aes(x = Specification, y = y_numeric)) +
             geom_point(color = "#666666", shape = 15, size = 2.5)
     }
 
-    # Add remaining plot elements
+    # Add separator lines between feature groups (discrete positions)
+    if (length(separator_positions) > 0) {
+        p2 <- p2 + geom_hline(yintercept = separator_positions, color = "gray80", linewidth = 0.3)
+    }
+
+    # Add remaining plot elements (flat — no facet_grid)
+    # Y-axis text is blank here; richtext labels are added as grobs after conversion.
     p2 <- p2 +
-        facet_grid(feature_group ~ ., scales = "free_y", space = "free_y", switch = "y") +
+        scale_y_continuous(
+            breaks = sorted_mapping$y_numeric,
+            labels = sorted_mapping$feature_display_chr,
+            expand = expansion(add = 0.5)
+        ) +
         theme_minimal() +
         theme(
             axis.line.x = element_line(color = "black", linewidth = 0.5),
-            axis.text.y = if ("shapley_value" %in% names(plot_data_p2)) {
-                ggtext::element_markdown(colour = "black", size = 8)
-            } else {
-                element_text(colour = "black", size = 8)
-            },
-            strip.placement = "outside",
-            strip.text.y.left = element_text(angle = 0, hjust = 1, face = "bold"),
-            panel.spacing = unit(.25, "lines"),
+            axis.text.y = element_blank(),
+            axis.ticks.y = element_blank(),
+            panel.grid.major.y = element_blank(),
+            panel.grid.minor.y = element_blank(),
             legend.position = "bottom",
-            legend.key.width = unit(1.5, "cm"),
-            legend.box = "horizontal"   # Place legends side by side
+            legend.key.width = grid::unit(1.5, "cm"),
+            legend.box = "horizontal"
         ) +
         labs(x = "Specification Number", y = "")
 
 
     # --- 3. Combine Plots ---
-    final_plot <- plot_grid(
-        p1,
-        p2,
-        ncol = 1,
-        align = 'v',
-        axis = "lr",
-        rel_heights = c(0.4, 0.6)
+    # Extract legend from Panel B before removing it for grob assembly
+    p2_with_legend <- p2  # preserve for return object
+    p2_legend <- cowplot::get_legend(p2)
+    p2 <- p2 + theme(legend.position = "none")
+
+    # Extract Panel A legend before suppressing it
+    p1_for_legend <- p1 + theme(legend.position = "right")
+    p1_legend <- cowplot::get_legend(p1_for_legend)
+
+    # Convert both panels to grobs
+    p2_grob <- ggplot2::ggplotGrob(p2)
+    p1_grob <- ggplot2::ggplotGrob(p1)
+
+    # --- Build label grobs for Panel B ---
+    # Compute NPC coordinates matching Panel B's continuous y-scale
+    # (y_numeric range with expansion(add = 0.5))
+    y_min <- min(sorted_mapping$y_numeric) - 0.5
+    y_max <- max(sorted_mapping$y_numeric) + 0.5
+    y_range <- y_max - y_min
+    to_npc <- function(y_val) (y_val - y_min) / y_range
+
+    # Category labels (bold feature_group names at group midpoints)
+    cat_labels_text <- fg_order
+    cat_y_npc <- sapply(fg_order, function(fg) to_npc(group_disc_boundaries[[fg]]$mid))
+    cat_grob <- grid::textGrob(
+        label = cat_labels_text,
+        x = grid::unit(0.5, "npc"),
+        y = grid::unit(cat_y_npc, "npc"),
+        hjust = 0.5, vjust = 0.5,
+        gp = grid::gpar(fontsize = 9, fontface = "bold")
     )
+
+    # Subcategory labels (feature names with colored SHAP values, rendered as richtext)
+    # Wrap long labels onto two lines using <br> (richtext supports HTML)
+    subcat_y_npc <- to_npc(sorted_mapping$y_numeric)
+    subcat_labels <- gsub(" \\+ ", "<br>+ ", sorted_mapping$feature_display_chr)
+    subcat_grob <- gridtext::richtext_grob(
+        text = subcat_labels,
+        x = grid::unit(1, "npc"),
+        y = grid::unit(subcat_y_npc, "npc"),
+        hjust = 1, vjust = 0.5,
+        gp = grid::gpar(fontsize = 8),
+        default.units = "npc",
+        padding = grid::unit(c(0, 4, 0, 0), "pt"),
+        margin = grid::unit(c(0, 2, 0, 0), "pt"),
+        box_gp = grid::gpar(col = NA, fill = NA)
+    )
+
+    # --- Insert label columns into Panel B grob ---
+    p2_panel_idx <- which(p2_grob$layout$name == "panel")
+    p2_panel_row_t <- min(p2_grob$layout$t[p2_panel_idx])
+    p2_panel_row_b <- max(p2_grob$layout$b[p2_panel_idx])
+
+    # Insert category column (col 1) and subcategory column (col 2) at left
+    p2_grob <- gtable::gtable_add_cols(p2_grob, grid::unit(1.5, "cm"), pos = 0)
+    p2_grob <- gtable::gtable_add_cols(p2_grob, grid::unit(4.0, "cm"), pos = 1)
+
+    p2_grob <- gtable::gtable_add_grob(p2_grob, cat_grob,
+        t = p2_panel_row_t, b = p2_panel_row_b,
+        l = 1, r = 1, clip = "off", name = "cat_labels")
+    p2_grob <- gtable::gtable_add_grob(p2_grob, subcat_grob,
+        t = p2_panel_row_t, b = p2_panel_row_b,
+        l = 2, r = 2, clip = "off", name = "subcat_labels")
+
+    # --- Align Panel A columns with Panel B ---
+    # Panel B now has one extra column (category labels) that Panel A lacks.
+    # Insert dummy columns in Panel A so both panels occupy the same column.
+    p2_panel_col <- min(p2_grob$layout$l[p2_grob$layout$name == "panel"])
+    p1_panel_col <- min(p1_grob$layout$l[grepl("^panel$", p1_grob$layout$name)])
+
+    n_extra <- p2_panel_col - p1_panel_col
+    if (n_extra > 0) {
+        for (i in seq_len(n_extra)) {
+            p1_grob <- gtable::gtable_add_cols(p1_grob, grid::unit(0, "cm"), pos = 0)
+        }
+    }
+
+    # Pad right side so both grobs have the same column count
+    while (ncol(p1_grob) < ncol(p2_grob)) {
+        p1_grob <- gtable::gtable_add_cols(p1_grob, grid::unit(0, "cm"), pos = -1)
+    }
+    while (ncol(p2_grob) < ncol(p1_grob)) {
+        p2_grob <- gtable::gtable_add_cols(p2_grob, grid::unit(0, "cm"), pos = -1)
+    }
+
+    # Copy Panel B widths to Panel A — panels now occupy the same column
+    p1_grob$widths <- p2_grob$widths
+
+    # Move Panel A's ylab and axis-l into the label columns so they don't
+    # consume extra width. Panel B has blank y-axis so those columns are zero-width;
+    # we relocate the grobs rather than inflating columns.
+    p1_panel_ids <- which(grepl("^panel", p1_grob$layout$name))
+    p1_panel_t <- min(p1_grob$layout$t[p1_panel_ids])
+    p1_panel_b <- max(p1_grob$layout$b[p1_panel_ids])
+
+    # Move ylab into category column (col 1)
+    ylab_ids <- which(grepl("^ylab-l$|^ylab$|^ylab-l-.*|^ylab-.*", p1_grob$layout$name))
+    if (length(ylab_ids)) {
+        p1_grob$layout$l[ylab_ids] <- 1
+        p1_grob$layout$r[ylab_ids] <- 1
+    }
+    # Move axis-l (tick labels) into subcategory column (col 2), right-aligned
+    axisl_ids <- which(grepl("^axis-l", p1_grob$layout$name))
+    if (length(axisl_ids)) {
+        p1_grob$layout$l[axisl_ids] <- 2
+        p1_grob$layout$r[axisl_ids] <- 2
+    }
+
+    # Place Panel A legend in the left margin columns (where Panel B has category labels)
+    if (!is.null(p1_legend)) {
+        p1_grob <- gtable::gtable_add_grob(
+            p1_grob, p1_legend,
+            t = p1_panel_t, b = p1_panel_b,
+            l = 1, r = 2,
+            clip = "off", name = "panelA_legend"
+        )
+    }
+
+    # Combine panels
+    final_plot <- gridExtra::gtable_rbind(p1_grob, p2_grob, size = "last")
+
+    # Set Panel A panel row height so it gets ~30% of figure
+    p1_panel_row <- unique(p1_grob$layout$t[p1_panel_ids])
+    for (r in p1_panel_row) {
+        final_plot$heights[r] <- grid::unit(0.7, "null")
+    }
+
+    # Add legend row at bottom
+    if (!is.null(p2_legend)) {
+        final_plot <- gtable::gtable_add_rows(final_plot, grid::unit(2.0, "cm"), pos = -1)
+        final_plot <- gtable::gtable_add_grob(final_plot, p2_legend,
+            t = nrow(final_plot), l = 1, r = ncol(final_plot),
+            clip = "off", name = "legend_bottom")
+    }
 
     # Save plot if file path is provided
     if (!is.na(file_path_save)) {
-        ggplot2::ggsave(file_path_save, plot = final_plot, width = width, height = height)
+        pdf(file_path_save, width = width, height = height)
+        grid::grid.draw(final_plot)
+        dev.off()
     }
 
     # Prepare comprehensive return object
     return_object <- list(
         final_plot = final_plot,
         panel_a = p1,
-        panel_b = p2,
+        panel_b = p2_with_legend,
         plot_data_p1 = plot_data_p1,
         plot_data_p2 = plot_data_p2,
         computed_shap = computed_shap,

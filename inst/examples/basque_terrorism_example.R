@@ -130,7 +130,7 @@ cat("Specification Curve Analysis completed with",
 # ===== SHAP INTERPRETABILITY ANALYSIS =====
 
 # Configure machine learning analysis to understand what drives variation
-catboost_config <- create_catboost_config(
+xgboost_config <- create_xgboost_config(
   dataset_name = "basque_terrorism",
   treated_unit_name = "Basque Country (Pais Vasco)",
   outcome_filter = "gdpcap",
@@ -138,9 +138,9 @@ catboost_config <- create_catboost_config(
 )
 
 # Generate SHAP values to explain specification sensitivity
-shap_results <- run_catboost_shap_analysis(
+shap_results <- run_xgboost_shap_analysis(
   spec_results$results, 
-  catboost_config
+  xgboost_config
 )
 
 # ===== VISUALIZATION AND RESULTS =====

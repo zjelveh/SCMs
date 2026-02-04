@@ -10,8 +10,8 @@
 #' @param treated_period Numeric. Time period when treatment starts for the treated unit.
 #' @param min_period Numeric. Earliest time period in the dataset.
 #' @param end_period Numeric. Latest time period in the dataset.
-#' @param outcome_models Character vector. Outcome models to fit. Default is c("None", "OLS", "Ridge", "Lasso", "AugSynth").
-#' @param feature_weights Character vector. Method for assigning weights to predictors. Default is c("uniform", "optimized").
+#' @param outcome_models Character vector. Outcome models to fit. Default is c("none", "ols", "ridge", "lasso", "augsynth").
+#' @param feature_weights Character vector. Method for assigning weights to predictors. Default is c("uniform", "optimize").
 #' @param w.constr Optional. Constraints on the weights.
 #' @param V Character. Covariance matrix estimation method. Default is "separate".
 #' @param V.mat Optional. Pre-computed covariance matrix.
@@ -39,8 +39,8 @@ estimate_sc <- function(dataset,           # Input dataset (panel data format)
                         treated_period,    # Time period when treatment starts for the treated unit
                         min_period,        # Earliest time period in the dataset
                         end_period,        # Latest time period in the dataset
-                        outcome_models = c("None", "OLS", "Ridge", "Lasso", "AugSynth"), # Outcome models to fit
-                        feature_weights = c("uniform", "optimized"),  # Method for assigning weights to predictors
+                        outcome_models = c("none", "ols", "ridge", "lasso", "augsynth"), # Outcome models to fit
+                        feature_weights = c("uniform", "optimize"),  # Method for assigning weights to predictors
                         w.constr = NULL,    # Constraints on the weights (optional)
                         V = "separate",     # Covariance matrix estimation method (usually "separate")
                         V.mat = NULL,       # Pre-computed covariance matrix (optional)
@@ -76,9 +76,9 @@ estimate_sc <- function(dataset,           # Input dataset (panel data format)
   # Validate optional parameters
   validate_list(covagg, "covagg", allow_null = TRUE)
   validate_character(outcome_models, "outcome_models", length = length(outcome_models),
-                    choices = c("None", "OLS", "Ridge", "Lasso", "AugSynth"))
+                    choices = c("none", "ols", "ridge", "lasso", "augsynth"))
   validate_character(feature_weights, "feature_weights", length = length(feature_weights),
-                    choices = c("uniform", "optimized"))
+                    choices = c("uniform", "optimize"))
 
 
   data <- create_scm_dataset(       # Create a formatted dataset for SCM

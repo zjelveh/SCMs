@@ -380,12 +380,7 @@ scdata <- function(df,
   } else {
     out.in.features <- FALSE
   }
-  
-  
-  # Prevent constant term with single feature (mathematical non-identifiability)
-  if ((length(features) == 1) && (constant == TRUE)) {
-    stop("Cannot use constant=TRUE with only one feature. Please specify multiple features in covagg to enable constant term estimation.")
-  }
+
 
   period.pre  <- sort(period.pre, decreasing = FALSE)
   period.post <- sort(period.post, decreasing = FALSE)

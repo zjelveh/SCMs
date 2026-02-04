@@ -157,8 +157,8 @@ spec_results <- spec_curve(
   cores = 4
 )
 
-# Configure CatBoost + SHAP analysis
-catboost_config <- create_catboost_config(
+# Configure XGBoost + SHAP analysis
+xgboost_config <- create_xgboost_config(
   dataset_name = "basque_terrorism",
   treated_unit_name = "Basque Country (Pais Vasco)",
   outcome_filter = "gdpcap",
@@ -166,7 +166,7 @@ catboost_config <- create_catboost_config(
 )
 
 # Generate SHAP values
-shap_results <- run_catboost_shap_analysis(spec_results$results, catboost_config)
+shap_results <- run_xgboost_shap_analysis(spec_results$results, xgboost_config)
 
 # Create specification curve with SHAP coloring
 plot_spec_curve(
@@ -183,7 +183,7 @@ plot_spec_curve(
 - **High-Performance Computing**: Built-in clarabel solver for faster optimization
 - **Parallel Processing**: Handle 1000+ specifications efficiently with multi-core support
 - **Comprehensive Inference**: Multiple test statistics (RMSE ratio, treatment effect, normalized)
-- **Machine Learning Integration**: CatBoost + SHAP for specification interpretability
+- **Machine Learning Integration**: XGBoost + SHAP for specification interpretability
 - **Flexible Data Processing**: Sophisticated covariate aggregation system
 
 Enable high-performance optimization:
@@ -244,7 +244,7 @@ spec_results <- spec_curve(
 )
 
 # Generate SHAP interpretability
-shap_results <- run_catboost_shap_analysis(spec_results$results)
+shap_results <- run_xgboost_shap_analysis(spec_results$results)
 
 # Create specification curve with SHAP coloring
 plot_spec_curve(spec_results, shap_values = shap_results$shapley,

@@ -9,7 +9,7 @@
 This package provides tools for implementing Synthetic Control Methods (SCM),
 performing inference, conducting specification curve analysis, and visualizing results.
 
-Comprehensive toolkit for Synthetic Control Methods (SCM) with advanced features including specification curve analysis, CatBoost+SHAP machine learning analysis, and multiple inference procedures. The package highlight is specification curves colored by SHAP values showing feature relevance to predicted treatment effects. Provides functions for data preparation, model estimation, statistical inference (including SCPI and placebo-based methods), and publication-ready visualizations. Supports multiple outcome models (OLS, Ridge, Lasso, Augmented Synthetic Control) and includes parallel processing capabilities for large-scale specification curve analysis.
+Comprehensive toolkit for Synthetic Control Methods (SCM) with advanced features including specification curve analysis, XGBoost+SHAP machine learning analysis, and multiple inference procedures. The package highlight is specification curves colored by SHAP values showing feature relevance to predicted treatment effects. Provides functions for data preparation, model estimation, statistical inference (including SCPI and placebo-based methods), and publication-ready visualizations. Supports multiple outcome models (OLS, Ridge, Lasso, Augmented Synthetic Control) and includes parallel processing capabilities for large-scale specification curve analysis.
 
 Researchers using synthetic control methods face a "garden of forking paths" with numerous
 specification choices that can dramatically affect results. Existing packages often produce
@@ -44,7 +44,7 @@ coloring, significance indicators, and customizable aesthetics
 The package workflow proceeds from data preparation through estimation to visualization:
 data preparation with \code{\link{scdata}}, synthetic control estimation via \code{\link{scest}},
 specification curve generation using \code{\link{spec_curve}}, SHAP analysis with
-\code{\link{run_catboost_shap_analysis}}, and visualization through \code{\link{plot_spec_curve}}.
+\code{\link{run_xgboost_shap_analysis}}, and visualization through \code{\link{plot_spec_curve}}.
 The complete pipeline can be executed with \code{\link{run_spec_curve_analysis}} for turnkey analysis.
 
 \strong{Methodological Innovation:}
@@ -68,7 +68,7 @@ constraints show the opposite pattern. SHAP analysis reveals these interactions 
 \item{\code{\link{spec_curve}}}{Core computational engine for specification curve analysis across modeling choices}
 \item{\code{\link{run_spec_curve_analysis}}}{High-level interface for complete specification curve workflow}
 \item{\code{\link{plot_spec_curve}}}{Create publication-ready specification curve visualizations with SHAP integration}
-\item{\code{\link{run_catboost_shap_analysis}}}{Compute SHAP values to explain specification choices driving treatment effects}
+\item{\code{\link{run_xgboost_shap_analysis}}}{Compute SHAP values to explain specification choices driving treatment effects}
 }
 }
 

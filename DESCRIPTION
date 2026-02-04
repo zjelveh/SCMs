@@ -38,16 +38,18 @@ Imports: CVXR        (>= 1.0-10),
          doSNOW,
          fastDummies,
          glmnet,
-         catboost,
+         xgboost,
          ggnewscale,
          shapviz,
          treeshap,
          ggrepel,
          ggtext,
+         gridtext,
+         gridExtra,
          generics
 Description: Comprehensive toolkit for Synthetic Control Methods (SCM) with advanced 
-    features including specification curve analysis, CatBoost+SHAP machine learning 
-    analysis, and multiple inference procedures. The package highlight is specification 
+    features including specification curve analysis, XGBoost+SHAP machine learning
+    analysis, and multiple inference procedures. The package highlight is specification
     curves colored by SHAP values showing feature relevance to predicted treatment effects. 
     Provides functions for data preparation, model estimation, statistical inference 
     (including SCPI and placebo-based methods), and publication-ready visualizations. 

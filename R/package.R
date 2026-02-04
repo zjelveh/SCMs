@@ -1,14 +1,14 @@
 #' @importFrom data.table as.data.table data.table copy melt fread rbindlist setDT setnames setorderv is.data.table ":=" ".N" ".SD" ".BY" "fwrite" "fcase" "between" "uniqueN"
 #' @importFrom stats coef fitted predict sd .lm.fit C aggregate cor cov lm mad median na.omit poly qnorm quantile rnorm sigma var
 #' @importFrom utils data head tail
-#' @importFrom ggplot2 aes aes_string annotate element_blank element_line element_rect element_text expansion facet_grid facet_wrap geom_abline geom_col geom_errorbar geom_histogram geom_hline geom_line geom_point geom_ribbon geom_segment geom_text geom_vline ggplot ggsave ggtitle guide_colorbar guide_legend guides labs scale_alpha_continuous scale_alpha_manual scale_color_discrete scale_color_gradient scale_color_gradient2 scale_color_manual scale_fill_discrete scale_fill_gradient2 scale_fill_manual scale_x_continuous scale_y_continuous theme theme_bw theme_minimal xlab ylab ylim
+#' @importFrom ggplot2 aes aes_string annotate element_blank element_line element_rect element_text expansion facet_grid facet_wrap geom_abline geom_col geom_errorbar geom_histogram geom_hline geom_line geom_point geom_ribbon geom_segment geom_text geom_vline ggplot ggsave ggtitle guide_colorbar guide_legend guides labs scale_alpha_continuous scale_alpha_manual scale_color_discrete scale_color_gradient scale_color_gradient2 scale_color_manual scale_fill_discrete scale_fill_gradient2 scale_fill_manual scale_shape_manual scale_x_continuous scale_y_continuous scale_y_discrete theme theme_bw theme_minimal xlab ylab ylim
 #' @importFrom grDevices colorRamp rgb
 #' @importFrom CVXR Variable Minimize Problem solve
 #' @importFrom kernlab alpha
 #' @importFrom foreach %dopar%
 #' @importFrom ggnewscale new_scale_color
 #' @importFrom cowplot plot_grid
-#' @importFrom catboost catboost.train catboost.predict catboost.load_pool catboost.get_feature_importance
+#' @importFrom xgboost xgb.DMatrix xgb.train xgb.importance
 #' @import methods
 #' @import optimx
 #' @import stringr
@@ -55,7 +55,7 @@
 #' The package workflow proceeds from data preparation through estimation to visualization:
 #' data preparation with \code{\link{scdata}}, synthetic control estimation via \code{\link{scest}}, 
 #' specification curve generation using \code{\link{spec_curve}}, SHAP analysis with 
-#' \code{\link{run_catboost_shap_analysis}}, and visualization through \code{\link{plot_spec_curve}}. 
+#' \code{\link{run_xgboost_shap_analysis}}, and visualization through \code{\link{plot_spec_curve}}. 
 #' The complete pipeline can be executed with \code{\link{run_spec_curve_analysis}} for turnkey analysis.
 #' 
 #' \strong{Methodological Innovation:}
@@ -78,7 +78,7 @@
 #'   \item{\code{\link{spec_curve}}}{Core computational engine for specification curve analysis across modeling choices}
 #'   \item{\code{\link{run_spec_curve_analysis}}}{High-level interface for complete specification curve workflow}
 #'   \item{\code{\link{plot_spec_curve}}}{Create publication-ready specification curve visualizations with SHAP integration}
-#'   \item{\code{\link{run_catboost_shap_analysis}}}{Compute SHAP values to explain specification choices driving treatment effects}
+#'   \item{\code{\link{run_xgboost_shap_analysis}}}{Compute SHAP values to explain specification choices driving treatment effects}
 #' }
 #' 
 #' @section Example Workflow:

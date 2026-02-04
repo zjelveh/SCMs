@@ -607,54 +607,23 @@ advanced_features <- list(
 
 # Integration with External Tools
 
-## CatBoost and SHAP Integration
+## XGBoost and SHAP Integration
 
-```{r catboost-integration, eval=FALSE}
-# Advanced SHAP analysis with CatBoost
-run_advanced_shap_analysis <- function(spec_results, catboost_config = NULL) {
-  
-  if (is.null(catboost_config)) {
-    catboost_config <- create_catboost_config(
-      iterations = 1000,
-      learning_rate = 0.1,
-      depth = 6,
-      l2_leaf_reg = 3
+```{r xgboost-integration, eval=FALSE}
+# Advanced SHAP analysis with XGBoost
+run_advanced_shap_analysis <- function(spec_results, xgboost_config = NULL) {
+
+  if (is.null(xgboost_config)) {
+    xgboost_config <- create_xgboost_config(
+      dataset_name = "analysis",
+      treated_unit_name = "treated"
     )
   }
-  
-  # Prepare data for CatBoost
-  analysis_data <- prepare_catboost_data(spec_results)
-  
-  # Train CatBoost model
-  catboost_model <- catboost::catboost.train(
-    learn_pool = analysis_data$train_pool,
-    test_pool = analysis_data$test_pool,
-    params = catboost_config
-  )
-  
-  # Calculate SHAP values
-  shap_values <- catboost::catboost.get_feature_importance(
-    catboost_model,
-    pool = analysis_data$train_pool,
-    type = "ShapValues"
-  )
-  
-  # Analyze SHAP results
-  shap_analysis <- analyze_shap_patterns(shap_values, spec_results$results)
-  
-  # Create visualizations
-  shap_plots <- list(
-    importance = plot_shap_importance(shap_analysis$feature_importance),
-    interactions = plot_shap_interactions(shap_analysis),
-    distributions = plot_shap_distributions(shap_values)
-  )
-  
-  return(list(
-    model = catboost_model,
-    shap_values = shap_values,
-    analysis = shap_analysis,
-    plots = shap_plots
-  ))
+
+  # Run XGBoost SHAP analysis
+  shap_results <- run_xgboost_shap_analysis(spec_results, xgboost_config)
+
+  return(shap_results)
 }
 ```
 

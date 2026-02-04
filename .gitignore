@@ -9,7 +9,7 @@ sftp.json
 *.Rcheck/
 ..Rcheck/
 
-# CatBoost training artifacts
+# XGBoost/CatBoost training artifacts
 catboost_info/
 */catboost_info/
 

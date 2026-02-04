@@ -6,6 +6,7 @@
 #' interface for examining and summarizing specification curve analysis results.
 #'
 #' @name spec_curve-methods
+NULL
 
 #' Print Method for Specification Curve Results
 #'
@@ -13,6 +14,7 @@
 #' overview of the analysis results including number of specifications, treatment
 #' effect distribution, and available inference results.
 #'
+#' @rdname spec_curve-methods
 #' @param x An object of class "spec_curve" from \code{\link{spec_curve}}
 #' @param ... Additional arguments (currently unused)
 #'

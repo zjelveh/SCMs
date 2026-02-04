@@ -113,12 +113,12 @@ cat("- Placebo inference available:", !is.null(results_germany$abadie_inference)
 cat("- Test statistics:", if(!is.null(results_germany$abadie_inference)) 
     names(results_germany$abadie_inference) else "None", "\n\n")
 
-# ===== CATBOOST + SHAP ANALYSIS =====
+# ===== XGBOOST + SHAP ANALYSIS =====
 
-cat("Running CatBoost + SHAP analysis for interpretability...\n")
+cat("Running XGBoost + SHAP analysis for interpretability...\n")
 
-# Create CatBoost analysis configuration
-cb_config <- create_catboost_config(
+# Create XGBoost analysis configuration
+xgb_config <- create_xgboost_config(
   dataset_name = "german_reunification_analysis",
   treated_unit_name = "West Germany",
   outcome_filter = "gdp",
@@ -126,10 +126,10 @@ cb_config <- create_catboost_config(
   treated_unit_only = TRUE
 )
 
-# Run CatBoost model with SHAP values
-germany_shap <- run_catboost_shap_analysis(results_germany$results, cb_config)
+# Run XGBoost model with SHAP values
+germany_shap <- run_xgboost_shap_analysis(results_germany$results, xgb_config)
 
-cat("CatBoost analysis complete!\n")
+cat("XGBoost analysis complete!\n")
 cat("SHAP results available for", nrow(germany_shap$shapley), "specifications\n\n")
 
 # ===== VISUALIZATION =====

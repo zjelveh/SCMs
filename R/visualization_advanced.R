@@ -4,7 +4,7 @@
 #' @description Creates histograms of SHAP values across all units with the
 #' treated unit's values highlighted as vertical lines.
 #'
-#' @param catboost_results List. Results from \code{run_catboost_shap_analysis}.
+#' @param shap_results List. Results from \code{run_xgboost_shap_analysis}.
 #' @param metric Character. Which SHAP metric to plot ("mean_shap", "sd_shap", or "mean_abs_shap").
 #' @param ncol Integer. Number of columns for facet layout.
 #'
@@ -15,15 +15,15 @@
 #' @examples
 #' \dontrun{
 #' # Plot mean absolute SHAP values
-#' p <- plot_shapley_distributions(catboost_results, metric = "mean_abs_shap")
+#' p <- plot_shapley_distributions(shap_results, metric = "mean_abs_shap")
 #' print(p)
 #' }
-plot_shapley_distributions <- function(catboost_results, metric = "mean_abs_shap", ncol = 2) {
+plot_shapley_distributions <- function(shap_results, metric = "mean_abs_shap", ncol = 2) {
   # Extract results data table
-  results_dt <- catboost_results$results
+  results_dt <- shap_results$results
   
   # Get the treated unit name from config
-  treated_unit_name <- catboost_results$config$treated_unit_name
+  treated_unit_name <- shap_results$config$treated_unit_name
   
   if(nrow(results_dt) == 0 || is.null(results_dt)) {
     stop("No results available to plot")
@@ -95,13 +95,13 @@ plot_shapley_distributions <- function(catboost_results, metric = "mean_abs_shap
 #'
 #' @title Calculate SHAP-Based Specification Feature Interactions
 #' @description Computes feature interactions using TreeSHAP interaction values
-#' from CatBoost model, providing true main effects and interaction effects.
+#' from XGBoost model, providing true main effects and interaction effects.
 #'
-#' @param catboost_results List. Results from \code{run_catboost_shap_analysis}.
+#' @param shap_results List. Results from \code{run_xgboost_shap_analysis}.
 #' @param dataset_name Character. Name for the dataset (for labeling).
 #' @param include_shap_interactions Logical. Whether to compute SHAP interactions (default TRUE).
 #' @param top_n Integer. Number of top interactions to return (default 10).
-#' @param shap_method Character. SHAP method to use: "shapviz" (default) or "catboost".
+#' @param shap_method Character. SHAP method to use: "shapviz" (default) or "xgboost".
 #'
 #' @return List containing:
 #'   \itemize{
@@ -114,23 +114,23 @@ plot_shapley_distributions <- function(catboost_results, metric = "mean_abs_shap
 #' @examples
 #' \dontrun{
 #' # Calculate SHAP interactions
-#' interactions <- calculate_specification_interactions(catboost_results, "homicide_study")
+#' interactions <- calculate_specification_interactions(shap_results, "homicide_study")
 #' # Calculate with more interactions
-#' interactions <- calculate_specification_interactions(catboost_results, "homicide_study", top_n = 20)
+#' interactions <- calculate_specification_interactions(shap_results, "homicide_study", top_n = 20)
 #' }
-calculate_specification_interactions <- function(catboost_results, dataset_name, 
+calculate_specification_interactions <- function(shap_results, dataset_name, 
                                                include_shap_interactions = TRUE, top_n = 10, shap_method = "shapviz") {
   # Hard fail if results are missing
-  if(is.null(catboost_results) || is.null(catboost_results$predictions) || 
-     nrow(catboost_results$predictions) == 0) {
+  if(is.null(shap_results) || is.null(shap_results$predictions) || 
+     nrow(shap_results$predictions) == 0) {
     stop("Missing prediction data for dataset: ", dataset_name)
   }
 
   # Get treated unit name
-  treated_unit <- catboost_results$config$treated_unit_name
+  treated_unit <- shap_results$config$treated_unit_name
 
   # Extract predictions data
-  preds_data <- catboost_results$predictions
+  preds_data <- shap_results$predictions
 
   # Get specification features
   spec_features <- c("outcome_model", "const", "fw", "feat", "data_sample")
@@ -143,10 +143,10 @@ calculate_specification_interactions <- function(catboost_results, dataset_name,
     stop("No data for treated unit in dataset: ", dataset_name)
   }
 
-  # SHAP interaction values using shapviz (recommended) or catboost
+  # SHAP interaction values using shapviz (recommended) or xgboost
   shap_interactions <- NULL
   if(include_shap_interactions) {
-    shap_interactions <- calculate_shap_interactions(catboost_results, treated_unit, top_n, method = shap_method)
+    shap_interactions <- calculate_shap_interactions(shap_results, treated_unit, top_n, method = shap_method)
   }
   
   return(list(
@@ -157,38 +157,38 @@ calculate_specification_interactions <- function(catboost_results, dataset_name,
 
 
 #' Calculate SHAP Interaction Values using shapviz
-#' @param catboost_results List. Results from CatBoost analysis.
+#' @param shap_results List. Results from XGBoost analysis.
 #' @param treated_unit Character. Name of treated unit.
 #' @param top_n Integer. Number of top interactions to return.
-#' @param method Character. Method to use: "shapviz" (default) or "catboost".
+#' @param method Character. Method to use: "shapviz" (default) or "xgboost".
 #' @return List with SHAP interaction results.
 #' @keywords internal
-calculate_shap_interactions <- function(catboost_results, treated_unit, top_n, method = "shapviz") {
-  if(method == "catboost") {
-    stop("CatBoost SHAP interactions are currently disabled due to API compatibility issues")
+calculate_shap_interactions <- function(shap_results, treated_unit, top_n, method = "shapviz") {
+  if(method == "xgboost") {
+    stop("XGBoost SHAP interactions are currently disabled due to API compatibility issues")
   }
   
   if(method == "shapviz") {
-    return(calculate_shapviz_interactions(catboost_results, treated_unit, top_n))
+    return(calculate_shapviz_interactions(shap_results, treated_unit, top_n))
   }
   
   stop("Unknown SHAP method: ", method)
 }
 
 #' Calculate SHAP Values and Interactions using shapviz
-#' @param catboost_results List. Results from CatBoost analysis.
+#' @param shap_results List. Results from XGBoost analysis.
 #' @param treated_unit Character. Name of treated unit.
 #' @param top_n Integer. Number of top interactions to return.
 #' @return List with shapviz SHAP results.
 #' @keywords internal
-calculate_shapviz_interactions <- function(catboost_results, treated_unit, top_n) {
+calculate_shapviz_interactions <- function(shap_results, treated_unit, top_n) {
   # Check if shapviz is available
   if(!requireNamespace("shapviz", quietly = TRUE)) {
     stop("Package 'shapviz' is required for this functionality. Install with: install.packages('shapviz')")
   }
   
   # Get treated unit data
-  treated_data <- catboost_results$predictions[unit == treated_unit]
+  treated_data <- shap_results$predictions[unit == treated_unit]
   
   if(nrow(treated_data) == 0) {
     stop("No treated unit data available for SHAP interactions")
@@ -217,52 +217,50 @@ calculate_shapviz_interactions <- function(catboost_results, treated_unit, top_n
   y_values <- treated_data$actual
   
   # Use existing trained model if available, otherwise train new one
-  if(!is.null(catboost_results$models) && treated_unit %in% names(catboost_results$models)) {
-    model <- catboost_results$models[[treated_unit]]
+  # One-hot encode for XGBoost
+  X_onehot <- model.matrix(~ . - 1, data = feature_matrix)
+
+  if(!is.null(shap_results$models) && treated_unit %in% names(shap_results$models)) {
+    model <- shap_results$models[[treated_unit]]
     cat("Using existing trained model for unit", treated_unit, "\n")
   } else {
-    # Fallback: Train new CatBoost model for SHAP
-    cat("Training new model for SHAP analysis...\n")
-    train_pool <- catboost.load_pool(data = feature_matrix, label = y_values)
-    
+    # Train new XGBoost model for SHAP
+    cat("Training new XGBoost model for SHAP analysis...\n")
+    dtrain <- xgboost::xgb.DMatrix(data = X_onehot, label = y_values)
     params <- list(
-      loss_function = 'RMSE',
-      iterations = 100,
-      depth = 4,
-      learning_rate = 0.1,
-      random_seed = 42,
-      verbose = 0
+      objective = "reg:squarederror",
+      max_depth = 10,
+      eta = 0.05,
+      subsample = 0.8,
+      colsample_bytree = 0.8,
+      nthread = 1,
+      seed = 42
     )
-    
-    model <- catboost.train(learn_pool = train_pool, params = params)
+    model <- xgboost::xgb.train(params = params, data = dtrain, nrounds = 500, verbose = 0)
   }
-  
-  # Calculate SHAP values using CatBoost directly, then create shapviz object
-  train_pool <- catboost.load_pool(data = feature_matrix, label = y_values)
 
-  # Get SHAP values from CatBoost
-  shap_matrix <- catboost.get_feature_importance(
-    model = model,
-    pool = train_pool,
-    type = 'ShapValues',
-    thread_count = 1
-  )
+  # Calculate SHAP values using XGBoost's built-in TreeSHAP
+  dmat <- xgboost::xgb.DMatrix(data = X_onehot, label = y_values)
+  shap_matrix <- xgboost:::predict.xgb.Booster(model, dmat, predcontrib = TRUE)
 
-  # Remove baseline column if present (CatBoost sometimes adds it)
-  if(ncol(shap_matrix) == ncol(feature_matrix) + 1) {
-    shap_matrix <- shap_matrix[, -ncol(shap_matrix), drop = FALSE]
+  # Remove BIAS column (last column)
+  shap_matrix <- shap_matrix[, -ncol(shap_matrix), drop = FALSE]
+
+  # Aggregate one-hot SHAP values back to original categorical features
+  agg_shap <- matrix(0, nrow = nrow(shap_matrix), ncol = ncol(feature_matrix))
+  colnames(agg_shap) <- names(feature_matrix)
+  for (feat in names(feature_matrix)) {
+    feat_cols <- grep(paste0("^", feat), colnames(X_onehot), value = TRUE)
+    if (length(feat_cols) == 1) {
+      agg_shap[, feat] <- shap_matrix[, feat_cols]
+    } else {
+      agg_shap[, feat] <- rowSums(shap_matrix[, feat_cols, drop = FALSE])
+    }
   }
-  
-  # Ensure dimensions match
-  if(ncol(shap_matrix) != ncol(feature_matrix)) {
-    stop("SHAP matrix dimensions don't match feature matrix")
-  }
-  
-  # Set column names
-  colnames(shap_matrix) <- names(feature_matrix)
-  
+  shap_matrix <- agg_shap
+
   # Get predictions
-  predictions <- catboost.predict(model, train_pool)
+  predictions <- xgboost:::predict.xgb.Booster(model, dmat)
 
   # Create shapviz object manually
   shap_values <- shapviz::shapviz(
@@ -359,8 +357,8 @@ calculate_shapviz_interactions <- function(catboost_results, treated_unit, top_n
       cat("One-hot encoded feature matrix dimensions:", nrow(feature_matrix_onehot), "x", ncol(feature_matrix_onehot), "\n")
       cat("One-hot encoded features:", paste(names(feature_matrix_onehot), collapse=", "), "\n")
       
-      # Train new CatBoost model with one-hot encoded features for treeshap
-      train_pool_onehot <- catboost.load_pool(data = feature_matrix_onehot, label = y_values)
+      # Train new XGBoost model with one-hot encoded features for treeshap
+      train_pool_onehot <- xgboost.load_pool(data = feature_matrix_onehot, label = y_values)
       
       params_onehot <- list(
         loss_function = 'RMSE',
@@ -371,18 +369,18 @@ calculate_shapviz_interactions <- function(catboost_results, treated_unit, top_n
         verbose = 0
       )
       
-      model_onehot <- catboost.train(learn_pool = train_pool_onehot, params = params_onehot)
+      model_onehot <- xgboost.train(learn_pool = train_pool_onehot, params = params_onehot)
       
-      # Convert CatBoost model to treeshap format with enhanced error handling
+      # Convert XGBoost model to treeshap format with enhanced error handling
       unified_model <- tryCatch({
-        treeshap::catboost.unify(model_onehot, feature_matrix_onehot)
+        treeshap::xgboost.unify(model_onehot, feature_matrix_onehot)
       }, error = function(e) {
-        stop("catboost.unify failed with one-hot encoded features: ", e$message, 
+        stop("xgboost.unify failed with one-hot encoded features: ", e$message, 
              "\nThis may indicate model-data compatibility issues.")
       })
       
       if(is.null(unified_model)) {
-        stop("catboost.unify returned NULL with one-hot encoded features")
+        stop("xgboost.unify returned NULL with one-hot encoded features")
       }
       
       # Calculate SHAP values with interactions using treeshap with timeout protection
@@ -468,16 +466,16 @@ calculate_shapviz_interactions <- function(catboost_results, treated_unit, top_n
       # All features are numerical, use directly
       cat("All features are numerical, using directly...\n")
       
-      # Convert CatBoost model to treeshap format with enhanced error handling
+      # Convert XGBoost model to treeshap format with enhanced error handling
       unified_model <- tryCatch({
-        treeshap::catboost.unify(model, feature_matrix)
+        treeshap::xgboost.unify(model, feature_matrix)
       }, error = function(e) {
-        stop("catboost.unify failed with numerical features: ", e$message, 
+        stop("xgboost.unify failed with numerical features: ", e$message, 
              "\nThis may indicate model-data compatibility issues.")
       })
       
       if(is.null(unified_model)) {
-        stop("catboost.unify returned NULL with numerical features")
+        stop("xgboost.unify returned NULL with numerical features")
       }
       
       # Calculate SHAP values with interactions using treeshap with timeout protection
@@ -524,7 +522,7 @@ calculate_shapviz_interactions <- function(catboost_results, treated_unit, top_n
     
   }, error = function(e) {
     warning("SHAP interactions failed with treeshap: ", e$message)
-    warning("For true SHAP interactions, ensure treeshap is properly installed: devtools::install_github('ModelOriented/treeshap@catboost')")
+    warning("For true SHAP interactions, ensure treeshap is properly installed: devtools::install_github('ModelOriented/treeshap@xgboost')")
     return(list(
         interactions = data.table(),
         categorical_decomposition = NULL,
@@ -1211,15 +1209,15 @@ validate_shap_decomposition <- function(categorical_decomposition, tolerance = 1
   return(validation_results)
 }
 
-#' Check if CatBoost Results Have Sufficient Features for Interaction Analysis
-#' @param catboost_results List. Results from run_catboost_shap_analysis.
+#' Check if XGBoost Results Have Sufficient Features for Interaction Analysis
+#' @param shap_results List. Results from run_xgboost_shap_analysis.
 #' @param min_features Integer. Minimum number of features required (default 2).
 #' @return List with check results and available features.
 #' @export
-check_interaction_feasibility <- function(catboost_results, min_features = 2) {
+check_interaction_feasibility <- function(shap_results, min_features = 2) {
   # Check basic structure
-  if(is.null(catboost_results) || is.null(catboost_results$predictions) || 
-     nrow(catboost_results$predictions) == 0) {
+  if(is.null(shap_results) || is.null(shap_results$predictions) || 
+     nrow(shap_results$predictions) == 0) {
     return(list(
       feasible = FALSE,
       reason = "Missing prediction data",
@@ -1229,8 +1227,8 @@ check_interaction_feasibility <- function(catboost_results, min_features = 2) {
   }
   
   # Get treated unit data
-  treated_unit <- catboost_results$config$treated_unit_name
-  treated_data <- catboost_results$predictions[unit == treated_unit]
+  treated_unit <- shap_results$config$treated_unit_name
+  treated_data <- shap_results$predictions[unit == treated_unit]
   
   if(nrow(treated_data) == 0) {
     return(list(

@@ -5,7 +5,7 @@
 \title{Calculate SHAP-Based Specification Feature Interactions}
 \usage{
 calculate_specification_interactions(
-  catboost_results,
+  shap_results,
   dataset_name,
   include_shap_interactions = TRUE,
   top_n = 10,
@@ -13,7 +13,7 @@ calculate_specification_interactions(
 )
 }
 \arguments{
-\item{catboost_results}{List. Results from \code{run_catboost_shap_analysis}.}
+\item{shap_results}{List. Results from \code{run_xgboost_shap_analysis}.}
 
 \item{dataset_name}{Character. Name for the dataset (for labeling).}
 
@@ -21,7 +21,7 @@ calculate_specification_interactions(
 
 \item{top_n}{Integer. Number of top interactions to return (default 10).}
 
-\item{shap_method}{Character. SHAP method to use: "shapviz" (default) or "catboost".}
+\item{shap_method}{Character. SHAP method to use: "shapviz" (default) or "xgboost".}
 }
 \value{
 List containing:
@@ -32,7 +32,7 @@ List containing:
 }
 \description{
 Computes feature interactions using TreeSHAP interaction values
-from CatBoost model, providing true main effects and interaction effects.
+from XGBoost model, providing true main effects and interaction effects.
 }
 \details{
 Calculate SHAP-Based Specification Feature Interactions
@@ -40,8 +40,8 @@ Calculate SHAP-Based Specification Feature Interactions
 \examples{
 \dontrun{
 # Calculate SHAP interactions
-interactions <- calculate_specification_interactions(catboost_results, "homicide_study")
+interactions <- calculate_specification_interactions(shap_results, "homicide_study")
 # Calculate with more interactions
-interactions <- calculate_specification_interactions(catboost_results, "homicide_study", top_n = 20)
+interactions <- calculate_specification_interactions(shap_results, "homicide_study", top_n = 20)
 }
 }

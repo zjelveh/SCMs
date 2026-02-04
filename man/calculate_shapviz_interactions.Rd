@@ -4,10 +4,10 @@
 \alias{calculate_shapviz_interactions}
 \title{Calculate SHAP Values and Interactions using shapviz}
 \usage{
-calculate_shapviz_interactions(catboost_results, treated_unit, top_n)
+calculate_shapviz_interactions(shap_results, treated_unit, top_n)
 }
 \arguments{
-\item{catboost_results}{List. Results from CatBoost analysis.}
+\item{shap_results}{List. Results from XGBoost analysis.}
 
 \item{treated_unit}{Character. Name of treated unit.}
 

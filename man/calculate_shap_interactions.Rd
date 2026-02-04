@@ -5,20 +5,20 @@
 \title{Calculate SHAP Interaction Values using shapviz}
 \usage{
 calculate_shap_interactions(
-  catboost_results,
+  shap_results,
   treated_unit,
   top_n,
   method = "shapviz"
 )
 }
 \arguments{
-\item{catboost_results}{List. Results from CatBoost analysis.}
+\item{shap_results}{List. Results from XGBoost analysis.}
 
 \item{treated_unit}{Character. Name of treated unit.}
 
 \item{top_n}{Integer. Number of top interactions to return.}
 
-\item{method}{Character. Method to use: "shapviz" (default) or "catboost".}
+\item{method}{Character. Method to use: "shapviz" (default) or "xgboost".}
 }
 \value{
 List with SHAP interaction results.
