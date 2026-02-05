@@ -21,3 +21,10 @@ catboost_info/
 # OS files
 .DS_Store
 Thumbs.db
+
+# LLM-related / perf artifacts (keep on disk, do not track)
+AGENTS.md
+Rplots.pdf
+inst/CLAUDE.md
+inst/performance_profile.R
+inst/performance_results/
