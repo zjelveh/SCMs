@@ -1,6 +1,6 @@
 # SCMs: Synthetic Control Methods
 
-A comprehensive R package for Synthetic Control Methods featuring specification curve analysis with SHAP interpretability. The package's highlight is specification curves where each point is colored by its Shapley value, showing how much each specification feature contributes to the predicted treatment effect.
+A comprehensive R package for Synthetic Control Methods featuring specification curve analysis with SHAP interpretability. The package's highlight is specification curves that can be colored by Shapley values, showing how much each specification feature contributes to the predicted treatment effect.
 
 ## Installation
 
@@ -32,7 +32,7 @@ results <- scest(data = scm_data, w.constr = list(name = "simplex"))
 
 # View results and run inference
 summary(results)
-plot(results)
+scplot(results)
 inference_results <- inference_sc(results, dataset, inference_type = "placebo")
 ```
 
@@ -44,41 +44,35 @@ The package's flexible covariate system allows sophisticated feature engineering
 
 ```r
 covagg = list(
-  # Average over all pre-treatment periods (default)
+  # Average over all pre-treatment periods (default behavior)
   gdp_mean = list(var = "gdp"),
   
   # Separate feature for each period
   gdp_per_period = list(var = "gdp", each = TRUE),
   
-  # Use specific periods only
+  # Use specific periods only (averaged)
   gdp_late_pre = list(var = "gdp", periods = c(1985, 1988, 1990)),
   
-  # Average over full pre-treatment period (explicit)
-  trade_average = list(var = "trade", average = "full_pre")
+  # Use last N pre-treatment periods (averaged)
+  trade_last3 = list(var = "trade", last = 3)
 )
 ```
 
-### Advanced Aggregation Methods
+### Advanced Aggregation Methods (Supported)
 
 ```r
 covagg = list(
-  # Rolling N-period averages
-  gdp_rolling_3yr = list(var = "gdp", rolling = 3),
-  
-  # First N periods of pre-treatment
+  # First N periods of pre-treatment (averaged)
   early_investment = list(var = "investment", first = 5),
   
-  # Last N periods before treatment
+  # Last N periods before treatment (averaged)
   late_trade = list(var = "trade", last = 3),
   
-  # Every N periods (useful for long time series)
-  gdp_every_5yr = list(var = "gdp", every_n = 5),
+  # Custom aggregation function (must return a single numeric value)
+  gdp_median_last5 = list(var = "gdp", last = 5, agg_fun = median),
   
-  # Period-over-period growth rates
-  gdp_growth = list(var = "gdp", growth = "period_over_period"),
-  
-  # Volatility measures (standard deviation)
-  gdp_volatility = list(var = "gdp", volatility = "sd")
+  # Each period for a specified subset
+  gdp_each_selected = list(var = "gdp", periods = c(1980, 1985), each = TRUE)
 )
 ```
 
@@ -89,19 +83,19 @@ covagg = list(
 covagg = list(
   # GDP in different forms
   gdp_early = list(var = "gdp", periods = c(1970, 1975, 1980)),
-  gdp_trend = list(var = "gdp", rolling = 5),
-  gdp_volatility = list(var = "gdp", volatility = "sd"),
+  gdp_recent = list(var = "gdp", last = 5),
+  gdp_each = list(var = "gdp", each = TRUE),
   
   # Trade patterns
   trade_baseline = list(var = "trade", periods = 1970),
-  trade_growth = list(var = "trade", growth = "period_over_period"),
+  trade_recent = list(var = "trade", last = 5),
   
   # Investment timing
   invest_early = list(var = "investment", first = 10),
   invest_late = list(var = "investment", last = 5),
   
-  # Population every 5 years
-  pop_milestones = list(var = "population", every_n = 5)
+  # Population at selected milestones
+  pop_milestones = list(var = "population", periods = c(1970, 1975, 1980, 1985))
 )
 ```
 
@@ -116,19 +110,19 @@ basque_covariates = list(
   gdp_each = list(var = "gdpcap", each = TRUE),                    # All periods
   
   # Economic structure (sectoral composition)
-  agriculture = list(var = "sec.agriculture", average = "full_pre"), # Agricultural share
-  industry = list(var = "sec.industry", average = "full_pre"),       # Industrial share
-  energy = list(var = "sec.energy", average = "full_pre"),           # Energy sector
-  construction = list(var = "sec.construction", average = "full_pre"), # Construction
-  services = list(var = "sec.services.venta", average = "full_pre"),  # Market services
+  agriculture = list(var = "sec.agriculture"),                      # Agricultural share
+  industry = list(var = "sec.industry"),                            # Industrial share
+  energy = list(var = "sec.energy"),                                # Energy sector
+  construction = list(var = "sec.construction"),                    # Construction
+  services = list(var = "sec.services.venta"),                      # Market services
   
   # Demographics and development
-  population_density = list(var = "popdens", rolling = 3),         # Population density
+  population_density = list(var = "popdens", last = 3),            # Population density (recent)
   human_capital = list(var = "school.high", periods = c(1964, 1967, 1969)), # Education
   
   # Investment patterns  
   investment_rate = list(var = "invest", first = 10),              # Early investment
-  investment_trend = list(var = "invest", rolling = 5)             # Investment momentum
+  investment_trend = list(var = "invest", last = 5)                # Investment momentum
 )
 ```
 
@@ -180,7 +174,7 @@ plot_spec_curve(
 
 ## Performance and Advanced Features
 
-- **High-Performance Computing**: Built-in clarabel solver for faster optimization
+- **High-Performance Computing**: Optional clarabel solver for supported constraints (falls back when unsupported)
 - **Parallel Processing**: Handle 1000+ specifications efficiently with multi-core support
 - **Comprehensive Inference**: Multiple test statistics (RMSE ratio, treatment effect, normalized)
 - **Machine Learning Integration**: XGBoost + SHAP for specification interpretability
@@ -227,14 +221,18 @@ dataset <- fread(system.file("extdata/basque.csv", package = "SCMs"))
 spec_results <- spec_curve(
   dataset = dataset,
   outcomes = "gdpcap",
+  col_name_unit_name = "regionname",
   name_treated_unit = "Basque Country (Pais Vasco)",
   treated_period = 1970,
+  min_period = 1955,
+  end_period = 1997,
+  col_name_period = "year",
   feature_weights = c("uniform", "optimize"),
   outcome_models = c("none", "augsynth", "ridge"),
   covagg = list(
     time_averaged = list(
       gdp_baseline = list(var = "gdpcap", periods = c(1960, 1965)),
-      sectors_avg = list(var = "sec.agriculture", average = "full_pre")
+      sectors_avg = list(var = "sec.agriculture")
     ),
     per_period = list(
       gdp_each = list(var = "gdpcap", each = TRUE),
@@ -244,7 +242,13 @@ spec_results <- spec_curve(
 )
 
 # Generate SHAP interpretability
-shap_results <- run_xgboost_shap_analysis(spec_results$results)
+xgboost_config <- create_xgboost_config(
+  dataset_name = "basque_terrorism",
+  treated_unit_name = "Basque Country (Pais Vasco)",
+  outcome_filter = "gdpcap",
+  spec_features = c("feat", "outcome_model", "const", "data_sample", "fw")
+)
+shap_results <- run_xgboost_shap_analysis(spec_results$results, xgboost_config)
 
 # Create specification curve with SHAP coloring
 plot_spec_curve(spec_results, shap_values = shap_results$shapley,
