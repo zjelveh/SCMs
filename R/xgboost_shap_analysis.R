@@ -625,6 +625,11 @@ analyze_unit_xgboost <- function(unit_data, unit, config,
   nrounds <- params$nrounds
   params_train <- params[setdiff(names(params), c("nrounds", "verbose", "seed"))]
   if (!is.null(params$seed)) set.seed(params$seed)
+  
+  predict_xgb <- getS3method("predict", "xgb.Booster", optional = TRUE)
+  if (is.null(predict_xgb)) {
+    stop("predict.xgb.Booster is not registered. Ensure xgboost is installed and available.", call. = FALSE)
+  }
 
   if (compute_loo) {
     # LOO test predictions
@@ -649,7 +654,7 @@ analyze_unit_xgboost <- function(unit_data, unit, config,
         verbose = 0
       )
 
-      all_test_preds[i] <- predict(model_fold, dtest)
+      all_test_preds[i] <- predict_xgb(model_fold, dtest)
     }
 
     # Calculate test metrics
@@ -678,7 +683,7 @@ analyze_unit_xgboost <- function(unit_data, unit, config,
     verbose = 0
   )
 
-  train_preds_final <- predict(xgb_model_final, dfull)
+  train_preds_final <- predict_xgb(xgb_model_final, dfull)
   train_correlation_final <- cor(train_preds_final, y_full)
   train_rmse_final <- sqrt(mean((train_preds_final - y_full)^2))
 
@@ -691,7 +696,7 @@ analyze_unit_xgboost <- function(unit_data, unit, config,
 
   # Calculate SHAP values using XGBoost's built-in TreeSHAP (predcontrib=TRUE)
   cat("Calculating SHAP values for", nrow(X_mat), "observations with", ncol(X_mat), "one-hot features...\n")
-  shap_matrix <- predict(xgb_model_final, dfull, predcontrib = TRUE)
+  shap_matrix <- predict_xgb(xgb_model_final, dfull, predcontrib = TRUE)
 
   # Last column is BIAS term — remove it
   shap_matrix <- shap_matrix[, -ncol(shap_matrix), drop = FALSE]
