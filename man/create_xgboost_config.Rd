@@ -2,7 +2,7 @@
 % Please edit documentation in R/xgboost_shap_analysis.R
 \name{create_xgboost_config}
 \alias{create_xgboost_config}
-\title{Execute Complete XGBoost and SHAP Analysis Pipeline}
+\title{Create Configuration for Direct Long Format Analysis}
 \usage{
 create_xgboost_config(
   dataset_name,
@@ -10,6 +10,9 @@ create_xgboost_config(
   outcome_filter = NULL,
   spec_features = c("outcome_model", "const", "fw", "feat", "data_sample"),
   treated_unit_only = TRUE,
+  tune_xgboost = NULL,
+  xgboost_grid = NULL,
+  xgboost_cv_folds = 5,
   xgboost_params = NULL
 )
 }
@@ -24,40 +27,38 @@ create_xgboost_config(
 
 \item{treated_unit_only}{Logical. If TRUE, only analyze the treated unit.}
 
-\item{config}{List. Configuration object from \code{create_xgboost_config}.}
+\item{tune_xgboost}{Logical or NULL. If TRUE, tune XGBoost hyperparameters via
+k-fold CV on the treated unit before SHAP/LOO. If NULL, defaults to TRUE when
+xgboost_params is NULL and FALSE otherwise.}
+
+\item{xgboost_grid}{Data.frame, data.table, or list. Grid of hyperparameters for
+tuning. Must include max_depth, eta, nrounds, subsample, colsample_bytree.
+If NULL, uses an internal default grid.}
+
+\item{xgboost_cv_folds}{Integer. Number of CV folds for tuning.}
+
+\item{xgboost_params}{List. Fixed parameters for XGBoost training. If NULL,
+defaults are used. If tune_xgboost is TRUE, xgboost_params must be NULL.}
 }
 \value{
-List containing:
-\itemize{
-\item \code{results} - Feature importance results for all units
-\item \code{shapley} - SHAP values for all units
-\item \code{predictions} - Predictions for all units
-\item \code{config} - Original configuration object
-}
-
 List containing configuration parameters.
 }
 \description{
-Runs the complete pipeline for XGBoost modeling and SHAP analysis
-on specification curve results for all units in the dataset.
-
 Creates configuration for XGBoost analysis that works directly
 with long format data from spec_curve().
 }
 \details{
-Run Complete XGBoost SHAP Analysis
+Create Configuration for Direct Long Format Analysis
 }
 \examples{
 \dontrun{
-# Create configuration and run analysis
+# Create configuration for SHAP analysis
 config <- create_xgboost_config(
   dataset_name = "homicide_study",
-  file_path = "results/spec_curve_results.csv", 
-  treated_unit_name = "PAPEP0000"
+  treated_unit_name = "PAPEP0000",
+  tune_xgboost = TRUE
 )
 
-results <- run_xgboost_shap_analysis(config)
+results <- run_xgboost_shap_analysis(long_data, config)
 }
-Create Configuration for Direct Long Format XGBoost Analysis
-
 }

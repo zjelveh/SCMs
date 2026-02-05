@@ -1,4 +1,4 @@
-# XGBoost functions imported via NAMESPACE (xgb.DMatrix, xgb.train, etc.)
+# XGBoost functions accessed via xgboost:: (optional dependency)
 
 #' Load and Prepare Data for XGBoost Analysis
 #'
@@ -153,6 +153,15 @@ prepare_xgboost_data <- function(sc_data, config) {
 #' @param outcome_filter Character. Outcome variable to filter on (optional).
 #' @param spec_features Character vector. Specification features to use as predictors.
 #' @param treated_unit_only Logical. If TRUE, only analyze the treated unit.
+#' @param tune_xgboost Logical or NULL. If TRUE, tune XGBoost hyperparameters via
+#'   k-fold CV on the treated unit before SHAP/LOO. If NULL, defaults to TRUE when
+#'   xgboost_params is NULL and FALSE otherwise.
+#' @param xgboost_grid Data.frame, data.table, or list. Grid of hyperparameters for
+#'   tuning. Must include max_depth, eta, nrounds, subsample, colsample_bytree.
+#'   If NULL, uses an internal default grid.
+#' @param xgboost_cv_folds Integer. Number of CV folds for tuning. Default is 5.
+#' @param xgboost_params List. Fixed parameters for XGBoost training. If NULL,
+#'   defaults are used. If tune_xgboost is TRUE, xgboost_params must be NULL.
 #'
 #' @return List containing configuration parameters.
 #'
@@ -162,11 +171,23 @@ create_xgboost_config <- function(dataset_name,
                                         outcome_filter = NULL,
                                         spec_features = c("outcome_model", "const", "fw", "feat", "data_sample"),
                                         treated_unit_only = TRUE,
+                                        tune_xgboost = NULL,
+                                        xgboost_grid = NULL,
+                                        xgboost_cv_folds = 5,
                                         xgboost_params = NULL) {
   
+  if (is.null(tune_xgboost)) {
+    tune_xgboost <- is.null(xgboost_params)
+  }
+  
+  if (!is.null(xgboost_params) && isTRUE(tune_xgboost)) {
+    stop("Both xgboost_params and tune_xgboost=TRUE were provided. ",
+         "Set tune_xgboost=FALSE to use fixed parameters, or set xgboost_params=NULL to tune.",
+         call. = FALSE)
+  }
+  
   # Set default XGBoost parameters if not provided
-  # Tuned via LOO CV grid search: d=10, eta=0.05, n=500, sub=0.8
-  # achieves LOO R²=0.57 (full, n=280) and 0.37 (refined, n=72)
+  # Defaults are used when tune_xgboost is FALSE
   if (is.null(xgboost_params)) {
     xgboost_params <- list(
       objective = "reg:squarederror",
@@ -187,14 +208,212 @@ create_xgboost_config <- function(dataset_name,
     outcome_filter = outcome_filter,
     spec_features = spec_features,
     treated_unit_only = treated_unit_only,
+    tune_xgboost = tune_xgboost,
+    xgboost_grid = xgboost_grid,
+    xgboost_cv_folds = xgboost_cv_folds,
     xgboost_params = xgboost_params
   )
   
   return(config)
 }
 
+default_xgboost_grid <- function() {
+  expand.grid(
+    max_depth = c(4, 6, 8, 10),
+    eta = c(0.01, 0.05, 0.1),
+    nrounds = c(200, 500, 800),
+    subsample = c(0.8),
+    colsample_bytree = c(0.8),
+    stringsAsFactors = FALSE
+  )
+}
 
+normalize_xgboost_grid <- function(xgboost_grid) {
+  if (is.null(xgboost_grid)) {
+    grid <- default_xgboost_grid()
+  } else if (is.list(xgboost_grid) && !is.data.frame(xgboost_grid)) {
+    grid <- expand.grid(xgboost_grid, stringsAsFactors = FALSE)
+  } else {
+    grid <- as.data.frame(xgboost_grid)
+  }
+  
+  required_cols <- c("max_depth", "eta", "nrounds", "subsample", "colsample_bytree")
+  missing_cols <- setdiff(required_cols, names(grid))
+  if (length(missing_cols) > 0) {
+    stop("xgboost_grid is missing required columns: ", paste(missing_cols, collapse = ", "), call. = FALSE)
+  }
+  
+  grid <- grid[, required_cols, drop = FALSE]
+  return(grid)
+}
 
+select_xgboost_features <- function(unit_data, spec_features) {
+  features_to_use <- spec_features
+  
+  for (feature in spec_features) {
+    if (!feature %in% names(unit_data)) {
+      stop("Missing specification feature in data: ", feature, call. = FALSE)
+    }
+    if (is.factor(unit_data[[feature]]) || is.character(unit_data[[feature]])) {
+      unique_vals <- unique(unit_data[[feature]])
+      if (length(unique_vals) < 2) {
+        cat("Removing feature", feature, "- only has one level:", unique_vals[1], "\n")
+        features_to_use <- setdiff(features_to_use, feature)
+      }
+    }
+  }
+  
+  return(features_to_use)
+}
+
+prepare_xgboost_matrix <- function(unit_data, features_to_use, all_factor_levels = NULL) {
+  design_data <- data.table::copy(unit_data)
+  feature_groups <- list()
+  
+  for (col in features_to_use) {
+    if (is.character(design_data[[col]]) || is.factor(design_data[[col]])) {
+      if (!is.null(all_factor_levels) && col %in% names(all_factor_levels)) {
+        all_levels <- all_factor_levels[[col]]
+      } else {
+        all_levels <- unique(design_data[[col]])
+      }
+      design_data[[col]] <- factor(design_data[[col]], levels = all_levels)
+      feature_groups[[col]] <- all_levels
+      cat("Factor", col, "levels:", paste(all_levels, collapse = ", "), "\n")
+    }
+  }
+  
+  # One-hot encode via model.matrix (no intercept)
+  X_df <- as.data.frame(design_data[, ..features_to_use])
+  X_mat <- model.matrix(~ . - 1, data = X_df)
+  
+  # Build mapping: one-hot column -> (feature_group, feature_level)
+  onehot_mapping <- data.table::data.table(
+    onehot_col = colnames(X_mat),
+    feature_group = character(ncol(X_mat)),
+    feature_level = character(ncol(X_mat))
+  )
+  for (feat in features_to_use) {
+    mask <- grepl(paste0("^", feat), colnames(X_mat))
+    onehot_mapping[mask, feature_group := feat]
+    onehot_mapping[mask, feature_level := gsub(paste0("^", feat), "", colnames(X_mat)[mask])]
+  }
+  
+  cat("One-hot matrix dimensions:", nrow(X_mat), "x", ncol(X_mat), "\n")
+  cat("Feature groups:", paste(unique(onehot_mapping$feature_group), collapse = ", "), "\n")
+  
+  return(list(
+    X_mat = X_mat,
+    onehot_mapping = onehot_mapping,
+    feature_groups = feature_groups
+  ))
+}
+
+tune_xgboost_params <- function(unit_data, config, all_factor_levels = NULL) {
+  grid <- normalize_xgboost_grid(config$xgboost_grid)
+  
+  # Drop rows with missing outcome/spec id
+  check_cols <- c("full_spec_id", "avg_tau")
+  unit_data_complete <- na.omit(unit_data, cols = check_cols)
+  if (nrow(unit_data_complete) < 3) {
+    stop("Insufficient specifications for XGBoost tuning. Need at least 3 rows, found ",
+         nrow(unit_data_complete), ".", call. = FALSE)
+  }
+  
+  features_to_use <- select_xgboost_features(unit_data_complete, config$spec_features)
+  if (length(features_to_use) == 0) {
+    stop("No varying features available for XGBoost tuning.", call. = FALSE)
+  }
+  
+  prepared <- prepare_xgboost_matrix(unit_data_complete, features_to_use, all_factor_levels)
+  X_mat <- prepared$X_mat
+  y_full <- unit_data_complete$avg_tau
+  
+  n_obs <- nrow(X_mat)
+  nfold <- config$xgboost_cv_folds
+  if (n_obs < nfold) {
+    stop("Insufficient specifications for requested CV folds. Requested ", nfold,
+         " folds but only ", n_obs, " observations available. Reduce xgboost_cv_folds or disable tuning.",
+         call. = FALSE)
+  }
+  if (nfold < 2) {
+    stop("Insufficient data for CV folds. Reduce xgboost_cv_folds or disable tuning.", call. = FALSE)
+  }
+  
+  base_params <- config$xgboost_params
+  objective <- if (!is.null(base_params$objective)) base_params$objective else "reg:squarederror"
+  nthread <- if (!is.null(base_params$nthread)) base_params$nthread else 1
+  seed <- base_params$seed
+  if (!is.null(seed)) set.seed(seed)
+  
+  dtrain <- xgboost::xgb.DMatrix(data = X_mat, label = y_full)
+  
+  cat("Tuning XGBoost with", nfold, "-fold CV over", nrow(grid), "settings...\n")
+  tuning_results <- data.table::data.table()
+  
+  for (i in seq_len(nrow(grid))) {
+    grid_row <- grid[i, , drop = FALSE]
+    params <- list(
+      objective = objective,
+      max_depth = grid_row$max_depth,
+      eta = grid_row$eta,
+      subsample = grid_row$subsample,
+      colsample_bytree = grid_row$colsample_bytree,
+      nthread = nthread
+    )
+    
+    cv <- xgboost::xgb.cv(
+      params = params,
+      data = dtrain,
+      nrounds = grid_row$nrounds,
+      nfold = nfold,
+      verbose = 0,
+      showsd = FALSE
+    )
+    
+    eval_log <- cv$evaluation_log
+    best_iter <- which.min(eval_log$test_rmse_mean)
+    best_rmse <- eval_log$test_rmse_mean[best_iter]
+    
+    tuning_results <- rbind(
+      tuning_results,
+      data.table::data.table(
+        max_depth = grid_row$max_depth,
+        eta = grid_row$eta,
+        nrounds = grid_row$nrounds,
+        subsample = grid_row$subsample,
+        colsample_bytree = grid_row$colsample_bytree,
+        best_iteration = best_iter,
+        test_rmse_mean = best_rmse
+      )
+    )
+  }
+  
+  best_idx <- which.min(tuning_results$test_rmse_mean)
+  best_row <- tuning_results[best_idx]
+  
+  cat("Best CV RMSE:", round(best_row$test_rmse_mean, 4), "\n")
+  
+  tuned_params <- list(
+    objective = objective,
+    max_depth = best_row$max_depth,
+    eta = best_row$eta,
+    nrounds = best_row$best_iteration,
+    subsample = best_row$subsample,
+    colsample_bytree = best_row$colsample_bytree,
+    nthread = nthread,
+    seed = seed,
+    verbose = 0
+  )
+  
+  return(list(
+    params = tuned_params,
+    tuning_results = tuning_results,
+    best_row = best_row,
+    nfold = nfold,
+    n_obs = n_obs
+  ))
+}
 #' Run XGBoost SHAP Analysis on Long Format Data
 #'
 #' @title Run Direct XGBoost Analysis on Long Format Data
@@ -215,6 +434,9 @@ create_xgboost_config <- function(dataset_name,
 #'
 #' @export
 run_xgboost_shap_analysis <- function(long_data, config, compute_loo = TRUE) {
+  if (!requireNamespace("xgboost", quietly = TRUE)) {
+    stop("Package 'xgboost' is required for SHAP analysis. Install with: install.packages('xgboost')", call. = FALSE)
+  }
   cat(paste("\nProcessing dataset:", config$dataset_name), "\n")
   cat("Using direct long format data - no CSV processing needed\n")
   
@@ -292,6 +514,19 @@ run_xgboost_shap_analysis <- function(long_data, config, compute_loo = TRUE) {
     }
   }
   
+  if (isTRUE(config$tune_xgboost)) {
+    if (!(config$treated_unit_name %in% avg_tau_data$unit_name)) {
+      stop("Tuning requested but treated unit not found in data: ", config$treated_unit_name, call. = FALSE)
+    }
+    treated_tuning_data <- avg_tau_data[unit_name == config$treated_unit_name]
+    tuning_results <- tune_xgboost_params(treated_tuning_data, config, all_factor_levels = all_factor_levels)
+    config$xgboost_params <- tuning_results$params
+    config$xgboost_tuning_results <- tuning_results$tuning_results
+    config$xgboost_tuning_best <- tuning_results$best_row
+    config$xgboost_tuning_folds <- tuning_results$nfold
+    config$xgboost_tuning_n_obs <- tuning_results$n_obs
+  }
+
   for(unit in unique_units) {
     unit_data <- avg_tau_data[unit_name == unit]
     analysis_results <- analyze_unit_xgboost(unit_data, unit, config, all_factor_levels, categorical_features, compute_loo = compute_loo)
@@ -370,57 +605,17 @@ analyze_unit_xgboost <- function(unit_data, unit, config,
   }
 
   # Check for single-level factors that would cause contrasts error
-  features_to_use <- spec_features
-  for (feature in spec_features) {
-    if (is.factor(unit_data_complete[[feature]]) || is.character(unit_data_complete[[feature]])) {
-      unique_vals <- unique(unit_data_complete[[feature]])
-      if (length(unique_vals) < 2) {
-        cat("Removing feature", feature, "- only has one level:", unique_vals[1], "\n")
-        features_to_use <- setdiff(features_to_use, feature)
-      }
-    }
-  }
+  features_to_use <- select_xgboost_features(unit_data_complete, spec_features)
 
   if (length(features_to_use) == 0) {
     cat("Skipping", unit, "- no varying features available\n")
     return(list(results = NULL, shapley = NULL, predictions = NULL))
   }
 
-  # Prepare data for XGBoost: one-hot encode categorical features
-  design_data <- data.table::copy(unit_data_complete)
-  feature_groups <- list()
-
-  for (col in features_to_use) {
-    if (is.character(design_data[[col]]) || is.factor(design_data[[col]])) {
-      if (!is.null(all_factor_levels) && col %in% names(all_factor_levels)) {
-        all_levels <- all_factor_levels[[col]]
-      } else {
-        all_levels <- unique(design_data[[col]])
-      }
-      design_data[[col]] <- factor(design_data[[col]], levels = all_levels)
-      feature_groups[[col]] <- all_levels
-      cat("Factor", col, "levels:", paste(all_levels, collapse = ", "), "\n")
-    }
-  }
-
-  # One-hot encode via model.matrix (no intercept)
-  X_df <- as.data.frame(design_data[, ..features_to_use])
-  X_mat <- model.matrix(~ . - 1, data = X_df)
-
-  # Build mapping: one-hot column → (feature_group, feature_level)
-  onehot_mapping <- data.table::data.table(
-    onehot_col = colnames(X_mat),
-    feature_group = character(ncol(X_mat)),
-    feature_level = character(ncol(X_mat))
-  )
-  for (feat in features_to_use) {
-    mask <- grepl(paste0("^", feat), colnames(X_mat))
-    onehot_mapping[mask, feature_group := feat]
-    onehot_mapping[mask, feature_level := gsub(paste0("^", feat), "", colnames(X_mat)[mask])]
-  }
-
-  cat("One-hot matrix dimensions:", nrow(X_mat), "x", ncol(X_mat), "\n")
-  cat("Feature groups:", paste(unique(onehot_mapping$feature_group), collapse = ", "), "\n")
+  prepared <- prepare_xgboost_matrix(unit_data_complete, features_to_use, all_factor_levels)
+  X_mat <- prepared$X_mat
+  onehot_mapping <- prepared$onehot_mapping
+  feature_groups <- prepared$feature_groups
 
   y_full <- unit_data_complete[[outcome_col_name]]
 
@@ -454,7 +649,7 @@ analyze_unit_xgboost <- function(unit_data, unit, config,
         verbose = 0
       )
 
-      all_test_preds[i] <- xgboost:::predict.xgb.Booster(model_fold, dtest)
+      all_test_preds[i] <- predict(model_fold, dtest)
     }
 
     # Calculate test metrics
@@ -483,7 +678,7 @@ analyze_unit_xgboost <- function(unit_data, unit, config,
     verbose = 0
   )
 
-  train_preds_final <- xgboost:::predict.xgb.Booster(xgb_model_final, dfull)
+  train_preds_final <- predict(xgb_model_final, dfull)
   train_correlation_final <- cor(train_preds_final, y_full)
   train_rmse_final <- sqrt(mean((train_preds_final - y_full)^2))
 
@@ -496,7 +691,7 @@ analyze_unit_xgboost <- function(unit_data, unit, config,
 
   # Calculate SHAP values using XGBoost's built-in TreeSHAP (predcontrib=TRUE)
   cat("Calculating SHAP values for", nrow(X_mat), "observations with", ncol(X_mat), "one-hot features...\n")
-  shap_matrix <- xgboost:::predict.xgb.Booster(xgb_model_final, dfull, predcontrib = TRUE)
+  shap_matrix <- predict(xgb_model_final, dfull, predcontrib = TRUE)
 
   # Last column is BIAS term — remove it
   shap_matrix <- shap_matrix[, -ncol(shap_matrix), drop = FALSE]

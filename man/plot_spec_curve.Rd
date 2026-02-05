@@ -27,7 +27,10 @@ plot_spec_curve(
   shap_label_type = "absolute",
   show_predictions = FALSE,
   predictions = NULL,
-  xgboost_params = NULL
+  xgboost_params = NULL,
+  tune_xgboost = NULL,
+  xgboost_grid = NULL,
+  xgboost_cv_folds = 5
 )
 }
 \arguments{
@@ -140,7 +143,16 @@ If NULL and show_predictions=TRUE, predictions will be computed internally. Defa
 list(objective='reg:squarederror', max_depth=10, eta=0.05, nrounds=500, subsample=0.8,
 colsample_bytree=0.8, nthread=1, seed=42, verbose=0). Common parameters to modify:
 nrounds (more = better fit but slower), max_depth (complexity), eta (learning rate).
-Default is NULL.}
+Default is NULL. If tune_xgboost is TRUE, xgboost_params must be NULL.}
+
+\item{tune_xgboost}{Logical or NULL. If TRUE, tune XGBoost hyperparameters via
+k-fold CV on the treated unit before SHAP/LOO. If NULL, defaults to TRUE when
+xgboost_params is NULL and FALSE otherwise. Default is NULL.}
+
+\item{xgboost_grid}{Data.frame, data.table, or list. Optional grid for tuning.
+Must include max_depth, eta, nrounds, subsample, colsample_bytree. Default is NULL.}
+
+\item{xgboost_cv_folds}{Integer. Number of CV folds for tuning. Default is 5.}
 }
 \value{
 List containing:
@@ -294,10 +306,8 @@ plot_customized <- plot_spec_curve(
 # ===== EXTRACTING INDIVIDUAL PANELS =====
 
 # Extract and display only Panel A (treatment effects)
-panel_a <- extract_panel_a(plot_customized)
 
 # Extract and save Panel B (specification features/SHAP)
-extract_panel_b(plot_customized, file_path = "shap_features.png", width = 10, height = 8)
 
 }
 }

@@ -81,7 +81,13 @@
 #'   list(objective='reg:squarederror', max_depth=10, eta=0.05, nrounds=500, subsample=0.8,
 #'   colsample_bytree=0.8, nthread=1, seed=42, verbose=0). Common parameters to modify:
 #'   nrounds (more = better fit but slower), max_depth (complexity), eta (learning rate).
-#'   Default is NULL.
+#'   Default is NULL. If tune_xgboost is TRUE, xgboost_params must be NULL.
+#' @param tune_xgboost Logical or NULL. If TRUE, tune XGBoost hyperparameters via
+#'   k-fold CV on the treated unit before SHAP/LOO. If NULL, defaults to TRUE when
+#'   xgboost_params is NULL and FALSE otherwise. Default is NULL.
+#' @param xgboost_grid Data.frame, data.table, or list. Optional grid for tuning.
+#'   Must include max_depth, eta, nrounds, subsample, colsample_bytree. Default is NULL.
+#' @param xgboost_cv_folds Integer. Number of CV folds for tuning. Default is 5.
 #'
 #' @return List containing:
 #' \itemize{
@@ -223,13 +229,10 @@
 #' # ===== EXTRACTING INDIVIDUAL PANELS =====
 #'
 #' # Extract and display only Panel A (treatment effects)
-#' panel_a <- extract_panel_a(plot_customized)
 #' 
 #' # Extract and save Panel B (specification features/SHAP)
-#' extract_panel_b(plot_customized, file_path = "shap_features.png", width = 10, height = 8)
 #'
 #' }
-#' @importFrom ggtext element_markdown
 plot_spec_curve <- function(
     long_data,
     name_treated_unit,
@@ -256,7 +259,10 @@ plot_spec_curve <- function(
     shap_label_type = "absolute",
     show_predictions = FALSE,
     predictions = NULL,
-    xgboost_params = NULL
+    xgboost_params = NULL,
+    tune_xgboost = NULL,
+    xgboost_grid = NULL,
+    xgboost_cv_folds = 5
 ) {
 
     # Libraries imported via NAMESPACE
@@ -686,6 +692,9 @@ plot_spec_curve <- function(
     
     # Check if we need to compute SHAP internally
     if (show_shap && is.null(shap_values)) {
+        if (!requireNamespace("xgboost", quietly = TRUE)) {
+            stop("Package 'xgboost' is required for internal SHAP computation. Install with: install.packages('xgboost') or provide shap_values.", call. = FALSE)
+        }
         message("Internal SHAP computation requested. Running XGBoost SHAP analysis...")
         
         # Create default configuration for internal SHAP computation
@@ -726,7 +735,10 @@ plot_spec_curve <- function(
             outcome_filter = outcome_filter,
             spec_features = available_spec_features,
             treated_unit_only = TRUE,  # Default to treated unit only for efficiency
-            xgboost_params = xgboost_params  # Pass custom XGBoost parameters
+            xgboost_params = xgboost_params,
+            tune_xgboost = tune_xgboost,
+            xgboost_grid = xgboost_grid,
+            xgboost_cv_folds = xgboost_cv_folds
         )
         
         # Create long format data structure expected by run_xgboost_shap_analysis
@@ -1379,12 +1391,15 @@ plot_spec_curve <- function(
                 guide = guide_colorbar(title.position = "top")
             )
         } else {  # signed
+            # Force symmetric limits so the color scale is always centered on 0
+            shap_max_abs <- max(abs(plot_data_p2$shap_color_value), na.rm = TRUE)
             p2 <- p2 + scale_color_gradient2(
                 name = "SHAP Value = Change in Treatment Effect",
                 low = SHAP_COLORS$red,
                 mid = SHAP_COLORS$gray,
                 high = SHAP_COLORS$blue,
                 midpoint = 0,
+                limits = c(-shap_max_abs, shap_max_abs),
                 guide = guide_colorbar(title.position = "top")
             )
         }
