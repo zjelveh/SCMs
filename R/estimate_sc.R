@@ -3,7 +3,10 @@
 #'
 #' @param dataset A data frame containing the panel data.
 #' @param outcome Character. Name of the outcome variable (column in dataset).
-#' @param covagg List of covariates used for matching (columns in dataset).
+#' @param covagg List of covariate-aggregation operations passed to
+#'   \code{\link{scdata}}. Each operation should define at least \code{var}, and can
+#'   optionally define \code{select_periods}, \code{partition_periods}, and
+#'   \code{compute}.
 #' @param col_name_unit_name Character. Column name in dataset containing unit names (e.g., state names).
 #' @param name_treated_unit Character. Name of the treated unit (e.g., the state that received treatment).
 #' @param col_name_period Character. Column name in dataset containing time periods.
@@ -19,20 +22,25 @@
 #' @param constant Logical. Whether to include a constant term in synthetic control weights. Default is FALSE.
 #' @param P Optional. Number of factors to use (for AugSynth).
 #'
-#' @return A list of class "scpi" containing the estimated SCM results and input parameters.
+#' @return A list of class \code{"scm_estimate"} containing estimated SCM results
+#' and input parameters.
 #'
 #' @export
 #'
 #' @examples
 #' # Example usage (replace with actual example when available)
-#' # result <- estimate_sc(dataset = my_data, outcome = "gdp", 
-#' #                       covagg = c("population", "unemployment"),
+#' # result <- estimate_sc(dataset = my_data, outcome = "gdp",
+#' #                       covagg = list(
+#' #                         list(var = "outcome_var", partition_periods = list(type = "by_period")),
+#' #                         list(var = "population", compute = "mean"),
+#' #                         list(var = "unemployment", compute = "mean")
+#' #                       ),
 #' #                       col_name_unit_name = "state", name_treated_unit = "California",
 #' #                       col_name_period = "year", treated_period = 2000, 
 #' #                       min_period = 1990, end_period = 2010)
 estimate_sc <- function(dataset,           # Input dataset (panel data format)
                         outcome,           # Name of the outcome variable (column in dataset)
-                        covagg,            # List of covariates used for matching (columns in dataset)
+                        covagg,            # List of covariate-aggregation operations for matching
                         col_name_unit_name, # Column name in dataset containing unit names (e.g., state names)
                         name_treated_unit, # Name of the treated unit (e.g., the state that received treatment)
                         col_name_period,    # Column name in dataset containing time periods
@@ -95,8 +103,8 @@ estimate_sc <- function(dataset,           # Input dataset (panel data format)
   )
 
   # Error handling: Check if data preparation was successful
-  if (!methods::is(data, "scdata") & !methods::is(data, "scdataMulti")) {
-    stop("data should be the object returned by running scdata or scdata_multi!")
+  if (!methods::is(data, "scdata")) {
+    stop("data should be the object returned by running scdata!")
   }
 
   # 2. SCM Estimation
@@ -171,19 +179,8 @@ estimate_sc <- function(dataset,           # Input dataset (panel data format)
     }
   }
 
-  # Set the appropriate class type
-  if (methods::is(data, "scdata") == TRUE) {
-    class.type <- "scpi_data"
-  } else if (methods::is(data, "scdataMulti") == TRUE) {
-    class.type <- "scpi_data_multi"
-  }
-
-  class(result) <- "scpi"
-  if (class.type == "scpi_data") {
-    result$data$specs$class.type <- "scpi_scpi"
-  } else if (class.type == "scpi_data_multi") {
-    result$data$specs$class.type <- "scpi_scpi_multi"
-  }
+  class(result) <- "scm_estimate"
+  result$data$specs$class.type <- "scm_estimate"
 
   return(result)
 }

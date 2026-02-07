@@ -9,8 +9,6 @@ scplot(
   fig.path = NULL,
   fig.name = NULL,
   fig.format = "png",
-  e.out = TRUE,
-  joint = FALSE,
   col.treated = "black",
   col.synth = "mediumblue",
   label.xy = NULL,
@@ -22,8 +20,7 @@ scplot(
 )
 }
 \arguments{
-\item{result}{a class 'scest' object, obtained by calling \code{\link{scest}}, or a class
-'scpi' object, obtained by calling \code{\link{scpi}}.}
+\item{result}{A class \code{"scest"} object from \code{\link{scest}}.}
 
 \item{fig.path}{a string indicating the path where the plot(s) should be saved.}
 
@@ -31,10 +28,6 @@ scplot(
 generates a numeric suffix to avoid overwriting them.}
 
 \item{fig.format}{a string indicating the format in which the plot(s) should be saved.}
-
-\item{e.out}{a logical specifying whether out-of-sample uncertainty should be included in the plot(s).}
-
-\item{joint}{a logical specifying whether simultaneous prediction intervals should be included in the plot(s). It requires \code{e.out = TRUE}.}
 
 \item{col.treated}{a string specifying the color for the treated unit series. Find the full list at \url{http://sape.inf.usi.ch/quick-reference/ggplot2/colour}.}
 
@@ -59,20 +52,13 @@ to produce the plot.}
 \item{plots}{a list containing standard ggplot object(s) that can be used for further customization.}
 }
 \description{
-The command plots the actual pre-treatment and post-treatment series of the treated
-unit and the estimated counterfactual synthetic control unit with corresponding prediction intervals.
-Prediction intervals can take into account either in-sample uncertainty only or in-sample and
-out-of-sample uncertainty using the techniques developed in \href{https://nppackages.github.io/references/Cattaneo-Feng-Titiunik_2021_JASA.pdf}{Cattaneo, Feng, and Titiunik (2021)}. \code{\link{scpi}}.
-The input object should come from the command \code{\link{scest}} or from the command \code{\link{scpi}}.
+Plot treated and synthetic time series from a fitted
+\code{\link{scest}} object.
 
 Companion \href{https://www.stata.com/}{Stata} and \href{https://www.python.org/}{Python} packages are described in \href{https://arxiv.org/abs/2202.05984}{Cattaneo, Feng, Palomba, and Titiunik (2022)}.
 
-Companion commands are:  \link{scdata} and \link{scdataMulti} for data preparation in the single and multiple treated unit(s) cases, respectively,
-\link{scest} for point estimation, \link{scpi} for inference procedures, and \link{scplotMulti} for plots with multiple treated units.
-
-Related Stata, R, and Python packages useful for inference in SC designs are described in the following website:
-
-\href{ https://nppackages.github.io/scpi/}{ https://nppackages.github.io/scpi/}
+Companion commands are \link{scdata} for data preparation, \link{scest} for
+point estimation, and \link{inference_sc} for inference procedures.
 
 For an introduction to synthetic control methods, see \href{https://www.aeaweb.org/articles?id=10.1257/jel.20191450}{Abadie (2021)} and references therein.
 }
@@ -104,16 +90,10 @@ scplot(result)
 \item{\href{https://www.aeaweb.org/articles?id=10.1257/jel.20191450}{Abadie, A. (2021)}. Using synthetic controls:
 Feasibility, data requirements, and methodological aspects.
 \emph{Journal of Economic Literature}, 59(2), 391-425.}
-\item{\href{https://nppackages.github.io/references/Cattaneo-Feng-Titiunik_2021_JASA.pdf}{Cattaneo, M. D., Feng, Y., and Titiunik, R.
-(2021)}. Prediction intervals for synthetic control methods. \emph{Journal of the American Statistical Association}, 116(536), 1865-1880.}
-\item{\href{https://arxiv.org/abs/2202.05984}{Cattaneo, M. D., Feng, Y., Palomba F., and Titiunik, R. (2022)},
-scpi: Uncertainty Quantification for Synthetic Control Methods, \emph{arXiv}:2202.05984.}
-\item{\href{https://arxiv.org/abs/2210.05026}{Cattaneo, M. D., Feng, Y., Palomba F., and Titiunik, R. (2022).}
-Uncertainty Quantification in Synthetic Controls with Staggered Treatment Adoption, \emph{arXiv}:2210.05026.}
 }
 }
 \seealso{
-\code{\link{scdata}}, \code{\link{scdataMulti}}, \code{\link{scest}}, \code{\link{scpi}}, \code{\link{scplotMulti}}
+\code{\link{scdata}}, \code{\link{scest}}, \code{\link{inference_sc}}
 }
 \author{
 Matias Cattaneo, Princeton University. \email{cattaneo@princeton.edu}.

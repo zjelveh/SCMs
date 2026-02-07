@@ -1345,7 +1345,7 @@ e.des.prep <- function(B, P, e.order, e.lags, res, sc.pred, Y.donors, out.feat, 
     # If the outcome variable is not among the features we need to create a
     # proper vector of residuals. Further, we force the predictors to be
     # the outcome variable of the donors
-    if (class.type == "scpi_data") {
+    if (class.type == "scm_data") {
       # just one treated unit
       e.res <- sc.pred$data$Y.pre - sc.pred$est.results$Y.pre.fit
     } else {

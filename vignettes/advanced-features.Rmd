@@ -140,28 +140,29 @@ process_large_spec_curve <- function(dataset, max_specs_per_batch = 50) {
     compression_level = 9  # High compression for storage
   )
   
-  # Process in batches
-  results <- run_spec_curve_analysis(
-    dataset = dataset,
+  analysis_params <- list(
     outcomes = c("outcome_1", "outcome_2"),
-    covagg_list = covariate_specs,
+    covagg = covariate_specs,
     col_name_unit_name = "unit",
     name_treated_unit = "treated",
     treated_period = 2005,
     min_period = 1990,
     end_period = 2014,
     col_name_period = "year",
-    
-    # Optimization settings
-    cores = optimal_cores,
-    batch_size = max_specs_per_batch,
-    storage_manager = storage_manager,
-    
-    # Reduced specification space for demonstration
     feature_weights = c("uniform"),
     outcome_models = c("none", "ridge"),
-    
-    verbose = TRUE
+    donor_sample = "all",
+    constants = FALSE,
+    constraints = list(list(name = "simplex")),
+    inference_type = "placebo",
+    inference_config = list(verbose = TRUE)
+  )
+
+  # Process analysis through the wrapper
+  results <- run_spec_curve_analysis(
+    dataset = dataset,
+    params = analysis_params,
+    cores = optimal_cores
   )
   
   return(results)

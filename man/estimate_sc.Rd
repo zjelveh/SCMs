@@ -28,7 +28,10 @@ estimate_sc(
 
 \item{outcome}{Character. Name of the outcome variable (column in dataset).}
 
-\item{covagg}{List of covariates used for matching (columns in dataset).}
+\item{covagg}{List of covariate-aggregation operations passed to
+\code{\link{scdata}}. Each operation should define at least \code{var}, and can
+optionally define \code{select_periods}, \code{partition_periods}, and
+\code{compute}.}
 
 \item{col_name_unit_name}{Character. Column name in dataset containing unit names (e.g., state names).}
 
@@ -59,15 +62,20 @@ estimate_sc(
 \item{P}{Optional. Number of factors to use (for AugSynth).}
 }
 \value{
-A list of class "scpi" containing the estimated SCM results and input parameters.
+A list of class \code{"scm_estimate"} containing estimated SCM results
+and input parameters.
 }
 \description{
 This function processes and estimates a Synthetic Control Model (SCM) based on the provided dataset and parameters.
 }
 \examples{
 # Example usage (replace with actual example when available)
-# result <- estimate_sc(dataset = my_data, outcome = "gdp", 
-#                       covagg = c("population", "unemployment"),
+# result <- estimate_sc(dataset = my_data, outcome = "gdp",
+#                       covagg = list(
+#                         list(var = "outcome_var", partition_periods = list(type = "by_period")),
+#                         list(var = "population", compute = "mean"),
+#                         list(var = "unemployment", compute = "mean")
+#                       ),
 #                       col_name_unit_name = "state", name_treated_unit = "California",
 #                       col_name_period = "year", treated_period = 2000, 
 #                       min_period = 1990, end_period = 2010)

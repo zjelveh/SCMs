@@ -270,39 +270,31 @@ cat(sprintf("\nTotal specifications to estimate: %d\n", total_specs))
 cat("Running specification curve analysis...\n")
 cat("This may take several minutes depending on the number of specifications.\n\n")
 
-tobacco_results <- run_spec_curve_analysis(
-  
-  # Data specification
-  dataset = tobacco_data,
+analysis_params <- list(
   outcomes = "cigsale",
-  covagg_list = covariate_specifications,
-  
-  # Unit and time identification
+  covagg = covariate_specifications,
   col_name_unit_name = "state",
   name_treated_unit = "California",
   col_name_period = "year",
-  
-  # Treatment timing
   treated_period = 1989,  # Treatment began in 1989
   min_period = 1980,
   end_period = 2000,
-  
-  # Specification choices
   feature_weights = analysis_config$feature_weights,
   outcome_models = analysis_config$outcome_models,
   constraints = analysis_config$constraints,
   donor_sample = analysis_config$donor_sample,
-  
-  # Inference settings
+  constants = FALSE,
   inference_type = "all",  # Both placebo and bootstrap
   inference_config = list(
     bootstrap_n_replications = 500,
     bootstrap_cores = 1
-  ),
-  
-  # Computational settings
-  cores = 2,  # Adjust based on your system
-  verbose = TRUE
+  )
+)
+
+tobacco_results <- run_spec_curve_analysis(
+  dataset = tobacco_data,
+  params = analysis_params,
+  cores = 2  # Adjust based on your system
 )
 
 # Check if analysis completed successfully

@@ -435,8 +435,7 @@ scdata <- function(df,
       available_cols <- colnames(data.bal.tr)
       
       if (!(var_name %in% available_cols)) {
-        message(sprintf("DEBUG C: ERROR - Variable '%s' not found in data!", var_name))
-        next
+        stop("Covariate variable '", var_name, "' not found in input data while constructing treated-unit features.")
       }
       
       # Determine periods to use
@@ -495,8 +494,7 @@ scdata <- function(df,
       # Check if variable exists in data for B matrix
       available_cols_b <- colnames(data.bal.co)
       if (!(var_name %in% available_cols_b)) {
-        message(sprintf("DEBUG E: ERROR - Variable '%s' not found in B matrix data!", var_name))
-        next
+        stop("Covariate variable '", var_name, "' not found in input data while constructing donor features.")
       }
       # Determine periods to use
       periods_to_use <- resolve_covagg_periods(cov_spec, period.pre)

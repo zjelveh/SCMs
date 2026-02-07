@@ -141,7 +141,7 @@ scest <- function(data,
   Z0 <- Y.donors
   Z1 <- data$Y.pre
 
-  class.type <- 'scpi_data'
+  class.type <- 'scm_data'
   V.type <- V
 
   # Extract data specifications
@@ -344,7 +344,7 @@ scest <- function(data,
   # Prepare return object
   to.return <- list(data = df, est.results = est.results)
   class(to.return) <- 'scest'
-  to.return$data$specs$class.type <- 'scpi_scest'
+  to.return$data$specs$class.type <- 'scm_scest'
 
   return(to.return)
 }

@@ -182,29 +182,31 @@ covariate_specs <- list(
 )
 
 # Run specification curve analysis
-spec_results <- run_spec_curve_analysis(
-  dataset = panel_data,
+analysis_params <- list(
   outcomes = "gdp",
-  covagg_list = covariate_specs,
+  covagg = covariate_specs,
   col_name_unit_name = "state",
-  name_treated_unit = "California", 
+  name_treated_unit = "California",
   treated_period = 2001,
   min_period = 1990,
   end_period = 2010,
   col_name_period = "year",
-  
-  # Modeling choices to vary
   feature_weights = c("uniform", "optimize"),
   outcome_models = c("none", "ridge"),
   constraints = list(
     list(name = "simplex"),
     list(name = "lasso", Q = 0.1)
   ),
-  
-  # Inference settings
+  donor_sample = "all",
+  constants = FALSE,
   inference_type = "placebo",
-  cores = 1,  # Use 1 core for vignette
-  verbose = TRUE
+  inference_config = list(verbose = TRUE)
+)
+
+spec_results <- run_spec_curve_analysis(
+  dataset = panel_data,
+  params = analysis_params,
+  cores = 1  # Use 1 core for vignette
 )
 
 # View specification curve

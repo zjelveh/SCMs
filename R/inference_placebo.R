@@ -219,6 +219,8 @@ inference_placebo <- function(
     verbose,
     expected_direction = "negative"
 ){
+  dataset <- data.table::as.data.table(dataset)
+  dataset <- data.table::copy(dataset)
 
   # Debug: Check critical fields immediately
   if (is.null(sc.pred)) stop("sc.pred is NULL")

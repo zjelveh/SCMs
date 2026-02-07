@@ -399,26 +399,7 @@ spec_curve <- function(
           inference_sc(
             sc.pred,
             dataset2,
-            inference_type = 'placebo',
-            P = NULL,
-            u.missp = TRUE,
-            u.sigma = "HC1",
-            u.order = 1,
-            u.lags = 0,
-            u.design = NULL,
-            u.alpha = 0.05,
-            e.method = "all",
-            e.order = 1,
-            e.lags = 0,
-            e.design = NULL,
-            e.alpha = 0.05,
-            sims = 200,
-            rho = NULL,
-            rho.max = 0.2,
-            lgapp = "generalized",
             cores = 1,  # No nested parallelism
-            w.bounds = NULL,
-            e.bounds = NULL,
             verbose = FALSE,
             expected_direction = expected_direction
           )

@@ -3,7 +3,8 @@
 #'
 #' @param dataset Data frame or data.table containing the panel data.
 #' @param outcome Character. Name of the outcome variable column.
-#' @param covagg List of covariates used for matching.
+#' @param covagg List of covariate-aggregation operations passed through to
+#'   \code{\link{scdata}}.
 #' @param col_name_unit_name Character. Name of the column containing unit names.
 #' @param name_treated_unit Character. Name of the treated unit.
 #' @param col_name_period Character. Name of the column containing time periods.
@@ -21,8 +22,9 @@
 #' # Example usage (replace with actual example when available)
 #' # scm_data <- create_scm_dataset(dataset = my_data, outcome = "gdp", 
 #' #                                covagg = list(
-#' #                                  population = list(var = "population"),
-#' #                                  education = list(var = "education")
+#' #                                  list(var = "outcome_var", partition_periods = list(type = "by_period")),
+#' #                                  list(var = "population", compute = "mean"),
+#' #                                  list(var = "education", compute = "mean")
 #' #                                ),
 #' #                                col_name_unit_name = "state", name_treated_unit = "California",
 #' #                                col_name_period = "year", treated_period = 2000,
@@ -78,7 +80,7 @@ create_scm_dataset <- function(dataset,
     max_untreated_period <- treated_period - 1
   }
 
-  # Create SCM dataset using scpi package
+  # Create SCM dataset using SCMs::scdata
 
   # Check which variables actually exist in the dataset
   dataset_vars <- names(dataset)
@@ -86,7 +88,7 @@ create_scm_dataset <- function(dataset,
   # Check for variables with periods that might be missing
   period_vars <- dataset_vars[grepl("\\.", dataset_vars)]
 
-  scpi_data <- scdata(
+  scm_data <- scdata(
     df = as.data.frame(dataset),
     id.var = col_name_unit_name,
     outcome.var = outcome,
@@ -100,12 +102,12 @@ create_scm_dataset <- function(dataset,
   )
 
   # Calculate standard deviations and standardize data
-  X0_sds <- apply(scpi_data$B, 1, sd)
-  scpi_data$A_original <- copy(scpi_data$A)
-  scpi_data$B_original <- copy(scpi_data$B)
-  scpi_data$X0_sds <- X0_sds
-  scpi_data$A <- scpi_data$A / X0_sds
-  scpi_data$B <- scpi_data$B / X0_sds
+  X0_sds <- apply(scm_data$B, 1, sd)
+  scm_data$A_original <- data.table::copy(scm_data$A)
+  scm_data$B_original <- data.table::copy(scm_data$B)
+  scm_data$X0_sds <- X0_sds
+  scm_data$A <- scm_data$A / X0_sds
+  scm_data$B <- scm_data$B / X0_sds
 
-  return(scpi_data)
+  return(scm_data)
 }

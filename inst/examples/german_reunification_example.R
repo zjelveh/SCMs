@@ -38,10 +38,26 @@ cat("Estimated donor weights:\n")
 print(fit$est.results$w)
 scplot(fit)
 
-placebo <- inference_sc(
-  fit,
+sc_result <- estimate_sc(
   dataset = dataset,
-  inference_type = "placebo",
+  outcome = "gdp",
+  covagg = list(
+    list(var = "outcome_var", partition_periods = list(type = "by_period"))
+  ),
+  col_name_unit_name = "unit_id",
+  name_treated_unit = treated_unit,
+  col_name_period = "year",
+  treated_period = 1991,
+  min_period = 1960,
+  end_period = 2003,
+  outcome_models = "none",
+  feature_weights = "optimize",
+  w.constr = list(name = "simplex")
+)
+
+placebo <- inference_sc(
+  sc_result,
+  dataset = dataset,
   verbose = FALSE
 )
 

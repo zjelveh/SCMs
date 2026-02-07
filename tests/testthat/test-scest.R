@@ -39,7 +39,9 @@ create_mock_scdata <- function(include_constant = FALSE) {
   # Create specs
   specs <- list(
     J = n_donors,
-    KM = if (include_constant) 1 else 0,
+    # KM counts additional non-constant matching covariates.
+    # Constant terms are represented by C/gamma, not by KM.
+    KM = 0,
     M = 1,
     T0.features = n_pre,
     out.in.features = TRUE,
