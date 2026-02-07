@@ -4,6 +4,7 @@
 #
 # Outputs:
 #   - inst/examples/readme_spec_curve.png (README inline image; white background)
+#   - inst/examples/readme_spec_curve.svg (README inline vector image)
 #   - inst/examples/readme_spec_curve.pdf (vector companion)
 
 if (file.exists("DESCRIPTION") && requireNamespace("devtools", quietly = TRUE)) {
@@ -19,6 +20,7 @@ outcome <- "gdpcap"
 spec_width <- 10
 spec_height <- 12
 png_out <- "inst/examples/readme_spec_curve.png"
+svg_out <- "inst/examples/readme_spec_curve.svg"
 pdf_out <- "inst/examples/readme_spec_curve.pdf"
 
 paper_results_path <- normalizePath("../../data/basque_results/basque_full_results.rdata", mustWork = FALSE)
@@ -176,6 +178,16 @@ ggsave(
 )
 
 ggsave(
+  filename = svg_out,
+  plot = final_plot,
+  width = spec_width,
+  height = spec_height,
+  units = "in",
+  device = "svg",
+  bg = "white"
+)
+
+ggsave(
   filename = pdf_out,
   plot = final_plot,
   width = spec_width,
@@ -186,4 +198,5 @@ ggsave(
 )
 
 cat("Saved:", png_out, "\n")
+cat("Saved:", svg_out, "\n")
 cat("Saved:", pdf_out, "\n")
