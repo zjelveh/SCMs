@@ -14,7 +14,6 @@ Encoding: UTF-8
 Depends: R (>= 4.1.0)
 Imports: CVXR        (>= 1.0-10),
          dplyr       (>= 1.0.7),
-         digest,
          ECOSolveR   (>= 0.5.4),
          foreach     (>= 1.5.1),
          ggplot2     (>= 3.3.3),
