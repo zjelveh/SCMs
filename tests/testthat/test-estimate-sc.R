@@ -57,11 +57,11 @@ test_that("estimate_sc input validation works correctly", {
   
   # Test treated unit not found
   expect_error(estimate_sc(mock_data, "gdp", list(), "state", "INVALID", "year", 2000, 1990, 2010),
-               "not found in data")
+               "Values not found in column")
   
   # Test treated period not found
   expect_error(estimate_sc(mock_data, "gdp", list(), "state", "CA", "year", 2050, 1990, 2010),
-               "'treated_period' \\(2050\\) not found in data")
+               "must be less than 'end_period'")
   
   # Test non-numeric outcome
   bad_data <- mock_data
@@ -72,20 +72,25 @@ test_that("estimate_sc input validation works correctly", {
   # Test invalid outcome models
   expect_error(estimate_sc(mock_data, "gdp", list(), "state", "CA", "year", 2000, 1990, 2010,
                           outcome_models = c("Invalid")),
-               "Invalid outcome_models.*Invalid")
+               "Invalid values in 'outcome_models'")
   
   # Test invalid feature weights
   expect_error(estimate_sc(mock_data, "gdp", list(), "state", "CA", "year", 2000, 1990, 2010,
                           feature_weights = c("invalid")),
-               "Invalid feature_weights.*invalid")
+               "Invalid values in 'feature_weights'")
 })
 
 test_that("estimate_sc validation warnings work correctly", {
   mock_data <- create_mock_panel_data()
   
   # Test warning for few pre-treatment periods
-  expect_warning(estimate_sc(mock_data, "gdp", list(), "state", "CA", "year", 2000, 1999, 2010),
-                 "Only 1 pre-treatment period")
+  expect_warning(
+    tryCatch(
+      estimate_sc(mock_data, "gdp", list(), "state", "CA", "year", 2000, 1999, 2010),
+      error = function(e) NULL
+    ),
+    "Only 1 pre-treatment period"
+  )
 })
 
 # Note: Full functionality tests would require a working synthetic control implementation
@@ -97,18 +102,25 @@ test_that("estimate_sc handles valid inputs without error", {
   
   mock_data <- create_mock_panel_data()
   
-  # This test verifies that valid inputs don't trigger validation errors
-  # The actual computation might fail due to solver/data issues, but validation should pass
-  expect_error(estimate_sc(mock_data, "gdp", list(), "state", "CA", "year", 2000, 1990, 2010),
-               # Should not get validation errors, but might get computation errors
-               regex = NA, invert = TRUE, class = "validation_error")
+  # Validation should pass even if estimation fails for numerical/computation reasons
+  expect_silent({
+    tryCatch(
+      estimate_sc(mock_data, "gdp", list(), "state", "CA", "year", 2000, 1990, 2010),
+      error = function(e) {
+        if (grepl("must be|Missing required|Invalid", e$message)) {
+          stop(e)
+        }
+        NULL
+      }
+    )
+  })
 })
 
 test_that("estimate_sc covagg parameter validation", {
   mock_data <- create_mock_panel_data()
   
   # Test valid covagg list
-  covagg <- list(list(var = "population", average = TRUE))
+  covagg <- list(list(var = "population", compute = "mean"))
   expect_silent({
     # Validation should pass - actual estimation may fail but that's different
     tryCatch(estimate_sc(mock_data, "gdp", covagg, "state", "CA", "year", 2000, 1990, 2010),

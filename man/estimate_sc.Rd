@@ -15,7 +15,7 @@ estimate_sc(
   min_period,
   end_period,
   outcome_models = c("none", "ols", "ridge", "lasso", "augsynth"),
-  feature_weights = c("uniform", "optimize"),
+  feature_weights = "uniform",
   w.constr = NULL,
   V = "separate",
   V.mat = NULL,
@@ -44,7 +44,7 @@ estimate_sc(
 
 \item{outcome_models}{Character vector. Outcome models to fit. Default is c("none", "ols", "ridge", "lasso", "augsynth").}
 
-\item{feature_weights}{Character vector. Method for assigning weights to predictors. Default is c("uniform", "optimize").}
+\item{feature_weights}{Character. Method for assigning weights to predictors ("uniform" or "optimize"). Default is "uniform".}
 
 \item{w.constr}{Optional. Constraints on the weights.}
 

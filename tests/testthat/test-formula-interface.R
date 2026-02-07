@@ -116,12 +116,13 @@ test_that("covariate aggregation building works", {
   # Test average method
   covagg_avg <- build_covagg_from_formula(covariates, "average")
   expect_equal(length(covagg_avg), 2)
-  expect_true(covagg_avg[[1]]$average)
   expect_equal(covagg_avg[[1]]$var, "population")
+  expect_equal(covagg_avg[[1]]$partition_periods$type, "all")
+  expect_equal(covagg_avg[[1]]$compute, "mean")
   
   # Test each method
   covagg_each <- build_covagg_from_formula(covariates, "each")
-  expect_true(covagg_each[[1]]$each)
+  expect_equal(covagg_each[[1]]$partition_periods$type, "by_period")
 })
 
 test_that("formula interface creates proper scest_formula object", {

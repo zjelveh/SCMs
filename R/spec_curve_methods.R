@@ -250,7 +250,8 @@ summary.spec_curve <- function(object, ...) {
 #' @export
 plot.spec_curve <- function(x, ...) {
   # Extract treated unit name - look for the treated unit in the data
-  treated_units <- unique(x$results[x$results$unit_type == "treated", "unit_name"])
+  treated_rows <- x$results[x$results$unit_type == "treated"]
+  treated_units <- unique(treated_rows$unit_name)
   
   if (length(treated_units) == 0) {
     stop("No treated unit found in specification curve results")

@@ -17,40 +17,16 @@
 #'   Requires multiple features (more than one covariate specification). The constant term is estimated alongside 
 #'   donor weights and can be positive or negative. Default is FALSE.
 #' @param verbose Logical. Whether to print diagnostic messages and warnings. Default is TRUE.
-#' @param covagg List. Flexible specification for covariate aggregation.
-#'   Two formats are supported:
+#' @param covagg List of covariate-aggregation operations.
+#'   Each entry must be a list with:
 #'   \itemize{
-#'     \item \strong{Simplified format} (recommended for spec grids):
-#'       \code{list(label = "...", per_period = c(...), pre_period_mean = c(...))}.
-#'       Use \code{"outcome_var"} to refer to \code{outcome.var}.
-#'     \item \strong{Traditional format} (fine-grained control): each element is
-#'       a list with \code{var} and optional controls
-#'       \code{periods}/\code{first}/\code{last}, \code{each}, and
-#'       \code{agg_fun}/\code{aggfunc}.
+#'     \item \code{var}: variable name, or \code{"outcome_var"} for \code{outcome.var}
+#'     \item \code{select_periods}: optional period selector
+#'     \item \code{partition_periods}: optional grouping of selected periods
+#'     \item \code{compute}: optional aggregation function/function name (default \code{"mean"})
 #'   }
-#'   Examples of traditional entries:
-#'   \itemize{
-#'     \item \code{list(var = "gdp")} - Mean over full pre-period (default behavior)
-#'     \item \code{list(var = "gdp", each = TRUE)} - Separate feature for each period
-#'     \item \code{list(var = "invest", periods = c(1980, 1985))} - Specific periods (averaged)
-#'     \item \code{list(var = "gdp", first = 3)} - First N pre-periods (averaged)
-#'     \item \code{list(var = "industry", last = 2)} - Last N pre-periods (averaged)
-#'     \item \code{list(var = "gdp", last = 5, agg_fun = median)} - Custom aggregation
-#'   }
-#'   Rules: do not mix simplified and traditional keys inside the same specification,
-#'   and use only one of \code{periods}, \code{first}, or \code{last} per traditional entry.
-#'   Default is empty list.
-#' @param default_agg List. Optional default aggregation specification for simplified covariate processing.
-#'   Contains three fields:
-#'   \itemize{
-#'     \item \code{outcome_agg}: Character. How to aggregate outcome variable ("mean", "per_period"). 
-#'           If NULL, no outcome variable added to matching matrices.
-#'     \item \code{features}: Character vector. Explicit list of variable names to include.
-#'     \item \code{features_agg}: Character. How to aggregate feature variables ("mean", "per_period").
-#'           Required when features are specified.
-#'   }
-#'   Variables specified in both default_agg and covagg will use covagg specification (with warning).
-#'   Default is NULL.
+#'   If \code{covagg} is empty, \code{scdata()} defaults to outcome per-period matching
+#'   over all pre-treatment periods.
 #' @param cointegrated.data Logical. Whether to treat the data as cointegrated (affects some computations). Default is FALSE.
 #'
 #' @details
@@ -100,71 +76,23 @@
 #'                    unit.co = c("France", "Italy", "Spain"),
 #'                    anticipation = 2)  # Exclude 2 pre-treatment years
 #'                    
-#' # With flexible covariate aggregation (ADH-style)
-#' scm_data_adh <- scdata(df = germany_data,
+#' # Outcome per-period + covariate means
+#' scm_data_ops <- scdata(df = germany_data,
 #'                        id.var = "country",
 #'                        time.var = "year",
-#'                        outcome.var = "gdp", 
+#'                        outcome.var = "gdp",
 #'                        period.pre = 1960:1990,
 #'                        period.post = 1991:2003,
 #'                        unit.tr = "West Germany",
 #'                        unit.co = c("USA", "UK", "France"),
 #'                        covagg = list(
-#'                          gdp_each = list(var = "gdp", each = TRUE),
-#'                          investment_avg = list(var = "investment"),
-#'                          schooling_last5 = list(var = "schooling", last = 5),
-#'                          trade_final = list(var = "trade", periods = 1990)
-#'                        ))
-#'                        
-#' # With simplified default aggregation
-#' scm_data_simple <- scdata(df = germany_data,
-#'                           id.var = "country",
-#'                           time.var = "year",
-#'                           outcome.var = "gdp",
-#'                           period.pre = 1960:1990,
-#'                           period.post = 1991:2003,
-#'                           unit.tr = "West Germany", 
-#'                           unit.co = c("USA", "UK", "France"),
-#'                           default_agg = list(
-#'                             outcome_agg = "mean",              # Mean outcome for matching
-#'                             features = c("investment", "trade"), # Explicit feature list
-#'                             features_agg = "per_period"        # Per-period features
-#'                           ))
-#'                           
-#' # Mixed approach: default_agg + custom covagg
-#' scm_data_mixed <- scdata(df = germany_data,
-#'                          id.var = "country", 
-#'                          time.var = "year",
-#'                          outcome.var = "gdp",
-#'                          period.pre = 1960:1990,
-#'                          period.post = 1991:2003,
-#'                          unit.tr = "West Germany",
-#'                          unit.co = c("USA", "UK", "France"),
-#'                          default_agg = list(
-#'                            outcome_agg = "per_period",
-#'                            features = c("investment", "trade"),
-#'                            features_agg = "mean"
+#'                          list(
+#'                            var = "outcome_var",
+#'                            partition_periods = list(type = "by_period")
 #'                          ),
-#'                          covagg = list(
-#'                            schooling_custom = list(var = "schooling", last = 5)
-#'                          ))
-#'
-#' # With simplified covagg format
-#' scm_data_simplified <- scdata(df = germany_data,
-#'                               id.var = "country",
-#'                               time.var = "year",
-#'                               outcome.var = "gdp",
-#'                               period.pre = 1960:1990,
-#'                               period.post = 1991:2003,
-#'                               unit.tr = "West Germany",
-#'                               unit.co = c("USA", "UK", "France"),
-#'                               covagg = list(
-#'                                 "Outcome + Covariates" = list(
-#'                                   label = "Outcome + Covariates",
-#'                                   per_period = "outcome_var",
-#'                                   pre_period_mean = c("investment", "trade")
-#'                                 )
-#'                               ))
+#'                          list(var = "investment", compute = "mean"),
+#'                          list(var = "trade", compute = "mean")
+#'                        ))
 #'                          
 #' # With constant term (requires multiple features)
 #' scm_data_const <- scdata(df = germany_data,
@@ -177,9 +105,12 @@
 #'                          unit.co = c("USA", "UK", "France"),
 #'                          constant = TRUE,  # Enable constant term
 #'                          covagg = list(
-#'                            gdp_avg = list(var = "gdp"),
-#'                            investment_avg = list(var = "investment"),
-#'                            trade_periods = list(var = "trade", periods = c(1985, 1990))
+#'                            list(var = "outcome_var", partition_periods = list(type = "by_period")),
+#'                            list(var = "investment", compute = "mean"),
+#'                            list(
+#'                              var = "trade",
+#'                              select_periods = list(type = "explicit", periods = c(1985, 1990))
+#'                            )
 #'                          ))
 #' }
 
@@ -196,7 +127,6 @@ scdata <- function(df,
                    constant = FALSE,
                    verbose = TRUE,
                    covagg = list(),
-                   default_agg = NULL,
                    cointegrated.data = FALSE) {
   
   
@@ -259,137 +189,21 @@ scdata <- function(df,
     stop("Outcome variable (outcome.var) must be numeric!")
   }
   
-  ############################################################################
-  ############################################################################
-  ############################################################################
-  # Process default_agg parameter
-  ############################################################################
-  ############################################################################
-  ############################################################################
-  
-  # Define supported aggregation types (extensible)
-  SUPPORTED_AGG_TYPES <- c("mean", "per_period")
-  
-  # Validation function for default_agg
-  validate_default_agg <- function(default_agg, data, id.var, time.var, outcome.var) {
-    
-    # Check required structure
-    if (!"features" %in% names(default_agg)) {
-      stop("default_agg must have 'features' field")
-    }
-    
-    if (length(default_agg$features) > 0 && !"features_agg" %in% names(default_agg)) {
-      stop("default_agg must have 'features_agg' when features are specified")
-    }
-    
-    # Validate aggregation types
-    if (!is.null(default_agg$outcome_agg)) {
-      if (!default_agg$outcome_agg %in% SUPPORTED_AGG_TYPES) {
-        stop(paste0("Invalid outcome_agg '", default_agg$outcome_agg, 
-                    "'. Supported types: ", paste(SUPPORTED_AGG_TYPES, collapse = ", ")))
-      }
-    }
-    
-    if (length(default_agg$features) > 0) {
-      if (!default_agg$features_agg %in% SUPPORTED_AGG_TYPES) {
-        stop(paste0("Invalid features_agg '", default_agg$features_agg, 
-                    "'. Supported types: ", paste(SUPPORTED_AGG_TYPES, collapse = ", ")))
-      }
-    }
-    
-    # Check variable existence
-    all_vars <- names(data)
-    missing_features <- setdiff(default_agg$features, all_vars)
-    if (length(missing_features) > 0) {
-      stop("Variables not found in data: ", paste(missing_features, collapse = ", "))
-    }
-    
-    # Warn about structural variables
-    structural_vars <- c(id.var, time.var, outcome.var)
-    structural_conflicts <- intersect(default_agg$features, structural_vars)
-    if (length(structural_conflicts) > 0) {
-      warning("Features include structural variables: ", paste(structural_conflicts, collapse = ", "))
-    }
-  }
-  
-  # Create aggregation specification (extensible)
-  create_agg_spec <- function(var_name, agg_type) {
-    switch(agg_type,
-      "mean" = list(var = var_name, average = "full_pre"),
-      "per_period" = list(var = var_name, each = TRUE),
-      # Future types can be added here easily
-      stop("Unsupported aggregation type: ", agg_type)
-    )
-  }
-  
-  # Generate covagg specs from default_agg
-  generate_default_covagg <- function(default_agg, outcome.var) {
-    specs <- list()
-    
-    # Generate outcome spec if specified
-    if (!is.null(default_agg$outcome_agg)) {
-      outcome_spec <- create_agg_spec(outcome.var, default_agg$outcome_agg)
-      specs[[paste0(outcome.var, "_", default_agg$outcome_agg)]] <- outcome_spec
-    }
-    
-    # Generate feature specs
-    for (feature in default_agg$features) {
-      feature_spec <- create_agg_spec(feature, default_agg$features_agg)
-      specs[[paste0(feature, "_", default_agg$features_agg)]] <- feature_spec
-    }
-    
-    return(specs)
-  }
-  
-  # Merge and deduplicate specs with warnings
-  merge_and_dedupe <- function(default_specs, custom_covagg) {
-    
-    # Combine both sources
-    all_specs <- c(default_specs, custom_covagg)
-    
-    # Extract variable names for deduplication
-    var_names <- sapply(all_specs, function(x) x$var)
-    
-    # Check for duplicates
-    duplicated_vars <- var_names[duplicated(var_names)]
-    if (length(duplicated_vars) > 0) {
-      unique_dups <- unique(duplicated_vars)
-      warning("Duplicate variable specifications for: ", 
-              paste(unique_dups, collapse = ", "), 
-              " - custom covagg takes precedence")
-    }
-    
-    # Keep last occurrence (custom wins)
-    final_specs <- all_specs[!duplicated(var_names, fromLast = TRUE)]
-    
-    return(final_specs)
-  }
-  
-  # Process default_agg if provided
-  if (!is.null(default_agg)) {
-    validate_default_agg(default_agg, df, id.var, time.var, outcome.var)
-    default_specs <- generate_default_covagg(default_agg, outcome.var)
-    covagg <- merge_and_dedupe(default_specs, covagg)
-  }
-  
   # Resolve covagg period selection for scdata
   resolve_covagg_periods <- function(cov_spec, period.pre) {
-    if (!is.null(cov_spec$periods)) {
-      return(cov_spec$periods)
+    if (is.null(cov_spec$periods)) {
+      stop("Internal covagg specification is missing periods")
     }
-    if (!is.null(cov_spec$last)) {
-      if (!is.numeric(cov_spec$last) || length(cov_spec$last) != 1 || cov_spec$last <= 0) {
-        stop("covagg 'last' must be a single positive number")
-      }
-      return(tail(sort(period.pre), min(cov_spec$last, length(period.pre))))
+    periods <- sort(unique(cov_spec$periods))
+    if (!is.numeric(periods) || length(periods) == 0) {
+      stop("Internal covagg specification has invalid periods")
     }
-    if (!is.null(cov_spec$first)) {
-      if (!is.numeric(cov_spec$first) || length(cov_spec$first) != 1 || cov_spec$first <= 0) {
-        stop("covagg 'first' must be a single positive number")
-      }
-      return(head(sort(period.pre), min(cov_spec$first, length(period.pre))))
+    missing_periods <- setdiff(periods, period.pre)
+    if (length(missing_periods) > 0) {
+      stop("Internal covagg specification contains periods outside period.pre: ",
+           paste(missing_periods, collapse = ", "))
     }
-    return(period.pre)
+    periods
   }
   
   # Resolve aggregation function for scdata
@@ -425,99 +239,24 @@ scdata <- function(df,
     return(aggfun(values))
   }
 
-  # Detect covagg format for scdata
-  detect_covagg_format_scdata <- function(spec) {
-    has_simplified <- !is.null(spec$per_period) || !is.null(spec$pre_period_mean)
-    has_traditional <- "var" %in% names(spec)
-    
-    if (has_simplified && has_traditional) {
-      stop("Cannot mix simplified format (per_period/pre_period_mean) with traditional format (var) in the same covagg specification")
-    }
-    if (has_simplified) return("simplified")
-    if (has_traditional) return("traditional")
-    
-    non_label_keys <- setdiff(names(spec), "label")
-    if (length(non_label_keys) == 0) return("empty")
-    
-    stop("Invalid covagg format - must include per_period/pre_period_mean or var")
-  }
-  
-  # Convert simplified covagg spec to traditional specs for scdata
-  convert_simplified_to_traditional_scdata <- function(spec, outcome.var, spec_name) {
-    base_label <- NULL
-    if (!is.null(spec$label) && is.character(spec$label) && length(spec$label) == 1 && nchar(spec$label) > 0) {
-      base_label <- spec$label
-    } else if (!is.null(spec_name) && !is.na(spec_name) && nchar(spec_name) > 0) {
-      base_label <- spec_name
-    } else {
-      base_label <- "spec"
-    }
-    
-    converted <- list()
-    
-    if (!is.null(spec$per_period)) {
-      for (var in spec$per_period) {
-        var_name <- if (var == "outcome_var") outcome.var else var
-        entry_name <- paste(base_label, var_name, "per", sep = "__")
-        converted[[entry_name]] <- list(var = var_name, each = TRUE)
-      }
-    }
-    
-    if (!is.null(spec$pre_period_mean)) {
-      for (var in spec$pre_period_mean) {
-        var_name <- if (var == "outcome_var") outcome.var else var
-        entry_name <- paste(base_label, var_name, "mean", sep = "__")
-        converted[[entry_name]] <- list(var = var_name)
-      }
-    }
-    
-    if (length(converted) == 0) {
-      return(list())
-    }
-    
-    names(converted) <- make.unique(names(converted))
-    return(converted)
-  }
-  
-  # Normalize covagg so scdata accepts both simplified and traditional formats
-  normalize_covagg_for_scdata <- function(covagg, outcome.var) {
-    if (length(covagg) == 0) {
-      return(covagg)
-    }
-    
-    normalized <- list()
-    covagg_names <- names(covagg)
-    
-    for (i in seq_along(covagg)) {
-      spec <- covagg[[i]]
-      spec_name <- if (!is.null(covagg_names) && length(covagg_names) >= i) covagg_names[[i]] else NULL
-      
-      if (!is.list(spec)) {
-        next
-      }
-      
-      format_type <- detect_covagg_format_scdata(spec)
-      
-      if (format_type == "simplified") {
-        converted <- convert_simplified_to_traditional_scdata(spec, outcome.var, spec_name)
-        if (length(converted) > 0) {
-          normalized <- c(normalized, converted)
-        }
-      } else if (format_type == "traditional") {
-        if (!is.null(spec_name) && !is.na(spec_name) && nchar(spec_name) > 0) {
-          normalized[[spec_name]] <- spec
-        } else {
-          normalized[[paste0("spec_", i)]] <- spec
-        }
-      } else if (format_type == "empty") {
-        next
-      }
-    }
-    
-    return(normalized)
+  if (length(covagg) == 0) {
+    covagg <- list(
+      list(
+        var = "outcome_var",
+        select_periods = list(type = "all_pre"),
+        partition_periods = list(type = "by_period"),
+        compute = "mean"
+      )
+    )
   }
 
-  covagg <- normalize_covagg_for_scdata(covagg, outcome.var)
+  covagg <- compile_covagg_signature(
+    covagg = covagg,
+    outcome_var = outcome.var,
+    period_pre = period.pre,
+    require_named = FALSE,
+    context = "scdata covagg"
+  )
   
   ############################################################################
   ############################################################################
@@ -702,51 +441,21 @@ scdata <- function(df,
       
       # Determine periods to use
       periods_to_use <- resolve_covagg_periods(cov_spec, period.pre)
-      
-      # Check if each=TRUE (create separate feature for each period)
-      if (!is.null(cov_spec$each) && cov_spec$each) {
-        
-        # Create separate feature for each period
-        for (period in periods_to_use) {
-          if (period %in% period.pre) {
-            idx2 = length(A_list) + 1
-            
-            # Extract data for this specific period and variable
-            period_data <- data.bal.tr[data.bal.tr[, "Time"] == period, c(outcome.var, var_name)]
-            if (nrow(period_data) > 0) {
-              A <- as.matrix(period_data[[var_name]])
-              colnames(A) <- unit.tr
-              rownames(A) <- paste(unit.tr, cov_name, period, sep='.')
-              A_list[[idx2]] = data.frame(A)
-            }
-          }
-        }
-        
-      } else {
-        # Default: aggregate using mean (or custom aggfun if specified)
-        aggfun <- resolve_covagg_aggfun(cov_spec)
-        aggfun_label <- if (!is.null(cov_spec$agg_fun)) {
-          if (is.character(cov_spec$agg_fun)) cov_spec$agg_fun else "custom"
-        } else if (!is.null(cov_spec$aggfunc)) {
-          if (is.character(cov_spec$aggfunc)) cov_spec$aggfunc else "custom"
-        } else {
-          "mean"
-        }
-        
-        # Filter data for the specified periods
-        period_data <- data.bal.tr[data.bal.tr[, "Time"] %in% periods_to_use, c(outcome.var, var_name)]
-        
-        if (nrow(period_data) > 0) {
-          idx2 = length(A_list) + 1
-          
-          # Apply aggregation function
-          agg_value <- apply_aggfun(aggfun, period_data[[var_name]])
-          
-          A <- as.matrix(agg_value)
-          colnames(A) <- unit.tr
-          rownames(A) <- paste(unit.tr, cov_name, aggfun_label, sep='.')
-          A_list[[idx2]] = data.frame(A)
-        }
+      aggfun <- resolve_covagg_aggfun(cov_spec)
+
+      # Filter data for the specified periods
+      period_data <- data.bal.tr[data.bal.tr[, "Time"] %in% periods_to_use, c(outcome.var, var_name)]
+
+      if (nrow(period_data) > 0) {
+        idx2 = length(A_list) + 1
+
+        # Apply aggregation function
+        agg_value <- apply_aggfun(aggfun, period_data[[var_name]])
+
+        A <- as.matrix(agg_value)
+        colnames(A) <- unit.tr
+        rownames(A) <- paste(unit.tr, cov_name, sep='.')
+        A_list[[idx2]] = data.frame(A)
       }
       # }
     }
@@ -791,100 +500,44 @@ scdata <- function(df,
       }
       # Determine periods to use
       periods_to_use <- resolve_covagg_periods(cov_spec, period.pre)
-      
-      # Check if each=TRUE (create separate feature for each period)
-      if (!is.null(cov_spec$each) && cov_spec$each) {
-        
-        # Create separate feature for each period
-        for (period in periods_to_use) {
-          if (period %in% period.pre) {
-            temp = data.bal.co[data.bal.co[, "Time"] == period, c('ID', 'Time', var_name)]
-            
-            if (nrow(temp) > 0) {
-              B = data.frame(data.table::dcast(data.table::melt(data.table(temp), id.vars=c('ID', 'Time')), variable+Time~ID))
-              
-              # Use underscores consistently - clean all names
-              clean_unit_tr <- gsub('[^A-Za-z0-9_]', '_', unit.tr)
-              clean_unit_tr <- gsub('_{2,}', '_', clean_unit_tr)
-              rownames(B) = paste(rep(clean_unit_tr, nrow(B)), cov_name, period, sep='.')
-              
-              idxes = which(colnames(B) %in% c('variable', 'Time'))
-              B = B[, -idxes]
-              
-              # IMPORTANT: Use the exact same transformation that Y.donors will use
-              # This matches the str_remove + gsub pattern in Y.donors creation
-              temp_names <- paste("gdpcap", colnames(B), sep = ".")
-              y_names_equivalent <- stringr::str_remove(temp_names, "gdpcap")
-              y_names_equivalent <- stringr::str_remove(y_names_equivalent, "\\.")
-              final_clean_names <- gsub('[^A-Za-z0-9_]', '_', y_names_equivalent)
-              final_clean_names <- gsub('_{2,}', '_', final_clean_names)
-              # Remove trailing underscores to match Y.donors
-              final_clean_names <- gsub('_+$', '', final_clean_names)
-              
-              # Only set column names if dimensions match
-              if (length(final_clean_names) == ncol(B)) {
-                colnames(B) <- final_clean_names
-              } else {
-                warning(paste("Column name dimension mismatch: B has", ncol(B), "columns but", length(final_clean_names), "names"))
-              }
-              
-              idx2 = length(B_list) + 1
-              B_list[[idx2]] = B
-            }
-          }
-        }
-        
-      } else {
-        
-        # Default: aggregate using mean (or custom aggfun if specified)
-        aggfun <- resolve_covagg_aggfun(cov_spec)
-        aggfun_label <- if (!is.null(cov_spec$agg_fun)) {
-          if (is.character(cov_spec$agg_fun)) cov_spec$agg_fun else "custom"
-        } else if (!is.null(cov_spec$aggfunc)) {
-          if (is.character(cov_spec$aggfunc)) cov_spec$aggfunc else "custom"
+      aggfun <- resolve_covagg_aggfun(cov_spec)
+      temp = data.bal.co[data.bal.co[, "Time"] %in% periods_to_use, c('ID', 'Time', var_name)]
+
+      if (nrow(temp) > 0) {
+        # Apply aggregation by ID
+        agg_data <- aggregate(
+          temp[[var_name]],
+          by = list(ID = temp$ID),
+          FUN = function(x) apply_aggfun(aggfun, x)
+        )
+
+        # Convert to matrix format
+        B <- data.frame(t(agg_data$x))
+
+        # IMPORTANT: Use the exact same transformation that Y.donors will use
+        # This matches the str_remove + gsub pattern in Y.donors creation
+        temp_names <- paste("gdpcap", agg_data$ID, sep = ".")
+        y_names_equivalent <- stringr::str_remove(temp_names, "gdpcap")
+        y_names_equivalent <- stringr::str_remove(y_names_equivalent, "\\.")
+        final_clean_names <- gsub('[^A-Za-z0-9_]', '_', y_names_equivalent)
+        final_clean_names <- gsub('_{2,}', '_', final_clean_names)
+        # Remove trailing underscores to match Y.donors
+        final_clean_names <- gsub('_+$', '', final_clean_names)
+
+        clean_unit_tr <- gsub('[^A-Za-z0-9_]', '_', unit.tr)
+        clean_unit_tr <- gsub('_{2,}', '_', clean_unit_tr)
+
+        # B matrix columns should match Y.donors exactly
+        # Only set column names if dimensions match
+        if (length(final_clean_names) == ncol(B)) {
+          colnames(B) <- final_clean_names
         } else {
-          "mean"
+          warning(paste("Column name dimension mismatch in aggregation: B has", ncol(B), "columns but", length(final_clean_names), "names"))
         }
-        # Filter data for the specified periods
-        temp = data.bal.co[data.bal.co[, "Time"] %in% periods_to_use, c('ID', 'Time', var_name)]
-        
-        if (nrow(temp) > 0) {
-          # Apply aggregation by ID
-          agg_data <- aggregate(
-            temp[[var_name]],
-            by = list(ID = temp$ID),
-            FUN = function(x) apply_aggfun(aggfun, x)
-          )
-          
-          # Convert to matrix format
-          B <- data.frame(t(agg_data$x))
-          
-          # IMPORTANT: Use the exact same transformation that Y.donors will use
-          # This matches the str_remove + gsub pattern in Y.donors creation
-          temp_names <- paste("gdpcap", agg_data$ID, sep = ".")
-          y_names_equivalent <- stringr::str_remove(temp_names, "gdpcap")
-          y_names_equivalent <- stringr::str_remove(y_names_equivalent, "\\.")
-          final_clean_names <- gsub('[^A-Za-z0-9_]', '_', y_names_equivalent)
-          final_clean_names <- gsub('_{2,}', '_', final_clean_names)
-          # Remove trailing underscores to match Y.donors
-          final_clean_names <- gsub('_+$', '', final_clean_names)
-          
-          
-          clean_unit_tr <- gsub('[^A-Za-z0-9_]', '_', unit.tr)
-          clean_unit_tr <- gsub('_{2,}', '_', clean_unit_tr)
-          
-          # B matrix columns should match Y.donors exactly
-          # Only set column names if dimensions match
-          if (length(final_clean_names) == ncol(B)) {
-            colnames(B) <- final_clean_names
-          } else {
-            warning(paste("Column name dimension mismatch in aggregation: B has", ncol(B), "columns but", length(final_clean_names), "names"))
-          }
-          rownames(B) <- paste(clean_unit_tr, cov_name, aggfun_label, sep='.')
-          
-          idx2 = length(B_list) + 1
-          B_list[[idx2]] = B
-        }
+        rownames(B) <- paste(clean_unit_tr, cov_name, sep='.')
+
+        idx2 = length(B_list) + 1
+        B_list[[idx2]] = B
       }
       #}
     }

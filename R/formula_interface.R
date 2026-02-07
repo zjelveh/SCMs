@@ -34,9 +34,9 @@ NULL
 #' @param feature.weights Character. Feature weighting method ("uniform" or "optimize")
 #' @param covariate.matching Character. How to aggregate covariates:
 #'   \itemize{
-#'     \item \code{"average"} - Use pre-period averages (default)
+#'     \item \code{"average"} - Use pre-period means (default)
 #'     \item \code{"each"} - Include each pre-period separately
-#'     \item \code{"last"} - Use only last pre-treatment value
+#'     \item \code{"last"} - Use only the last pre-treatment period
 #'   }
 #' @param ... Additional arguments passed to \code{scest()}
 #'
@@ -317,21 +317,37 @@ build_covagg_from_formula <- function(covariates, matching_method) {
     return(list())
   }
   
-  covagg_list <- list()
-  
-  for (i in seq_along(covariates)) {
-    var_spec <- switch(matching_method,
-      "average" = list(var = covariates[i], average = TRUE),
-      "each" = list(var = covariates[i], each = TRUE),
-      "last" = list(var = covariates[i], last = TRUE),
-      # Default to average
-      list(var = covariates[i], average = TRUE)
+  build_single <- function(v) {
+    switch(
+      matching_method,
+      "average" = list(
+        var = v,
+        select_periods = list(type = "all_pre"),
+        partition_periods = list(type = "all"),
+        compute = "mean"
+      ),
+      "each" = list(
+        var = v,
+        select_periods = list(type = "all_pre"),
+        partition_periods = list(type = "by_period"),
+        compute = "mean"
+      ),
+      "last" = list(
+        var = v,
+        select_periods = list(type = "predicate", fn = function(p) p == max(p)),
+        partition_periods = list(type = "all"),
+        compute = "mean"
+      ),
+      list(
+        var = v,
+        select_periods = list(type = "all_pre"),
+        partition_periods = list(type = "all"),
+        compute = "mean"
+      )
     )
-    
-    covagg_list[[i]] <- var_spec
   }
-  
-  return(covagg_list)
+
+  lapply(covariates, build_single)
 }
 
 #' Standardize Constraint Specification

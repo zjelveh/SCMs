@@ -27,6 +27,14 @@
 
 
 print.scest <- function(x, ...) {
+  parse_weight_names <- function(weight_names) {
+    parts <- strsplit(weight_names, "\\.")
+    list(
+      treated = vapply(parts, function(p) if (length(p) >= 2) p[[1]] else "treated", character(1)),
+      donor = vapply(parts, function(p) p[[length(p)]], character(1))
+    )
+  }
+
   I <- x$data$specs$I
 
   if (I == 1) {
@@ -37,9 +45,8 @@ print.scest <- function(x, ...) {
     }
     active.w  <- sum(abs(Weights) > 0)
 
-    names <- strsplit(names(Weights), "\\.")
-    names <- unlist(lapply(names, "[[", 2))  # Get all control units
-    names(Weights) <- names
+    parsed_names <- parse_weight_names(names(Weights))
+    names(Weights) <- parsed_names$donor
 
     cat("\n")
     cat("Synthetic Control Prediction - Results\n")
@@ -56,15 +63,13 @@ print.scest <- function(x, ...) {
     Weights <- round(x$est.results$w, digits = 3)
     W.list <- mat2list(as.matrix(Weights))
 
-    names <- strsplit(names(Weights), "\\.")
-    names <- unlist(lapply(names, "[[", 2))  # Get all control units
-    co.units <- unique(names)
+    parsed_names <- parse_weight_names(names(Weights))
+    co.units <- unique(parsed_names$donor)
     to.print <- data.frame(control.unit = co.units)
 
     for (i in seq_len(I)) {
-      names <- strsplit(rownames(W.list[[i]]), "\\.")
-      names <- unlist(lapply(names, "[[", 2))  # Get all control units
-      to.merge <- data.frame(control.unit = names, W.list[[i]])
+      parsed_i <- parse_weight_names(rownames(W.list[[i]]))
+      to.merge <- data.frame(control.unit = parsed_i$donor, W.list[[i]])
       names(to.merge) <- c("control.unit", treated.units[i])
       to.print <- merge(to.print, to.merge, by="control.unit", all = TRUE)
     }
@@ -228,6 +233,14 @@ summary.scest <- function(object, ...) {
 #'
 
 coef.scest <- function(object, ...) {
+  parse_weight_names <- function(weight_names) {
+    parts <- strsplit(weight_names, "\\.")
+    data.frame(
+      treated = vapply(parts, function(p) if (length(p) >= 2) p[[1]] else "treated", character(1)),
+      donor = vapply(parts, function(p) p[[length(p)]], character(1)),
+      stringsAsFactors = FALSE
+    )
+  }
 
   args <- list(...)
   I <- object$data$specs$I
@@ -239,9 +252,12 @@ coef.scest <- function(object, ...) {
   }
 
   w <- object$est.results$w
-  aux <- data.frame(w = w,
-                    donor = unlist(lapply(strsplit(names(w), "\\."), "[[", 2)),
-                    treated = unlist(lapply(strsplit(names(w), "\\."), "[[", 1)))
+  parsed_names <- parse_weight_names(names(w))
+  aux <- data.frame(
+    w = w,
+    donor = parsed_names$donor,
+    treated = parsed_names$treated
+  )
 
   ggplot() +
     geom_point(data = aux, aes(x = .data$donor, y = .data$w, size = abs(.data$w))) +

@@ -10,22 +10,12 @@
 #' @param outcomes Character vector of outcome variable names to analyze. Multiple outcomes will be processed separately.
 #' @param col_name_unit_name Character. Name of column containing unit identifiers (e.g., "state", "country").
 #' @param name_treated_unit Character. Identifier of the treated unit as it appears in the data.
-#' @param covagg List of covariate specifications for pre-treatment matching. Supports two formats:
-#'   \itemize{
-#'     \item \strong{Simplified Format} (recommended): List with optional fields:
-#'       \itemize{
-#'         \item \code{label} - Character: descriptive name for specification
-#'         \item \code{per_period} - Character vector: variables to include per-period
-#'         \item \code{pre_period_mean} - Character vector: variables to average over pre-period
-#'         \item Use \code{"outcome_var"} to refer to the outcome variable
-#'       }
-#'     \item \strong{Traditional Format}: List of lists with \code{var}, \code{periods}/\code{first}/\code{last},
-#'           \code{each}, optional \code{agg_fun}, and optional \code{label}.
-#'   }
-#'   Rules: do not mix simplified and traditional keys inside the same specification,
-#'   and for traditional entries use only one of \code{periods}, \code{first}, or
-#'   \code{last}. Use \code{"outcome_var"} in simplified format to reference the
-#'   current outcome variable.
+#' @param covagg List of covariate specifications for pre-treatment matching.
+#'   Each top-level entry must be a named specification with optional \code{label}
+#'   and required \code{operations}, where \code{operations} is a non-empty list
+#'   of operation signatures:
+#'   \code{list(var, select_periods, partition_periods, compute)}.
+#'   Use \code{"outcome_var"} in \code{var} to reference the current outcome.
 #'   Default is empty list.
 #' @param treated_period Numeric. First time period when treatment is active for the treated unit.
 #' @param min_period Numeric. Earliest time period available in the dataset.
@@ -120,91 +110,42 @@
 #' \dontrun{
 #' # Basic specification curve analysis
 #' results <- spec_curve(
-#'   dataset = state_panel,
-#'   outcomes = "gdp_per_capita",
-#'   col_name_unit_name = "state",
-#'   name_treated_unit = "California",
-#'   covagg = list(
-#'     "All Mean" = list(
-#'       label = "All Mean",
-#'       pre_period_mean = c("population", "income", "outcome_var")
-#'     )
-#'   ),
-#'   treated_period = 2000,
-#'   min_period = 1990,
-#'   end_period = 2010,
-#'   col_name_period = "year",
-#'   constraints = list(
-#'     list(name = "simplex"),
-#'     list(name = "lasso", Q = 0.1),
-#'     list(name = "ridge", Q = 0.1)
-#'   ),
-#'   cores = 4
-#' )
-#'
-#' # Using new simplified covagg format
-#' results_simplified <- spec_curve(
 #'   dataset = state_panel,
 #'   outcomes = "gdp_per_capita",
 #'   col_name_unit_name = "state",
 #'   name_treated_unit = "California",
 #'   covagg = list(
-#'     "Outcome Only per period" = list(label = "Outcome Only per period"),
-#'     "GDP Analysis" = list(
-#'       label = "GDP Analysis",
-#'       per_period = c("gdp", "outcome_var"),
-#'       pre_period_mean = c("population", "income")
+#'     "Outcome Only" = list(
+#'       label = "Outcome Only",
+#'       operations = list(
+#'         list(
+#'           var = "outcome_var",
+#'           partition_periods = list(type = "by_period")
+#'         )
+#'       )
 #'     ),
-#'     "All Variables Mean" = list(
-#'       label = "All Variables Mean",
-#'       pre_period_mean = c("gdp", "population", "income", "outcome_var")
+#'     "Outcome + Means" = list(
+#'       label = "Outcome + Means",
+#'       operations = list(
+#'         list(
+#'           var = "outcome_var",
+#'           partition_periods = list(type = "by_period")
+#'         ),
+#'         list(var = "population", compute = "mean"),
+#'         list(var = "income", compute = "mean")
+#'       )
 #'     )
 #'   ),
 #'   treated_period = 2000,
 #'   min_period = 1990,
 #'   end_period = 2010,
-#'   col_name_period = "year"
-#' )
-#'
-# Multiple specification patterns
-#' results_mixed <- spec_curve(
-#'   dataset = policy_data,
-#'   outcomes = "gdp",
-#'   col_name_unit_name = "country",
-#'   name_treated_unit = "Germany",
-#'   covagg = list(
-#'     "Outcome Only per period" = list(label = "Outcome Only per period"),
-#'     "All Mean" = list(
-#'       label = "All Mean",
-#'       pre_period_mean = c("population", "trade", "investment", "outcome_var")
-#'     ),
-#'     "Outcome Per Period" = list(
-#'       label = "Outcome Per Period",
-#'       per_period = c("outcome_var"),
-#'       pre_period_mean = c("population", "trade")
-#'     )
+#'   col_name_period = "year",
+#'   constraints = list(
+#'     list(name = "simplex"),
+#'     list(name = "lasso", Q = 0.1),
+#'     list(name = "ridge", Q = 0.1)
 #'   ),
-#'   treated_period = 2005,
-#'   min_period = 1990,
-#'   end_period = 2010,
-#'   col_name_period = "year"
-#' )
-#'
-#' # Multi-outcome analysis
-#' results_multi <- spec_curve(
-#'   dataset = policy_data,
-#'   outcomes = c("unemployment", "gdp", "investment"),
-#'   col_name_unit_name = "country",
-#'   name_treated_unit = "Germany",
-#'   covagg = list(
-#'     c("population", "gdp_lag"),
-#'     c("population", "gdp_lag", "trade_openness")
-#'   ),
-#'   treated_period = 2005,
-#'   min_period = 1995,
-#'   end_period = 2015,
-#'   col_name_period = "year",  
-#'   cores = 8
+#'   cores = 4
 #' )
 #'
 #' # Plot results
@@ -290,48 +231,37 @@ spec_curve <- function(
     stop("No covariate specifications provided. Must provide covagg specifications.")
   }
 
-  # Validate that covagg specifications have names OR label fields
+  # Validate covagg spec structure (new API):
+  # covagg = list(
+  #   "Spec Name" = list(
+  #     label = "Spec Name",
+  #     operations = list(
+  #       list(var = "outcome_var", ...),
+  #       list(var = "population", ...)
+  #     )
+  #   )
+  # )
   covagg_names <- names(covagg)
-  
-  # Check if we have any unnamed specifications without label fields
-  if (is.null(covagg_names)) {
-    # No names at all - check if all specs have labels
-    for (i in seq_along(covagg)) {
-      spec <- covagg[[i]]
-      if (!is.list(spec) || is.null(spec$label) || !is.character(spec$label) || length(spec$label) != 1) {
-        stop("Covariate specification at index ", i, " must have either a descriptive name or a label field.")
-      }
-    }
-    # Create dummy names for processing
-    covagg_names <- paste0("spec_", seq_along(covagg))
-    names(covagg) <- covagg_names
-  } else if (any(is.na(covagg_names)) || any(nchar(covagg_names) == 0)) {
-    # Some names are missing - check those without names have labels
-    for (i in seq_along(covagg_names)) {
-      if (is.na(covagg_names[i]) || nchar(covagg_names[i]) == 0) {
-        spec <- covagg[[i]]
-        if (!is.list(spec) || is.null(spec$label) || !is.character(spec$label) || length(spec$label) != 1) {
-          stop("Covariate specification at index ", i, " must have either a descriptive name or a label field.")
-        }
-      }
-    }
+  if (is.null(covagg_names) || any(is.na(covagg_names) | covagg_names == "")) {
+    stop("covagg entries must be named specifications")
   }
 
-  # Validate covagg specifications have proper names/labels
-  for (i in seq_along(covagg_names)) {
-    name <- covagg_names[i]
+  for (i in seq_along(covagg)) {
     spec <- covagg[[i]]
-    
-    # Check if specification has a label field (preferred)
-    if (is.list(spec) && !is.null(spec$label) && is.character(spec$label) && length(spec$label) == 1) {
-      # Good - has explicit label
-      next
-    } else {
-      # Warn that this might not be descriptive enough
-      if (verbose) {
-        message(sprintf("Warning: covagg specification '%s' may not be descriptive enough. Consider adding a 'label' field for better visualization.", name))
-      }
+    if (!is.list(spec)) {
+      stop("covagg specification '", covagg_names[[i]], "' must be a list")
     }
+    if (is.null(spec$operations) || !is.list(spec$operations) || length(spec$operations) == 0) {
+      stop("covagg specification '", covagg_names[[i]], "' must define a non-empty operations list")
+    }
+    # Validate operations now against the available pre-period range
+    compile_covagg_signature(
+      covagg = spec$operations,
+      outcome_var = outcomes[[1]],
+      period_pre = min_period:(treated_period - 1),
+      require_named = FALSE,
+      context = paste0("spec_curve covagg specification '", covagg_names[[i]], "'")
+    )
   }
 
   # Set default inference config values
@@ -390,58 +320,6 @@ spec_curve <- function(
     )
   }
 
-  # Helper function to detect covagg format type
-  detect_covagg_format <- function(ca) {
-    # Check if it has the new simplified parameters
-    has_simplified <- !is.null(ca$per_period) || !is.null(ca$pre_period_mean)
-    
-    # Check if it has traditional detailed specs (lists with var field)
-    other_keys <- setdiff(names(ca), c("label", "per_period", "pre_period_mean"))
-    has_traditional <- any(sapply(ca[other_keys], function(x) is.list(x) && !is.null(x$var)))
-    
-    # Check if it has single spec format (direct var field)
-    has_single_spec <- "var" %in% names(ca)
-    
-    if (has_simplified && (has_traditional || has_single_spec)) {
-      stop("Cannot mix simplified format (per_period/pre_period_mean) with traditional format in same specification")
-    }
-    
-    if (has_simplified) return("simplified")
-    if (has_traditional || has_single_spec) return("traditional")
-    
-    # Check if empty (only label field or completely empty)
-    non_label_keys <- setdiff(names(ca), "label")
-    if (length(non_label_keys) == 0) return("empty")
-    
-    # If we get here, it's an invalid format
-    stop("Invalid covagg format - must have simplified format (per_period/pre_period_mean), traditional format (var field), or be empty")
-  }
-  
-  # Helper function to convert simplified format to traditional format
-  convert_simplified_to_traditional <- function(ca, outcome_var) {
-    formatted_spec <- list()
-    
-    # Handle per_period variables
-    if (!is.null(ca$per_period)) {
-      for (var in ca$per_period) {
-        var_name <- if (var == "outcome_var") outcome_var else var
-        spec_name <- paste0(var_name, "_periods")
-        formatted_spec[[spec_name]] <- list(var = var_name, each = TRUE)
-      }
-    }
-    
-    # Handle pre_period_mean variables
-    if (!is.null(ca$pre_period_mean)) {
-      for (var in ca$pre_period_mean) {
-        var_name <- if (var == "outcome_var") outcome_var else var
-        spec_name <- paste0(var_name, "_mean")
-        formatted_spec[[spec_name]] <- list(var = var_name, average = "full_pre")
-      }
-    }
-    
-    return(formatted_spec)
-  }
-
   # Function to process a single specification
   process_spec <- function(
     outc, const_idx, fw, ca_idx, ds, constant, spec_number,
@@ -484,29 +362,10 @@ spec_curve <- function(
 
     if (verbose) message(sprintf("Processing: %s", spec_name))
 
-    # Ensure ca is in proper format for estimate_sc
-    if (is.list(ca)) {
-      # Detect format type
-      format_type <- detect_covagg_format(ca)
-      
-      if (format_type == "simplified") {
-        # New simplified format: convert to traditional format
-        ca_formatted <- convert_simplified_to_traditional(ca, outc)
-        
-      } else if (format_type == "traditional") {
-        # Traditional detailed format: use as-is but remove label field
-        ca_formatted <- ca[setdiff(names(ca), "label")]
-        
-      } else if (format_type == "empty") {
-        # Empty specification (outcome only per period)
-        ca_formatted <- list()
-        
-      } else {
-        stop("Invalid covagg format - specifications must have 'var' field, simplified format (per_period/pre_period_mean), or be empty")
-      }
-    } else {
-      stop("Invalid covagg format - only list format is supported")
+    if (!is.list(ca) || is.null(ca$operations) || !is.list(ca$operations)) {
+      stop("Invalid covagg specification: each entry must be a list with operations")
     }
+    ca_formatted <- ca$operations
 
     sc.pred <- tryCatch({
       estimate_sc(
@@ -761,14 +620,8 @@ spec_curve <- function(
     # Use foreach for parallel execution
     results_list <- foreach::foreach(
       i = 1:nrow(param_grid),
-      .packages = c('data.table', 'SCMs', 'optimx', 'kernlab'),  # Include all required packages
-      .export = c('validate_covariate_spec', 'determine_processing_pattern',
-                  'process_aggregate_arbitrary', 'process_aggregate_range',
-                  'process_each_arbitrary', 'process_each_range',
-                  'resolve_target_periods', 'get_agg_function', 'generate_var_name',
-                  'validate_agg_function', 'validate_periods', 'validate_range_size',
-                  'process_covariates', 'fn.V'),  # Export fn.V function
-      .noexport = c('data.table', '.SD', '.N', '.BY')  # Ensure data.table works in parallel
+      .packages = c('data.table', 'SCMs', 'optimx', 'kernlab'),
+      .noexport = c('data.table', '.SD', '.N', '.BY')
     ) %dopar% {
       # SCMs package functions available in parallel worker
 

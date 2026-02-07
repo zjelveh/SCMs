@@ -1,49 +1,43 @@
 Package: SCMs
 Title: Synthetic Control Methods
-Version: 0.1
-Author: Zubin Jelveh <zjelveh@umd.edu>
-Maintainer: Zubin Jelveh <zjelveh@umd.edu>
+Version: 0.1.0
 Authors@R: 
   c(person(given = "Zubin",
            family = "Jelveh",
            role = c("aut", "cre"),
            email = "zjelveh@umd.edu")
            )
+Author: Zubin Jelveh [aut, cre]
+Maintainer: Zubin Jelveh <zjelveh@umd.edu>
 License: GPL-3
 Encoding: UTF-8
+Depends: R (>= 4.1.0)
 Imports: CVXR        (>= 1.0-10),
          dplyr       (>= 1.0.7),
+         digest,
          ECOSolveR   (>= 0.5.4),
          foreach     (>= 1.5.1),
          ggplot2     (>= 3.3.3),
+         gtable,
          kernlab,
          cowplot,
          optimx,
          data.table,
-         scales,
-         magrittr    (>= 2.0.1),
-         MASS        (>= 7.3),
          Matrix      (>= 1.3.3),
-         methods     (>= 4.1.0),
-         parallel    (>= 4.1.0),
+         methods,
+         parallel,
          purrr       (>= 0.3.4),
          Qtools      (>= 1.5.6),
-         rlang       (>= 0.4.11),
-         stats       (>= 4.1.0),
+         R6,
+         stats,
          stringr     (>= 1.4.0),
          tibble      (>= 3.1.2),
          tidyr       (>= 1.1.3),
-         utils       (>= 4.1.1),
+         utils,
          doParallel,
          doSNOW,
          fastDummies,
          glmnet,
-         xgboost,
-         ggnewscale,
-         shapviz,
-         treeshap,
-         ggrepel,
-         ggtext,
          gridtext,
          gridExtra,
          generics
@@ -55,12 +49,14 @@ Description: Comprehensive toolkit for Synthetic Control Methods (SCM) with adva
     (including SCPI and placebo-based methods), and publication-ready visualizations. 
     Supports multiple outcome models (OLS, Ridge, Lasso, Augmented Synthetic Control) 
     and includes parallel processing capabilities for large-scale specification curve analysis.
-LazyData: true
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
 Suggests: 
     testthat (>= 3.0.0),
-    devtools,
     clarabel,
-    broom
+    broom,
+    xgboost,
+    knitr,
+    rmarkdown
+VignetteBuilder: knitr
 Config/testthat/edition: 3

@@ -34,58 +34,95 @@ create_mock_panel_data_spec_curve <- function() {
 
 test_that("spec_curve input validation works correctly", {
   mock_data <- create_mock_panel_data_spec_curve()
+  covagg_min <- list(
+    population = list(
+      label = "Population",
+      operations = list(list(var = "population", compute = "mean"))
+    )
+  )
+  empty_data <- data.table(
+    state = character(),
+    year = integer(),
+    gdp = numeric(),
+    population = numeric(),
+    investment = numeric(),
+    education = numeric()
+  )
   
   # Test missing required parameters
   expect_error(
-    spec_curve(NULL, "gdp", list(), "state", "treated_state", 2006, 2000, 2010, "year"),
-    "Input validation failed.*dataset.*must be a data frame"
+    spec_curve(dataset = NULL, outcomes = "gdp", covagg = covagg_min, verbose = FALSE,
+               col_name_unit_name = "state", name_treated_unit = "treated_state",
+               treated_period = 2006, min_period = 2000, end_period = 2010,
+               col_name_period = "year"),
+    "dataset must be a data.frame or data.table"
   )
   
   # Test empty dataset
   expect_error(
-    spec_curve(data.table(), "gdp", list(), "state", "treated_state", 2006, 2000, 2010, "year"),
-    "Input validation failed.*dataset.*cannot be empty"
+    spec_curve(dataset = empty_data, outcomes = "gdp", covagg = covagg_min, verbose = FALSE,
+               col_name_unit_name = "state", name_treated_unit = "treated_state",
+               treated_period = 2006, min_period = 2000, end_period = 2010,
+               col_name_period = "year"),
+    "dataset.*cannot be empty"
   )
   
   # Test non-character outcome
   expect_error(
-    spec_curve(mock_data, 123, list(), "state", "treated_state", 2006, 2000, 2010, "year"),
-    "Input validation failed.*outcomes.*must be.*character"
+    spec_curve(dataset = mock_data, outcomes = 123, covagg = covagg_min, verbose = FALSE,
+               col_name_unit_name = "state", name_treated_unit = "treated_state",
+               treated_period = 2006, min_period = 2000, end_period = 2010,
+               col_name_period = "year"),
+    "outcomes.*single character"
   )
   
   # Test missing columns
   bad_data <- copy(mock_data)[, gdp := NULL]
   expect_error(
-    spec_curve(bad_data, "gdp", list(), "state", "treated_state", 2006, 2000, 2010, "year"),
+    spec_curve(dataset = bad_data, outcomes = "gdp", covagg = covagg_min, verbose = FALSE,
+               col_name_unit_name = "state", name_treated_unit = "treated_state",
+               treated_period = 2006, min_period = 2000, end_period = 2010,
+               col_name_period = "year"),
     "Missing required columns.*gdp"
   )
   
   # Test invalid period relationships
   expect_error(
-    spec_curve(mock_data, "gdp", list(), "state", "treated_state", 2000, 2000, 2010, "year"),
-    "must be less than 'treated_period'"
+    spec_curve(dataset = mock_data, outcomes = "gdp", covagg = covagg_min, verbose = FALSE,
+               col_name_unit_name = "state", name_treated_unit = "treated_state",
+               treated_period = 2000, min_period = 2000, end_period = 2010,
+               col_name_period = "year"),
+    "min_period.*must be less than.*treated_period"
   )
   
   # Test treated unit not found
   expect_error(
-    spec_curve(mock_data, "gdp", list(), "state", "nonexistent_unit", 2006, 2000, 2010, "year"),
-    "not found in data"
+    spec_curve(dataset = mock_data, outcomes = "gdp", covagg = covagg_min, verbose = FALSE,
+               col_name_unit_name = "state", name_treated_unit = "nonexistent_unit",
+               treated_period = 2006, min_period = 2000, end_period = 2010,
+               col_name_period = "year"),
+    "Values not found in column 'state'"
   )
 })
 
 test_that("spec_curve covariate specification handling works", {
   mock_data <- create_mock_panel_data_spec_curve()
   
-  # Test simplified covariate format
+  # Test operation-based covariate format
   simple_covagg <- list(
-    label = "basic_covariates",
-    per_period = c("population"),
-    pre_period_mean = c("investment", "outcome_var")
+    "basic_covariates" = list(
+      label = "basic_covariates",
+      operations = list(
+        list(var = "population", partition_periods = list(type = "by_period")),
+        list(var = "investment", compute = "mean"),
+        list(var = "outcome_var", compute = "mean")
+      )
+    )
   )
   
   expect_silent({
     # Should not error on input validation - may error on computation
-    result <- tryCatch({
+    result <- suppressMessages(tryCatch({
       spec_curve(
         dataset = mock_data,
         outcomes = "gdp",
@@ -96,6 +133,10 @@ test_that("spec_curve covariate specification handling works", {
         min_period = 2000,
         end_period = 2010,
         col_name_period = "year",
+        feature_weights = c("uniform"),
+        outcome_models = c("none"),
+        constraints = list(list(name = "simplex")),
+        donor_sample = "all",
         cores = 1,
         verbose = FALSE
       )
@@ -105,17 +146,23 @@ test_that("spec_curve covariate specification handling works", {
         stop(e)
       }
       return(NULL)
-    })
+    }))
   })
   
-  # Test traditional covariate format
+  # Test alternative operation-based format
   trad_covagg <- list(
-    list(var = "population", average = TRUE),
-    list(var = "investment", each = TRUE)
+    population_mean = list(
+      label = "population_mean",
+      operations = list(list(var = "population", compute = "mean"))
+    ),
+    investment_each = list(
+      label = "investment_each",
+      operations = list(list(var = "investment", partition_periods = list(type = "by_period")))
+    )
   )
   
   expect_silent({
-    result <- tryCatch({
+    result <- suppressMessages(tryCatch({
       spec_curve(
         dataset = mock_data,
         outcomes = "gdp", 
@@ -126,6 +173,10 @@ test_that("spec_curve covariate specification handling works", {
         min_period = 2000,
         end_period = 2010,
         col_name_period = "year",
+        feature_weights = c("uniform"),
+        outcome_models = c("none"),
+        constraints = list(list(name = "simplex")),
+        donor_sample = "all",
         cores = 1,
         verbose = FALSE
       )
@@ -134,38 +185,52 @@ test_that("spec_curve covariate specification handling works", {
         stop(e)
       }
       return(NULL)
-    })
+    }))
   })
 })
 
 test_that("spec_curve parameter validation works", {
   mock_data <- create_mock_panel_data_spec_curve()
+  covagg_min <- list(
+    population = list(
+      label = "Population",
+      operations = list(list(var = "population", compute = "mean"))
+    )
+  )
   
   # Test invalid feature_weights
   expect_error(
-    spec_curve(mock_data, "gdp", list(), "state", "treated_state", 2006, 2000, 2010, "year",
-               feature_weights = c("invalid_method")),
-    "Invalid feature_weights.*invalid_method"
+    spec_curve(dataset = mock_data, outcomes = "gdp", covagg = covagg_min, verbose = FALSE,
+               col_name_unit_name = "state", name_treated_unit = "treated_state",
+               treated_period = 2006, min_period = 2000, end_period = 2010,
+               col_name_period = "year", feature_weights = c("invalid_method")),
+    "Invalid values in 'feature_weights'"
   )
   
   # Test invalid outcome_models  
   expect_error(
-    spec_curve(mock_data, "gdp", list(), "state", "treated_state", 2006, 2000, 2010, "year",
-               outcome_models = c("invalid_model")),
-    "Invalid outcome_models.*invalid_model"
+    spec_curve(dataset = mock_data, outcomes = "gdp", covagg = covagg_min, verbose = FALSE,
+               col_name_unit_name = "state", name_treated_unit = "treated_state",
+               treated_period = 2006, min_period = 2000, end_period = 2010,
+               col_name_period = "year", outcome_models = c("invalid_model")),
+    "Invalid values in 'outcome_models'"
   )
   
   # Test invalid donor_sample
   expect_error(
-    spec_curve(mock_data, "gdp", list(), "state", "treated_state", 2006, 2000, 2010, "year",
-               donor_sample = c("invalid_sample")),
-    "Invalid donor_sample.*invalid_sample"
+    spec_curve(dataset = mock_data, outcomes = "gdp", covagg = covagg_min, verbose = FALSE,
+               col_name_unit_name = "state", name_treated_unit = "treated_state",
+               treated_period = 2006, min_period = 2000, end_period = 2010,
+               col_name_period = "year", donor_sample = c("invalid_sample")),
+    "Invalid values in 'donor_sample'"
   )
   
   # Test invalid cores parameter
   expect_error(
-    spec_curve(mock_data, "gdp", list(), "state", "treated_state", 2006, 2000, 2010, "year",
-               cores = -1),
+    spec_curve(dataset = mock_data, outcomes = "gdp", covagg = covagg_min, verbose = FALSE,
+               col_name_unit_name = "state", name_treated_unit = "treated_state",
+               treated_period = 2006, min_period = 2000, end_period = 2010,
+               col_name_period = "year", cores = -1),
     "cores.*must be >= 1"
   )
 })
@@ -174,14 +239,20 @@ test_that("spec_curve basic functionality works without validation errors", {
   skip_if_not_installed("CVXR")
   
   mock_data <- create_mock_panel_data_spec_curve()
+  covagg_min <- list(
+    population = list(
+      label = "Population",
+      operations = list(list(var = "population", compute = "mean"))
+    )
+  )
   
   # Basic minimal spec_curve run - should pass input validation
   expect_silent({
-    result <- tryCatch({
+    result <- suppressMessages(tryCatch({
       spec_curve(
         dataset = mock_data,
         outcomes = "gdp",
-        covagg = list(),  # Empty covariate specification
+        covagg = covagg_min,
         col_name_unit_name = "state",
         name_treated_unit = "treated_state", 
         treated_period = 2006,
@@ -190,6 +261,8 @@ test_that("spec_curve basic functionality works without validation errors", {
         col_name_period = "year",
         feature_weights = c("uniform"),
         outcome_models = c("none"),
+        constraints = list(list(name = "simplex")),
+        donor_sample = "all",
         cores = 1,
         verbose = FALSE
       )
@@ -199,34 +272,46 @@ test_that("spec_curve basic functionality works without validation errors", {
         stop(e)
       }
       return(NULL)  # Suppress computational errors for this test
-    })
+    }))
   })
 })
 
 test_that("spec_curve inference parameter validation", {
   mock_data <- create_mock_panel_data_spec_curve()
+  covagg_min <- list(
+    population = list(
+      label = "Population",
+      operations = list(list(var = "population", compute = "mean"))
+    )
+  )
   
   # Test invalid inference_type
   expect_error(
-    spec_curve(mock_data, "gdp", list(), "state", "treated_state", 2006, 2000, 2010, "year",
-               inference_type = "invalid_inference"),
-    "Invalid inference_type.*invalid_inference"
+    spec_curve(dataset = mock_data, outcomes = "gdp", covagg = covagg_min, verbose = FALSE,
+               col_name_unit_name = "state", name_treated_unit = "treated_state",
+               treated_period = 2006, min_period = 2000, end_period = 2010,
+               col_name_period = "year", inference_type = "invalid_inference"),
+    "inference_type must be one of"
   )
   
   # Test inference_config validation
   expect_silent({
     # Should pass input validation even with custom inference config
-    result <- tryCatch({
+    result <- suppressMessages(tryCatch({
       spec_curve(
         dataset = mock_data,
         outcomes = "gdp",
-        covagg = list(),
+        covagg = covagg_min,
         col_name_unit_name = "state",
         name_treated_unit = "treated_state",
         treated_period = 2006,
         min_period = 2000,
         end_period = 2010,
         col_name_period = "year",
+        feature_weights = c("uniform"),
+        outcome_models = c("none"),
+        constraints = list(list(name = "simplex")),
+        donor_sample = "all",
         inference_type = "placebo",
         inference_config = list(bootstrap_n_replications = 100),
         cores = 1,
@@ -237,7 +322,7 @@ test_that("spec_curve inference parameter validation", {
         stop(e)
       }
       return(NULL)
-    })
+    }))
   })
 })
 
@@ -245,12 +330,18 @@ test_that("spec_curve returns proper structure when successful", {
   skip_if_not_installed("CVXR")
   
   mock_data <- create_mock_panel_data_spec_curve()
+  covagg_min <- list(
+    population = list(
+      label = "Population",
+      operations = list(list(var = "population", compute = "mean"))
+    )
+  )
   
   result <- tryCatch({
     spec_curve(
       dataset = mock_data,
       outcomes = "gdp",
-      covagg = list(),
+      covagg = covagg_min,
       col_name_unit_name = "state",
       name_treated_unit = "treated_state",
       treated_period = 2006,
@@ -259,6 +350,8 @@ test_that("spec_curve returns proper structure when successful", {
       col_name_period = "year",
       feature_weights = c("uniform"),
       outcome_models = c("none"),
+      constraints = list(list(name = "simplex")),
+      donor_sample = "all",
       cores = 1,
       verbose = FALSE
     )
@@ -290,22 +383,32 @@ test_that("spec_curve handles multiple outcomes", {
   skip_if_not_installed("CVXR")
   
   mock_data <- create_mock_panel_data_spec_curve()
+  covagg_min <- list(
+    population = list(
+      label = "Population",
+      operations = list(list(var = "population", compute = "mean"))
+    )
+  )
   
   # Add second outcome
   mock_data[, gdp2 := gdp + rnorm(.N, 0, 5)]
   
   expect_silent({
-    result <- tryCatch({
+    result <- suppressMessages(tryCatch({
       spec_curve(
         dataset = mock_data,
         outcomes = c("gdp", "gdp2"),
-        covagg = list(),
+        covagg = covagg_min,
         col_name_unit_name = "state",
         name_treated_unit = "treated_state",
         treated_period = 2006,
         min_period = 2000,
         end_period = 2010,
         col_name_period = "year",
+        feature_weights = c("uniform"),
+        outcome_models = c("none"),
+        constraints = list(list(name = "simplex")),
+        donor_sample = "all",
         cores = 1,
         verbose = FALSE
       )
@@ -314,7 +417,7 @@ test_that("spec_curve handles multiple outcomes", {
         stop(e)
       }
       return(NULL)
-    })
+    }))
   })
 })
 
@@ -324,19 +427,29 @@ test_that("spec_curve handles edge cases", {
   # Test with minimal time periods
   minimal_data <- create_mock_panel_data_spec_curve()
   minimal_data <- minimal_data[year %in% 2004:2007]  # Very short panel
+  covagg_min <- list(
+    population = list(
+      label = "Population",
+      operations = list(list(var = "population", compute = "mean"))
+    )
+  )
   
   expect_silent({
-    result <- tryCatch({
+    result <- suppressMessages(tryCatch({
       spec_curve(
         dataset = minimal_data,
         outcomes = "gdp", 
-        covagg = list(),
+        covagg = covagg_min,
         col_name_unit_name = "state",
         name_treated_unit = "treated_state",
         treated_period = 2006,
         min_period = 2004,
         end_period = 2007,
         col_name_period = "year",
+        feature_weights = c("uniform"),
+        outcome_models = c("none"),
+        constraints = list(list(name = "simplex")),
+        donor_sample = "all",
         cores = 1,
         verbose = FALSE
       )
@@ -347,6 +460,6 @@ test_that("spec_curve handles edge cases", {
         stop(e)
       }
       return(NULL)
-    })
+    }))
   })
 })

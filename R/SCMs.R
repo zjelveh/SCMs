@@ -30,14 +30,17 @@
 #' Example:
 #' \preformatted{
 #' # Prepare data
-#' data_prep <- scdata(df, id.var = "state", time.var = "year", 
-#'                     outcome.var = "outcome", treatment.identifier = "treated_state")
+#' data_prep <- scdata(df, id.var = "state", time.var = "year",
+#'                     outcome.var = "outcome",
+#'                     period.pre = 1990:1999, period.post = 2000:2005,
+#'                     unit.tr = "treated_state",
+#'                     unit.co = c("control1", "control2"))
 #'                     
 #' # Estimate synthetic control
 #' scm_result <- scest(data_prep, w.constr = list(name = "simplex", Q = 1))
 #' 
 #' # Conduct inference
-#' inference_result <- inference_sc(data_prep, scm_result)
+#' inference_result <- inference_sc(scm_result, df)
 #' 
 #' # Plot results
 #' scplot(scm_result)
@@ -46,10 +49,29 @@
 #' @section Specification Curve Analysis:
 #' For robustness analysis across multiple specifications:
 #' \preformatted{
-#' spec_results <- spec_curve(data_prep, 
-#'                           w.constr.options = list(simplex = list(name = "simplex", Q = 1),
-#'                                                  lasso = list(name = "lasso", Q = 0.1)),
-#'                           cores = 4)
+#' spec_results <- spec_curve(
+#'   dataset = df,
+#'   outcomes = "outcome",
+#'   col_name_unit_name = "state",
+#'   name_treated_unit = "treated_state",
+#'   covagg = list(
+#'     "Outcome Only" = list(
+#'       label = "Outcome Only",
+#'       operations = list(
+#'         list(var = "outcome_var", partition_periods = list(type = "by_period"))
+#'       )
+#'     )
+#'   ),
+#'   treated_period = 2000,
+#'   min_period = 1990,
+#'   end_period = 2005,
+#'   col_name_period = "year",
+#'   constraints = list(
+#'     list(name = "simplex"),
+#'     list(name = "lasso", Q = 0.1)
+#'   ),
+#'   cores = 4
+#' )
 #' plot_spec_curve(spec_results)
 #' }
 #'

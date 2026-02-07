@@ -157,43 +157,57 @@ covariate_specifications <- list(
   # Specification 1: Economic factors
   economic = list(
     label = "Economic Variables",
-    pre_period_mean = c("retprice", "income"),
-    per_period = NULL
+    operations = list(
+      list(var = "retprice", compute = "mean"),
+      list(var = "income", compute = "mean")
+    )
   ),
   
   # Specification 2: Full demographic and economic
   full_demographics = list(
     label = "Full Demographics + Economics", 
-    pre_period_mean = c("retprice", "income", "age15to24", "beer"),
-    per_period = NULL
+    operations = list(
+      list(var = "retprice", compute = "mean"),
+      list(var = "income", compute = "mean"),
+      list(var = "age15to24", compute = "mean"),
+      list(var = "beer", compute = "mean")
+    )
   ),
   
   # Specification 3: Outcome lags
   with_lags = list(
     label = "With Outcome Lags",
-    pre_period_mean = c("retprice", "income"),
-    per_period = c("outcome_var")  # Include lagged consumption
+    operations = list(
+      list(var = "outcome_var", partition_periods = list(type = "by_period")),
+      list(var = "retprice", compute = "mean"),
+      list(var = "income", compute = "mean")
+    )
   ),
   
   # Specification 4: Price focus
   price_focused = list(
     label = "Price-Focused",
-    pre_period_mean = c("retprice"),
-    per_period = c("retprice")  # Both average and time-varying price
+    operations = list(
+      list(var = "retprice", compute = "mean"),
+      list(var = "retprice", partition_periods = list(type = "by_period"))
+    )
   ),
   
   # Specification 5: Behavioral proxies
   behavioral = list(
     label = "Behavioral Proxies",
-    pre_period_mean = c("beer", "age15to24"),
-    per_period = NULL
+    operations = list(
+      list(var = "beer", compute = "mean"),
+      list(var = "age15to24", compute = "mean")
+    )
   ),
   
   # Specification 6: Minimal (for robustness)
   minimal = list(
     label = "Outcome Only",
-    pre_period_mean = NULL,
-    per_period = c("outcome_var")
+    operations = list(
+      list(var = "outcome_var", partition_periods = list(type = "by_period"))
+    )
   )
 )
 
@@ -202,10 +216,7 @@ cat("Covariate Specifications:\n")
 for (i in seq_along(covariate_specifications)) {
   spec <- covariate_specifications[[i]]
   cat(sprintf("\n%d. %s:\n", i, spec$label))
-  cat(sprintf("   Pre-period means: %s\n", 
-              paste(spec$pre_period_mean, collapse = ", ")))
-  cat(sprintf("   Time-varying: %s\n", 
-              paste(spec$per_period, collapse = ", ")))
+  cat(sprintf("   Operations: %d\n", length(spec$operations)))
 }
 ```
 

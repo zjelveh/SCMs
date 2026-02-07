@@ -109,9 +109,29 @@ process_large_spec_curve <- function(dataset, max_specs_per_batch = 50) {
   
   # Create specification combinations
   covariate_specs <- list(
-    basic = list(pre_period_mean = c("covar_1", "covar_2")),
-    extended = list(pre_period_mean = c("covar_1", "covar_2", "covar_3", "covar_4")),
-    behavioral = list(pre_period_mean = c("covar_5", "covar_6"))
+    basic = list(
+      label = "basic",
+      operations = list(
+        list(var = "covar_1", compute = "mean"),
+        list(var = "covar_2", compute = "mean")
+      )
+    ),
+    extended = list(
+      label = "extended",
+      operations = list(
+        list(var = "covar_1", compute = "mean"),
+        list(var = "covar_2", compute = "mean"),
+        list(var = "covar_3", compute = "mean"),
+        list(var = "covar_4", compute = "mean")
+      )
+    ),
+    behavioral = list(
+      label = "behavioral",
+      operations = list(
+        list(var = "covar_5", compute = "mean"),
+        list(var = "covar_6", compute = "mean")
+      )
+    )
   )
   
   # Use memory management for large specification spaces

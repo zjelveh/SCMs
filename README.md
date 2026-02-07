@@ -47,8 +47,14 @@ scm_data <- scdata(
   unit.tr = "treated",
   unit.co = c("c1", "c2", "c3"),
   covagg = list(
-    outcome_path = list(var = "outcome", each = TRUE),
-    cov1_mean = list(var = "cov1")
+    list(
+      var = "outcome_var",
+      partition_periods = list(type = "by_period")
+    ),
+    list(
+      var = "cov1",
+      compute = "mean"
+    )
   )
 )
 
@@ -71,43 +77,59 @@ placebo <- inference_sc(
 
 ## Covariate Aggregation (`covagg`)
 
-`covagg` controls how pre-period matching features are constructed.
+`covagg` tells SCMs which pre-period moments become matching features.
 
-Supported in both `scdata()` and `spec_curve()`:
-- **Simplified format** (recommended for specification grids)
-- **Traditional format** (fine-grained control)
+Each `covagg` entry is one operation with up to four fields:
+- `var`: variable name (or `"outcome_var"`)
+- `select_periods`: which pre-periods are used
+- `partition_periods`: how selected periods are grouped into features
+- `compute`: aggregation function (`"mean"` by default)
 
-### Simplified format
+Operation format:
+
+```r
+covagg = list(
+  list(
+    var = "outcome_var",
+    partition_periods = list(type = "by_period")
+  ),
+  list(
+    var = "population",
+    compute = "mean"
+  ),
+  list(
+    var = "income",
+    select_periods = list(type = "explicit", periods = 2001:2004),
+    compute = "mean"
+  )
+)
+```
+
+For `spec_curve()`, `covagg` is a named list of specifications, each with `operations`:
 
 ```r
 covagg = list(
   "Outcome Only" = list(
     label = "Outcome Only",
-    per_period = "outcome_var"
+    operations = list(
+      list(var = "outcome_var", partition_periods = list(type = "by_period"))
+    )
   ),
-  "Outcome + Covariates" = list(
-    label = "Outcome + Covariates",
-    per_period = "outcome_var",
-    pre_period_mean = c("population", "income")
+  "Outcome + Population Mean" = list(
+    label = "Outcome + Population Mean",
+    operations = list(
+      list(var = "outcome_var", partition_periods = list(type = "by_period")),
+      list(var = "population", compute = "mean")
+    )
   )
 )
 ```
 
-### Traditional format
-
-```r
-covagg = list(
-  gdp_mean = list(var = "gdp"),
-  gdp_each = list(var = "gdp", each = TRUE),
-  trade_last5 = list(var = "trade", last = 5),
-  invest_first4_median = list(var = "investment", first = 4, agg_fun = median)
-)
-```
-
 Rules:
-- Do not mix simplified and traditional keys inside the same specification.
-- Use only one of `periods`, `first`, or `last` per traditional entry.
-- Use `"outcome_var"` in simplified format to reference the current outcome.
+- `select_periods = NULL` means all pre-periods.
+- `partition_periods = list(type = "by_period")` creates one feature per period.
+- `partition_periods = list(type = "all")` creates one aggregated feature.
+- Use `"outcome_var"` to reference the current outcome.
 
 ## Specification Curve + SHAP
 
@@ -142,12 +164,16 @@ spec_results <- spec_curve(
   covagg = list(
     "Outcome Per Period" = list(
       label = "Outcome Per Period",
-      per_period = "outcome_var"
+      operations = list(
+        list(var = "outcome_var", partition_periods = list(type = "by_period"))
+      )
     ),
     "Outcome Per Period + Pop Mean" = list(
       label = "Outcome Per Period + Pop Mean",
-      per_period = "outcome_var",
-      pre_period_mean = "population"
+      operations = list(
+        list(var = "outcome_var", partition_periods = list(type = "by_period")),
+        list(var = "population", compute = "mean")
+      )
     )
   ),
   treated_period = 2007,

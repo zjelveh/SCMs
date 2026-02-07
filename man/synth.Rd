@@ -48,9 +48,9 @@ Example: \code{gdp ~ population + investment | California}}
 
 \item{covariate.matching}{Character. How to aggregate covariates:
 \itemize{
-\item \code{"average"} - Use pre-period averages (default)
+\item \code{"average"} - Use pre-period means (default)
 \item \code{"each"} - Include each pre-period separately
-\item \code{"last"} - Use only last pre-treatment value
+\item \code{"last"} - Use only the last pre-treatment period
 }}
 
 \item{...}{Additional arguments passed to \code{scest()}}

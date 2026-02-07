@@ -117,10 +117,10 @@ test_that("scdata input validation works", {
 test_that("scdata handles covariate specifications", {
   test_data <- create_test_data()
   
-  # Test with basic covariate aggregation
+  # Test with operation-based covariate aggregation
   covagg_spec <- list(
-    list(var = "population", average = TRUE),
-    list(var = "investment", each = TRUE)
+    list(var = "population", compute = "mean"),
+    list(var = "investment", partition_periods = list(type = "by_period"))
   )
   
   expect_silent({
@@ -161,12 +161,97 @@ test_that("scdata handles covariate specifications", {
   expect_equal(ncol(result$B), 4)  # Four control units
 })
 
+test_that("scdata honors first/last in covagg", {
+  test_data <- create_test_data()
+  
+  covagg_last <- list(
+    list(
+      var = "population",
+      select_periods = list(type = "predicate", fn = function(p) p >= max(p) - 1),
+      compute = "mean"
+    )
+  )
+  
+  result_last <- scdata(
+    df = test_data,
+    id.var = "state",
+    time.var = "year",
+    outcome.var = "gdp",
+    period.pre = 1990:2000,
+    period.post = 2001:2005,
+    unit.tr = "CA",
+    unit.co = c("TX", "NY", "FL", "WA"),
+    covagg = covagg_last
+  )
+  
+  expected_last <- mean(
+    test_data$population[
+      test_data$state == "CA" & test_data$year %in% c(1999, 2000)
+    ],
+    na.rm = TRUE
+  )
+  expect_equal(as.numeric(result_last$A[1, 1]), expected_last)
+  
+  covagg_first <- list(
+    list(
+      var = "population",
+      select_periods = list(type = "predicate", fn = function(p) p <= min(p) + 1),
+      compute = "mean"
+    )
+  )
+  
+  result_first <- scdata(
+    df = test_data,
+    id.var = "state",
+    time.var = "year",
+    outcome.var = "gdp",
+    period.pre = 1990:2000,
+    period.post = 2001:2005,
+    unit.tr = "CA",
+    unit.co = c("TX", "NY", "FL", "WA"),
+    covagg = covagg_first
+  )
+  
+  expected_first <- mean(
+    test_data$population[
+      test_data$state == "CA" & test_data$year %in% c(1990, 1991)
+    ],
+    na.rm = TRUE
+  )
+  expect_equal(as.numeric(result_first$A[1, 1]), expected_first)
+})
+
+test_that("scdata operation signatures can encode mixed period behavior", {
+  test_data <- create_test_data()
+  
+  covagg_operations <- list(
+    list(var = "population", partition_periods = list(type = "by_period")),
+    list(var = "investment", compute = "mean")
+  )
+  
+  result <- scdata(
+    df = test_data,
+    id.var = "state",
+    time.var = "year",
+    outcome.var = "gdp",
+    period.pre = 1990:2000,
+    period.post = 2001:2005,
+    unit.tr = "CA",
+    unit.co = c("TX", "NY", "FL", "WA"),
+    covagg = covagg_operations
+  )
+  
+  # 11 pre-period population features + 1 investment mean feature
+  expect_equal(nrow(result$A), 12)
+  expect_equal(nrow(result$B), 12)
+})
+
 test_that("scdata handles constant terms correctly", {
   test_data <- create_test_data()
   
   covagg_spec <- list(
-    list(var = "population", average = TRUE),
-    list(var = "investment", average = TRUE)
+    list(var = "population", compute = "mean"),
+    list(var = "investment", compute = "mean")
   )
   
   # Test without constant
@@ -218,42 +303,42 @@ test_that("scdata print and summary methods work", {
   )
   
   # Test print method
-  expect_output(print(result), "Synthetic Control Data")
+  expect_output(print(result), "Prepared Data for")
   
   # Test summary method
-  expect_output(summary(result), "Synthetic Control Data")
+  expect_output(summary(result), "Synthetic Control - Setup")
 })
 
 test_that("scdata handles edge cases", {
   test_data <- create_test_data()
   
   # Test with minimal time periods
-  expect_warning({
-    result <- scdata(
+  expect_error(
+    scdata(
       df = test_data,
       id.var = "state", 
       time.var = "year",
       outcome.var = "gdp",
       period.pre = c(1990, 1991),  # Very few pre-periods
       period.post = c(2001, 2002),
-      unit.tr = "CA", 
+      unit.tr = "CA",
       unit.co = "TX"
-    )
-  })
+    ),
+    "Please provide at least two control units"
+  )
   
-  # Test with single control unit
-  expect_silent({
-    result <- scdata(
+  # Test with single control unit (not allowed)
+  expect_error(
+    scdata(
       df = test_data,
       id.var = "state",
       time.var = "year",
       outcome.var = "gdp",
       period.pre = 1990:2000,
-      period.post = 2001:2005, 
+      period.post = 2001:2005,
       unit.tr = "CA",
-      unit.co = "TX"  # Only one control
-    )
-  })
-  
-  expect_equal(ncol(result$B), 1)
+      unit.co = "TX"
+    ),
+    "Please provide at least two control units"
+  )
 })

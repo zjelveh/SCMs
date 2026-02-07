@@ -1,109 +1,108 @@
 # Covariate Aggregation (`covagg`) Guide
 
-This guide explains how `covagg` turns pre‑treatment data into matching features.
-It is aligned with the current code, and is written for both human readers and
-LLMs.
+`covagg` controls how pre-treatment matching features are generated.
 
-## 1) What `covagg` Controls (Mental Model)
+## Core Operation Signature
 
-`covagg` defines **how you construct matching variables** from the pre‑period.
-Each `covagg` entry produces either:
-- **One feature** (e.g., mean of GDP over pre‑periods), or
-- **Many features** (one per pre‑period, when `each = TRUE`).
+For `scdata()`, `covagg` is a list of operations:
 
-## 2) Where You Use It
+```r
+covagg = list(
+  list(
+    var = "outcome_var",                              # or explicit column name
+    select_periods = list(type = "all_pre"),         # optional
+    partition_periods = list(type = "by_period"),    # optional
+    compute = "mean"                                  # optional
+  )
+)
+```
 
-- `spec_curve(...)`: you define a **set** of matching‑variable constructions.
-- `scdata(...)`: you define a **single** matching‑variable construction.
+Each operation has four fields:
+- `var`: variable name (`"outcome_var"` resolves to `outcome.var`).
+- `select_periods`: chooses periods from the pre-window.
+- `partition_periods`: groups selected periods into one or more features.
+- `compute`: function name or function used within each group.
 
-## 3) Choose a Format
+If `covagg` is empty, `scdata()` defaults to outcome per-period matching.
 
-There are two supported formats, and **both work in `spec_curve(...)` and `scdata(...)`**.
+## Selectors
 
-**Use Format A (Simplified)** for clarity and grid design.  
-**Use Format B (Traditional)** when you need fine‑grained control.
+Supported `select_periods` forms:
+- `NULL`: all pre-periods.
+- `list(type = "all_pre")`
+- `list(type = "explicit", periods = c(...))`
+- `list(type = "every_n", n = 2, offset = 1)`
+- `list(type = "predicate", fn = function(periods) ...)`
+- `function(periods) ...` (returns logical mask or numeric periods)
 
-Do **not** mix the two formats inside a single `covagg` entry.
+## Partitions
 
-## Format A: Simplified Specs (Recommended for `spec_curve`)
+Supported `partition_periods` forms:
+- `NULL` or `list(type = "all")`: one group.
+- `list(type = "by_period")`: one group per period.
+- `list(type = "fixed_width", width = 3, step = 3)`
+- `list(type = "custom", groups = list(c(...), c(...)))`
+- `function(selected_periods) ...` (returns list of numeric vectors)
 
-Each specification is a list with optional `label`, plus:
-- `per_period`: variables included **one per pre‑period**
-- `pre_period_mean`: variables included as **one mean feature** over all pre‑periods
+## Common Recipes
 
-Use the sentinel `"outcome_var"` to refer to the outcome variable.
+Outcome only (per period):
+
+```r
+covagg = list(
+  list(var = "outcome_var", partition_periods = list(type = "by_period"))
+)
+```
+
+All variables meaned:
+
+```r
+covagg = list(
+  list(var = "outcome_var", compute = "mean"),
+  list(var = "population", compute = "mean"),
+  list(var = "income", compute = "mean")
+)
+```
+
+Outcome per period + covariates meaned:
+
+```r
+covagg = list(
+  list(var = "outcome_var", partition_periods = list(type = "by_period")),
+  list(var = "population", compute = "mean"),
+  list(var = "income", compute = "mean")
+)
+```
+
+## `spec_curve()` Shape
+
+For `spec_curve()`, `covagg` is a named list of specifications, each with `operations`:
 
 ```r
 covagg = list(
   "Outcome Only" = list(
     label = "Outcome Only",
-    per_period = "outcome_var"
+    operations = list(
+      list(var = "outcome_var", partition_periods = list(type = "by_period"))
+    )
   ),
-  "All Mean" = list(
-    label = "All Mean",
-    pre_period_mean = c("population", "income", "outcome_var")
-  ),
-  "Outcome Per Period + All Mean" = list(
-    label = "Outcome Per Period + All Mean",
-    per_period = "outcome_var",
-    pre_period_mean = c("population", "income")
+  "Outcome + Means" = list(
+    label = "Outcome + Means",
+    operations = list(
+      list(var = "outcome_var", partition_periods = list(type = "by_period")),
+      list(var = "population", compute = "mean")
+    )
   )
 )
 ```
 
-## Format B: Traditional Specs (Detailed Control)
+## Troubleshooting
 
-Each entry is **one** covariate aggregation rule and must include:
-- `var` (required): a single variable name
+`unsupported fields`:
+- You passed removed keys (`per_period`, `pre_period_mean`, `each`, `first`, `last`, `average`, etc.).
 
-Optional fields:
-- `periods`: explicit period values to use
-- `first`: first N pre‑periods
-- `last`: last N pre‑periods
-- `each`: if `TRUE`, create one feature per period
-- `agg_fun`: aggregation function (default: `mean`)
-- `label`: optional display label
+`must define a non-empty operations list`:
+- In `spec_curve()`, each top-level specification must include `operations = list(...)`.
 
-```r
-covagg = list(
-  gdp_mean = list(var = "gdp"),                    # mean over all pre‑periods
-  trade_last5 = list(var = "trade", last = 5),     # mean over last 5 pre‑periods
-  gdp_each = list(var = "gdp", each = TRUE),       # one feature per pre‑period
-  inv_med_early = list(var = "investment", first = 4, agg_fun = median),
-  gdp_selected = list(var = "gdp", periods = c(1980, 1985), each = TRUE)
-)
-```
-
-## 4) `scdata(...)` Notes (Important)
-
-`scdata(...)` accepts **both** formats. When given simplified specs, it internally
-converts them to traditional entries before aggregation.
-
-Traditional fields supported by `scdata(...)` are:
-- `var` (required)
-- `periods`, `first`, or `last` (optional)
-- `each` (optional)
-- `agg_fun` or `aggfunc` (optional; default is `mean`)
-
-`agg_fun`/`aggfunc` can be a function (recommended) or a function name string.
-If the function supports `na.rm`, it will be used.
-
-## 5) Rules (Keep These Straight)
-
-- Use **only one** of `periods`, `first`, or `last` per spec.
-- If none are provided, SCMs uses **all pre‑periods**.
-- `each = TRUE` creates **one feature per period** (no aggregation).
-- `agg_fun` must return a **single numeric** value.
-- Provide `label` if you want clean display names in plots.
-
-## 6) Not Supported (Built‑In)
-
-Rolling windows, growth rates, and volatility are **not** built‑in.  
-If you need them, **precompute** them and pass the derived variables via `var`.
-
-## 7) Quick Troubleshooting
-
-- **“Invalid covagg format”**: you mixed simplified and traditional fields in one spec.
-- **“cannot have multiple period specifications”**: remove overlap between `periods`,
-  `first`, and `last`.
-- **Missing variable warning**: the variable is not present in your data or pre‑period.
+`selected periods are outside pre-period window`:
+- Your selector returned periods not in `period.pre`.

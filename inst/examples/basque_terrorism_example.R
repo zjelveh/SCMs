@@ -32,12 +32,16 @@ spec_results <- spec_curve(
   covagg = list(
     "Outcome Per Period" = list(
       label = "Outcome Per Period",
-      per_period = "outcome_var"
+      operations = list(
+        list(var = "outcome_var", partition_periods = list(type = "by_period"))
+      )
     ),
     "Outcome Per Period + Pop Mean" = list(
       label = "Outcome Per Period + Pop Mean",
-      per_period = "outcome_var",
-      pre_period_mean = "population"
+      operations = list(
+        list(var = "outcome_var", partition_periods = list(type = "by_period")),
+        list(var = "population", compute = "mean")
+      )
     )
   ),
   treated_period = 2007,

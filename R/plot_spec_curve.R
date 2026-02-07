@@ -1138,14 +1138,14 @@ plot_spec_curve <- function(
     p1 <- p1 +
         geom_point(data = legend_data[Legend == "Treated"],
                    aes(x = x, y = y, shape = Legend), color = "#1f78b4", fill = "#1f78b4",
-                   size = 2, alpha = 0.8, na.rm = TRUE) +
+                   size = 2, alpha = 0.8, na.rm = TRUE, inherit.aes = FALSE) +
         geom_point(data = legend_data[Legend == "Control/Placebo"],
                    aes(x = x, y = y, shape = Legend), color = "gray60",
-                   size = 2, alpha = 0.3, na.rm = TRUE) +
+                   size = 2, alpha = 0.3, na.rm = TRUE, inherit.aes = FALSE) +
         {if (show_predictions && "Predicted" %in% names(plot_data_p1))
             geom_point(data = legend_data[Legend == "XGBoost LOO-CV"],
                        aes(x = x, y = y, shape = Legend), color = "red",
-                       size = 2.5, stroke = 1.2, alpha = 0.4, na.rm = TRUE)
+                       size = 2.5, stroke = 1.2, alpha = 0.4, na.rm = TRUE, inherit.aes = FALSE)
         } +
         scale_shape_manual(
             name = NULL,
@@ -1186,8 +1186,9 @@ plot_spec_curve <- function(
 
     # Calculate specification curve p-values on filtered data
     # This ensures p-values reflect the actual data being plotted
+    # and avoids unnecessary inference work when p-values are hidden.
     spec_curve_pvals <- NULL
-    if (is.list(long_data)) {
+    if (show_pvalues && is.list(long_data)) {
         # Get expected direction from long_data or default to negative
         expected_direction <- if (!is.null(long_data$expected_direction)) long_data$expected_direction else "negative"
 
@@ -1880,4 +1881,3 @@ calculate_spec_curve_pvalues_filtered <- function(filtered_results, abadie_infer
         stouffer_pvalues = stouffer_results
     ))
 }
-

@@ -129,8 +129,8 @@ scdata_result <- scdata(
   unit.tr = "California",
   unit.co = c("Texas", "New York", "Florida", "Illinois"),
   covagg = list(
-    list(var = "population", average = TRUE),
-    list(var = "investment", average = TRUE)
+    list(var = "population"),
+    list(var = "investment")
   )
 )
 
@@ -154,22 +154,30 @@ Now let's examine robustness by varying multiple modeling choices:
 # Define covariate specifications to test
 covariate_specs <- list(
   # Basic specification
-  list(
+  basic = list(
     label = "basic",
-    pre_period_mean = c("population", "investment")
+    operations = list(
+      list(var = "population", compute = "mean"),
+      list(var = "investment", compute = "mean")
+    )
   ),
   
   # Include outcome lags
-  list(
+  with_lags = list(
     label = "with_lags", 
-    pre_period_mean = c("population", "investment"),
-    per_period = c("outcome_var")
+    operations = list(
+      list(var = "outcome_var", partition_periods = list(type = "by_period")),
+      list(var = "population", compute = "mean"),
+      list(var = "investment", compute = "mean")
+    )
   ),
   
   # Population only
-  list(
+  population_only = list(
     label = "population_only",
-    pre_period_mean = c("population")
+    operations = list(
+      list(var = "population", compute = "mean")
+    )
   )
 )
 

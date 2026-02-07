@@ -71,8 +71,8 @@ test_that("scdata with constant term maintains structure", {
   data <- create_deterministic_test_data()
   
   covagg <- list(
-    list(var = "population", average = TRUE),
-    list(var = "investment", average = TRUE)
+    list(var = "population", compute = "mean"),
+    list(var = "investment", compute = "mean")
   )
   
   result_const <- scdata(
@@ -95,7 +95,7 @@ test_that("scdata with constant term maintains structure", {
   expect_equal(nrow(result_const$C), nrow(result_const$A))  # Same as feature matrix
   
   # Test specs updated correctly
-  expect_equal(result_const$specs$KM, 1)  # One constant term
+  expect_equal(result_const$specs$KM, 0)  # Constant handled via C matrix
 })
 
 test_that("scest weight estimation remains stable", {
@@ -236,11 +236,11 @@ test_that("Package namespace exports remain consistent", {
   expect_true("run_spec_curve_analysis" %in% ls("package:SCMs"))
   
   # Test S3 method registration
-  expect_true(methods::existsMethod("print", "scdata"))
-  expect_true(methods::existsMethod("print", "scest"))
-  expect_true(methods::existsMethod("print", "spec_curve"))
-  expect_true(methods::existsMethod("summary", "scdata"))
-  expect_true(methods::existsMethod("summary", "scest")) 
-  expect_true(methods::existsMethod("summary", "spec_curve"))
-  expect_true(methods::existsMethod("plot", "spec_curve"))
+  expect_true(is.function(utils::getS3method("print", "scdata", optional = TRUE)))
+  expect_true(is.function(utils::getS3method("print", "scest", optional = TRUE)))
+  expect_true(is.function(utils::getS3method("print", "spec_curve", optional = TRUE)))
+  expect_true(is.function(utils::getS3method("summary", "scdata", optional = TRUE)))
+  expect_true(is.function(utils::getS3method("summary", "scest", optional = TRUE)))
+  expect_true(is.function(utils::getS3method("summary", "spec_curve", optional = TRUE)))
+  expect_true(is.function(utils::getS3method("plot", "spec_curve", optional = TRUE)))
 })

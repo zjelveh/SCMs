@@ -54,7 +54,12 @@ params <- list(
   col_name_unit_name = "country",
   name_treated_unit = "West Germany",
   covagg = list(
-    gdp_avg = list(var = "gdp", average = "full_pre")
+    "Outcome Path" = list(
+      label = "Outcome Path",
+      operations = list(
+        list(var = "outcome_var", partition_periods = list(type = "by_period"))
+      )
+    )
   ),
   treated_period = 1990,
   min_period = 1975,

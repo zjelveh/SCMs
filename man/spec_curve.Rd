@@ -37,22 +37,12 @@ spec_curve(
 
 \item{name_treated_unit}{Character. Identifier of the treated unit as it appears in the data.}
 
-\item{covagg}{List of covariate specifications for pre-treatment matching. Supports two formats:
-\itemize{
-\item \strong{Simplified Format} (recommended): List with optional fields:
-\itemize{
-\item \code{label} - Character: descriptive name for specification
-\item \code{per_period} - Character vector: variables to include per-period
-\item \code{pre_period_mean} - Character vector: variables to average over pre-period
-\item Use \code{"outcome_var"} to refer to the outcome variable
-}
-\item \strong{Traditional Format}: List of lists with \code{var}, \code{periods}/\code{first}/\code{last},
-\code{each}, optional \code{agg_fun}, and optional \code{label}.
-}
-Rules: do not mix simplified and traditional keys inside the same specification,
-and for traditional entries use only one of \code{periods}, \code{first}, or
-\code{last}. Use \code{"outcome_var"} in simplified format to reference the
-current outcome variable.
+\item{covagg}{List of covariate specifications for pre-treatment matching.
+Each top-level entry must be a named specification with optional \code{label}
+and required \code{operations}, where \code{operations} is a non-empty list
+of operation signatures:
+\code{list(var, select_periods, partition_periods, compute)}.
+Use \code{"outcome_var"} in \code{var} to reference the current outcome.
 Default is empty list.}
 
 \item{treated_period}{Numeric. First time period when treatment is active for the treated unit.}
@@ -161,90 +151,42 @@ The resulting specification curve can reveal:
 \dontrun{
 # Basic specification curve analysis
 results <- spec_curve(
-  dataset = state_panel,
-  outcomes = "gdp_per_capita",
-  col_name_unit_name = "state",
-  name_treated_unit = "California",
-  covagg = list(
-    "All Mean" = list(
-      label = "All Mean",
-      pre_period_mean = c("population", "income", "outcome_var")
-    )
-  ),
-  treated_period = 2000,
-  min_period = 1990,
-  end_period = 2010,
-  col_name_period = "year",
-  constraints = list(
-    list(name = "simplex"),
-    list(name = "lasso", Q = 0.1),
-    list(name = "ridge", Q = 0.1)
-  ),
-  cores = 4
-)
-
-# Using new simplified covagg format
-results_simplified <- spec_curve(
   dataset = state_panel,
   outcomes = "gdp_per_capita",
   col_name_unit_name = "state",
   name_treated_unit = "California",
   covagg = list(
-    "Outcome Only per period" = list(label = "Outcome Only per period"),
-    "GDP Analysis" = list(
-      label = "GDP Analysis",
-      per_period = c("gdp", "outcome_var"),
-      pre_period_mean = c("population", "income")
+    "Outcome Only" = list(
+      label = "Outcome Only",
+      operations = list(
+        list(
+          var = "outcome_var",
+          partition_periods = list(type = "by_period")
+        )
+      )
     ),
-    "All Variables Mean" = list(
-      label = "All Variables Mean",
-      pre_period_mean = c("gdp", "population", "income", "outcome_var")
+    "Outcome + Means" = list(
+      label = "Outcome + Means",
+      operations = list(
+        list(
+          var = "outcome_var",
+          partition_periods = list(type = "by_period")
+        ),
+        list(var = "population", compute = "mean"),
+        list(var = "income", compute = "mean")
+      )
     )
   ),
   treated_period = 2000,
   min_period = 1990,
   end_period = 2010,
-  col_name_period = "year"
-)
-
-results_mixed <- spec_curve(
-  dataset = policy_data,
-  outcomes = "gdp",
-  col_name_unit_name = "country",
-  name_treated_unit = "Germany",
-  covagg = list(
-    "Outcome Only per period" = list(label = "Outcome Only per period"),
-    "All Mean" = list(
-      label = "All Mean",
-      pre_period_mean = c("population", "trade", "investment", "outcome_var")
-    ),
-    "Outcome Per Period" = list(
-      label = "Outcome Per Period",
-      per_period = c("outcome_var"),
-      pre_period_mean = c("population", "trade")
-    )
+  col_name_period = "year",
+  constraints = list(
+    list(name = "simplex"),
+    list(name = "lasso", Q = 0.1),
+    list(name = "ridge", Q = 0.1)
   ),
-  treated_period = 2005,
-  min_period = 1990,
-  end_period = 2010,
-  col_name_period = "year"
-)
-
-# Multi-outcome analysis
-results_multi <- spec_curve(
-  dataset = policy_data,
-  outcomes = c("unemployment", "gdp", "investment"),
-  col_name_unit_name = "country",
-  name_treated_unit = "Germany",
-  covagg = list(
-    c("population", "gdp_lag"),
-    c("population", "gdp_lag", "trade_openness")
-  ),
-  treated_period = 2005,
-  min_period = 1995,
-  end_period = 2015,
-  col_name_period = "year",  
-  cores = 8
+  cores = 4
 )
 
 # Plot results

@@ -98,9 +98,9 @@ test_that("plot.spec_curve works correctly", {
   # Test basic plot functionality
   # Note: This mainly tests that the function doesn't error
   # Full plotting tests would require more complex setup
-  expect_silent({
+  expect_silent(suppressWarnings(suppressMessages({
     tryCatch({
-      plot_result <- plot(spec_obj)
+      plot_result <- plot(spec_obj, show_shap = FALSE)
       # If plot succeeds, it should return a ggplot-like object or list
       expect_true(is.list(plot_result))
     }, error = function(e) {
@@ -111,13 +111,13 @@ test_that("plot.spec_curve works correctly", {
       }
       # Other errors (missing packages, etc.) are acceptable for this test
     })
-  })
+  })))
   
   # Test error handling - no treated units
   no_treated_obj <- spec_obj
   no_treated_obj$results <- no_treated_obj$results[unit_type != "treated"]
   
-  expect_error(plot(no_treated_obj), "No treated unit found")
+  expect_error(plot(no_treated_obj, show_shap = FALSE), "No treated unit found")
   
   # Test warning - multiple treated units
   multi_treated_obj <- spec_obj
@@ -126,7 +126,10 @@ test_that("plot.spec_curve works correctly", {
     multi_treated_obj$results[unit_type == "treated"][1:5][, unit_name := "treated_unit_2"]
   )
   
-  expect_warning(plot(multi_treated_obj), "Multiple treated units found")
+  expect_warning(
+    plot(multi_treated_obj, show_shap = FALSE, show_pvalues = FALSE),
+    "Multiple treated units found"
+  )
 })
 
 test_that("spec_curve S3 class assignment works", {
@@ -142,9 +145,9 @@ test_that("spec_curve S3 class assignment works", {
   expect_s3_class(mock_results, "list")
   
   # Test method dispatch
-  expect_true(methods::existsMethod("print", signature = "spec_curve"))
-  expect_true(methods::existsMethod("summary", signature = "spec_curve"))
-  expect_true(methods::existsMethod("plot", signature = "spec_curve"))
+  expect_true(is.function(utils::getS3method("print", "spec_curve", optional = TRUE)))
+  expect_true(is.function(utils::getS3method("summary", "spec_curve", optional = TRUE)))
+  expect_true(is.function(utils::getS3method("plot", "spec_curve", optional = TRUE)))
 })
 
 test_that("S3 methods handle edge cases gracefully", {

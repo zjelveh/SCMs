@@ -43,7 +43,12 @@
 #'   col_name_unit_name = "country",
 #'   name_treated_unit = "West Germany",
 #'   covagg = list(
-#'     gdp_avg = list(var = "gdp", average = "full_pre")
+#'     "Outcome Path" = list(
+#'       label = "Outcome Path",
+#'       operations = list(
+#'         list(var = "outcome_var", partition_periods = list(type = "by_period"))
+#'       )
+#'     )
 #'   ),
 #'   treated_period = 1990,
 #'   min_period = 1975,
@@ -133,74 +138,3 @@ run_spec_curve_analysis <- function(dataset, params, cores = 1, output_dir = NUL
   
   return(results)
 }
-
-#' Extract Results from Specification Curve Analysis
-#'
-#' @title Extract and Compile Specification Curve Results
-#' @description Extracts treatment effects and RMSE data from specification curve
-#' results. Only supports the new structured format from spec_curve.
-#'
-#' @param results List. Results from \code{spec_curve} in structured format.
-#'
-#' @return Data table containing compiled results with columns:
-#'   \itemize{
-#'     \item \code{unit_name} - Unit identifier
-#'     \item \code{period} - Time period
-#'     \item \code{tau} - Treatment effect estimate
-#'     \item \code{post_period} - Logical indicating post-treatment period
-#'     \item \code{pre_rmse} - Pre-treatment RMSE
-#'     \item \code{outcome} - Outcome variable name
-#'     \item \code{const} - Constraint specification
-#'     \item \code{fw} - Feature weighting method
-#'     \item \code{data_sample} - Donor sample method
-#'     \item \code{feat} - Feature specification
-#'     \item \code{spec_number} - Specification number
-#'     \item \code{full_spec_id} - Full specification identifier
-#'   }
-#'
-#' @export
-#'
-#' @examples
-#' \dontrun{
-#' # Extract results from specification curve analysis
-#' compiled_results <- extract_spec_curve_results(spec_curve_results)
-#' }
-extract_spec_curve_results <- function(results) {
-  # Check if input is already in long format
-  if (data.table::is.data.table(results)) {
-    # Input is already long format, return as-is
-    return(results)
-  } else if (is.list(results) && "results" %in% names(results)) {
-    # Input is new structured format from spec_curve (results, abadie_inference, bootstrap_inference)
-    return(results$results)
-  } else {
-    stop("Unrecognized input format. Expected structured format from spec_curve with 'results' component or long format data.table.")
-  }
-}
-
-#' Save Specification Curve Results
-#'
-#' @title Save Compiled Results to File
-#' @description Saves compiled specification curve results to CSV format.
-#'
-#' @param results_df Data table containing compiled results from \code{extract_spec_curve_results}.
-#' @param base_path Character. Base path for output file (without extension).
-#'
-#' @export
-#'
-#' @examples
-#' \dontrun{
-#' # Save results to CSV
-#' save_spec_curve_results(compiled_results, "path/to/output/results")
-#' }
-save_spec_curve_results <- function(results_df, base_path) {
-  # Clean up results if needed
-  if ("unit_type" %in% names(results_df)) {
-    results_df[, unit_type := NULL]
-  }
-  
-  # Save to CSV
-  fwrite(results_df, paste0(base_path, ".csv"))
-}
-
-

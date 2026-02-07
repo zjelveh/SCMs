@@ -236,10 +236,12 @@ scest <- function(data,
                           bound.ipop = Bound.ipop
     )
 
-    # get minimum
-    rgV.optim <- collect.optimx(rgV.optim.1, "min")
-
-    solution.v   <- abs(rgV.optim$par)/sum(abs(rgV.optim$par))
+    # get minimum from optimx output
+    rgV.optim.1 <- rgV.optim.1[order(rgV.optim.1$value, decreasing = FALSE), ]
+    value_idx <- which(colnames(rgV.optim.1) == "value")
+    par_idx <- seq_len(value_idx - 1)
+    best_par <- as.numeric(rgV.optim.1[1, par_idx])
+    solution.v <- abs(best_par) / sum(abs(best_par))
     V.mat = diag(solution.v)
   } else{
     if(feature_weights=='uniform'){

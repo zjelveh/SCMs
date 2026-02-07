@@ -290,58 +290,6 @@ perform_bootstrap_inference <- function(dataset_null, sc.pred, actual_effects,
   ))
 }
 
-#' Debug Single Bootstrap Iteration
-#'
-#' @title Test Single Bootstrap Iteration for Debugging
-#' @description Runs a single bootstrap iteration with detailed output to help debug failures.
-#'
-#' @param sc.pred Results from estimate_sc function
-#' @param dataset_null Dataset with null hypothesis enforced
-#' @param iteration_number Integer. Iteration number for reproducibility
-#'
-#' @return List with bootstrap results or error details
-#' @export
-debug_single_bootstrap <- function(sc.pred, dataset_null, iteration_number = 1) {
-  col_name_unit <- sc.pred$col_name_unit_name
-  all_units <- unique(dataset_null[[col_name_unit]])
-  
-  # Sample units
-  set.seed(iteration_number)  # For reproducibility
-  bootstrap_units <- sample(all_units, size = length(all_units), replace = TRUE)
-  
-  # Test dataset creation
-  tryCatch({
-    bootstrap_data <- create_bootstrap_dataset(dataset_null, bootstrap_units, 
-                                              col_name_unit, sc.pred$name_treated_unit)
-    cat("Bootstrap dataset created successfully\n")
-    cat("  Rows:", nrow(bootstrap_data), "\n")
-    cat("  Units:", length(unique(bootstrap_data[[col_name_unit]])), "\n")
-    
-    # Test SC estimation
-    bootstrap_sc <- estimate_sc(
-      dataset = bootstrap_data,
-      outcome = sc.pred$outcome,
-      covagg = sc.pred$covagg,
-      col_name_unit_name = sc.pred$col_name_unit_name,
-      name_treated_unit = sc.pred$name_treated_unit,
-      col_name_period = sc.pred$col_name_period,
-      treated_period = sc.pred$treated_period,
-      min_period = sc.pred$min_period,
-      end_period = sc.pred$end_period,
-      feature_weights = sc.pred$feature_weights,
-      outcome_models = sc.pred$outcome_models,
-      w.constr = sc.pred$w.constr
-    )
-    
-    cat("Bootstrap SC estimation successful\n")
-    return(list(success = TRUE, bootstrap_sc = bootstrap_sc))
-    
-  }, error = function(e) {
-    cat("Bootstrap failed with error:", e$message, "\n")
-    return(list(success = FALSE, error = e$message))
-  })
-}
-
 #' Create Bootstrap Dataset by Unit-level Resampling
 #'
 #' @param dataset_null Original dataset with null enforced

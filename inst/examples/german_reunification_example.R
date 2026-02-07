@@ -24,7 +24,7 @@ scm_data <- scdata(
   unit.tr = treated_unit,
   unit.co = control_units,
   covagg = list(
-    outcome_path = list(var = "gdp", each = TRUE)
+    list(var = "outcome_var", partition_periods = list(type = "by_period"))
   )
 )
 

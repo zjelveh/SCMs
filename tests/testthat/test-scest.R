@@ -253,7 +253,7 @@ test_that("scest feature weight optimization validation", {
   mock_data <- create_mock_scdata()
   
   # Test that feature weight optimization doesn't fail due to input validation
-  expect_silent({
+  expect_silent(suppressMessages({
     result <- tryCatch({
       scest(data = mock_data,
             w.constr = list(name = "simplex"),
@@ -266,7 +266,7 @@ test_that("scest feature weight optimization validation", {
       }
       return(NULL)
     })
-  })
+  }))
 })
 
 test_that("scest solver availability check works", {

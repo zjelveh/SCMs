@@ -11,7 +11,7 @@
 #' @param min_period Numeric. Earliest time period in the dataset.
 #' @param end_period Numeric. Latest time period in the dataset.
 #' @param outcome_models Character vector. Outcome models to fit. Default is c("none", "ols", "ridge", "lasso", "augsynth").
-#' @param feature_weights Character vector. Method for assigning weights to predictors. Default is c("uniform", "optimize").
+#' @param feature_weights Character. Method for assigning weights to predictors ("uniform" or "optimize"). Default is "uniform".
 #' @param w.constr Optional. Constraints on the weights.
 #' @param V Character. Covariance matrix estimation method. Default is "separate".
 #' @param V.mat Optional. Pre-computed covariance matrix.
@@ -40,7 +40,7 @@ estimate_sc <- function(dataset,           # Input dataset (panel data format)
                         min_period,        # Earliest time period in the dataset
                         end_period,        # Latest time period in the dataset
                         outcome_models = c("none", "ols", "ridge", "lasso", "augsynth"), # Outcome models to fit
-                        feature_weights = c("uniform", "optimize"),  # Method for assigning weights to predictors
+                        feature_weights = "uniform",  # Method for assigning weights to predictors
                         w.constr = NULL,    # Constraints on the weights (optional)
                         V = "separate",     # Covariance matrix estimation method (usually "separate")
                         V.mat = NULL,       # Pre-computed covariance matrix (optional)
@@ -52,13 +52,13 @@ estimate_sc <- function(dataset,           # Input dataset (panel data format)
   # =============================================================================
   
   # Validate main inputs using utility functions
-  validate_dataframe(dataset, "dataset", required_cols = c(outcome, col_name_unit_name, col_name_period))
   validate_character(outcome, "outcome")
   validate_character(col_name_unit_name, "col_name_unit_name")
   validate_character(name_treated_unit, "name_treated_unit")
   validate_character(col_name_period, "col_name_period")
   validate_character(solver, "solver")
   validate_logical(constant, "constant")
+  validate_dataframe(dataset, "dataset", required_cols = c(outcome, col_name_unit_name, col_name_period))
   
   # Validate numeric periods
   validate_numeric(treated_period, "treated_period")
@@ -77,7 +77,7 @@ estimate_sc <- function(dataset,           # Input dataset (panel data format)
   validate_list(covagg, "covagg", allow_null = TRUE)
   validate_character(outcome_models, "outcome_models", length = length(outcome_models),
                     choices = c("none", "ols", "ridge", "lasso", "augsynth"))
-  validate_character(feature_weights, "feature_weights", length = length(feature_weights),
+  validate_character(feature_weights, "feature_weights", length = 1,
                     choices = c("uniform", "optimize"))
 
 

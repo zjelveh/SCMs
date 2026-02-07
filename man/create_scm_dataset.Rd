@@ -47,7 +47,10 @@ This function prepares a dataset for use with the Synthetic Control Method (SCM)
 \examples{
 # Example usage (replace with actual example when available)
 # scm_data <- create_scm_dataset(dataset = my_data, outcome = "gdp", 
-#                                covagg = list(c("population", "education")),
+#                                covagg = list(
+#                                  population = list(var = "population"),
+#                                  education = list(var = "education")
+#                                ),
 #                                col_name_unit_name = "state", name_treated_unit = "California",
 #                                col_name_period = "year", treated_period = 2000,
 #                                min_period = 1990, end_period = 2010)

@@ -34,8 +34,8 @@ scm_data <- scdata(
   unit.tr = "treated",
   unit.co = c("c1", "c2", "c3"),
   covagg = list(
-    outcome_path = list(var = "outcome", each = TRUE),
-    cov1_mean = list(var = "cov1")
+    list(var = "outcome_var", partition_periods = list(type = "by_period")),
+    list(var = "cov1", compute = "mean")
   )
 )
 
