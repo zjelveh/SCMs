@@ -1,39 +1,59 @@
-#' Quick Start Example - German Reunification
-#' 
-#' A minimal example showing basic SCMs package usage with the German
-#' reunification dataset included in the package.
+# Quick Start Example
+#
+# Minimal end-to-end example:
+#   1) build scm data with scdata()
+#   2) estimate with scest()
+#   3) run placebo inference with inference_sc()
 
 library(SCMs)
-library(data.table)
 
-# Load the included German dataset
-dataset <- fread(system.file("extdata/scpi_germany.csv", package = "SCMs"))
-
-# Basic synthetic control estimation using the main user interface
-results <- scest(
-  dataset, 
-  treated_unit = "West Germany",
-  treated_period = 1991,
-  outcome = "gdp",
-  unit_col = "country",
-  time_col = "year"
+set.seed(123)
+example_data <- expand.grid(
+  unit = c("treated", "c1", "c2", "c3"),
+  year = 2001:2010,
+  KEEP.OUT.ATTRS = FALSE,
+  stringsAsFactors = FALSE
 )
 
-# View results
-summary(results)
-plot(results)
+example_data$outcome <-
+  50 + 0.8 * (example_data$year - 2001) +
+  ifelse(example_data$unit == "treated" & example_data$year >= 2007, 3, 0) +
+  rnorm(nrow(example_data), 0, 0.5)
 
-# Run placebo inference with multiple test statistics
-inference_results <- inference_sc(
-  results, 
-  dataset, 
-  inference_type = "placebo"
+example_data$cov1 <-
+  20 + 0.2 * (example_data$year - 2001) +
+  rnorm(nrow(example_data), 0, 0.3)
+
+scm_data <- scdata(
+  df = example_data,
+  id.var = "unit",
+  time.var = "year",
+  outcome.var = "outcome",
+  period.pre = 2001:2006,
+  period.post = 2007:2010,
+  unit.tr = "treated",
+  unit.co = c("c1", "c2", "c3"),
+  covagg = list(
+    outcome_path = list(var = "outcome", each = TRUE),
+    cov1_mean = list(var = "cov1")
+  )
 )
 
-# The inference results now include three test statistics:
-# - RMSE ratio (traditional Abadie approach) 
-# - Treatment effect (direct comparison)
-# - Normalized treatment effect (effect / pre-period SD)
+fit <- scest(
+  data = scm_data,
+  w.constr = list(name = "simplex"),
+  feature_weights = "optimize"
+)
 
-print("P-values for different test statistics:")
-print(inference_results$abadie_significance)
+cat("Estimated donor weights:\n")
+print(fit$est.results$w)
+scplot(fit)
+
+placebo <- inference_sc(
+  fit,
+  dataset = example_data,
+  inference_type = "placebo",
+  verbose = FALSE
+)
+
+print(placebo$abadie_significance)

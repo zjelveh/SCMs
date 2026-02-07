@@ -46,8 +46,13 @@ spec_curve(
 \item \code{pre_period_mean} - Character vector: variables to average over pre-period
 \item Use \code{"outcome_var"} to refer to the outcome variable
 }
-\item \strong{Traditional Format}: List of lists with \code{var}, \code{average}, \code{each}, etc.
+\item \strong{Traditional Format}: List of lists with \code{var}, \code{periods}/\code{first}/\code{last},
+\code{each}, optional \code{agg_fun}, and optional \code{label}.
 }
+Rules: do not mix simplified and traditional keys inside the same specification,
+and for traditional entries use only one of \code{periods}, \code{first}, or
+\code{last}. Use \code{"outcome_var"} in simplified format to reference the
+current outcome variable.
 Default is empty list.}
 
 \item{treated_period}{Numeric. First time period when treatment is active for the treated unit.}
@@ -160,7 +165,12 @@ results <- spec_curve(
   outcomes = "gdp_per_capita",
   col_name_unit_name = "state",
   name_treated_unit = "California",
-  covagg = list(c("population", "income")),
+  covagg = list(
+    "All Mean" = list(
+      label = "All Mean",
+      pre_period_mean = c("population", "income", "outcome_var")
+    )
+  ),
   treated_period = 2000,
   min_period = 1990,
   end_period = 2010,

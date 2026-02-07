@@ -48,18 +48,27 @@ donor weights and can be positive or negative. Default is FALSE.}
 \item{verbose}{Logical. Whether to print diagnostic messages and warnings. Default is TRUE.}
 
 \item{covagg}{List. Flexible specification for covariate aggregation.
-Each element is a list with \code{var} and aggregation type:
+Two formats are supported:
 \itemize{
-\item \code{list(var = "gdp", each = TRUE)} - Separate variable for each period
-\item \code{list(var = "trade", average = "full_pre")} - Average over full pre-period
-\item \code{list(var = "schooling", every_n = 5)} - Every N periods
-\item \code{list(var = "invest", periods = c(1980, 1985))} - Specific periods
-\item \code{list(var = "gdp", first = 3)} - First N periods
-\item \code{list(var = "industry", last = 2)} - Last N periods
-\item \code{list(var = "trade", rolling = 3)} - Rolling N-period averages
-\item \code{list(var = "gdp", growth = "period_over_period")} - Growth rates
-\item \code{list(var = "gdp", volatility = "sd")} - Volatility measures
+\item \strong{Simplified format} (recommended for spec grids):
+\code{list(label = "...", per_period = c(...), pre_period_mean = c(...))}.
+Use \code{"outcome_var"} to refer to \code{outcome.var}.
+\item \strong{Traditional format} (fine-grained control): each element is
+a list with \code{var} and optional controls
+\code{periods}/\code{first}/\code{last}, \code{each}, and
+\code{agg_fun}/\code{aggfunc}.
 }
+Examples of traditional entries:
+\itemize{
+\item \code{list(var = "gdp")} - Mean over full pre-period (default behavior)
+\item \code{list(var = "gdp", each = TRUE)} - Separate feature for each period
+\item \code{list(var = "invest", periods = c(1980, 1985))} - Specific periods (averaged)
+\item \code{list(var = "gdp", first = 3)} - First N pre-periods (averaged)
+\item \code{list(var = "industry", last = 2)} - Last N pre-periods (averaged)
+\item \code{list(var = "gdp", last = 5, agg_fun = median)} - Custom aggregation
+}
+Rules: do not mix simplified and traditional keys inside the same specification,
+and use only one of \code{periods}, \code{first}, or \code{last} per traditional entry.
 Default is empty list.}
 
 \item{default_agg}{List. Optional default aggregation specification for simplified covariate processing.
@@ -138,8 +147,8 @@ scm_data_adh <- scdata(df = germany_data,
                        unit.co = c("USA", "UK", "France"),
                        covagg = list(
                          gdp_each = list(var = "gdp", each = TRUE),
-                         investment_avg = list(var = "investment", average = "full_pre"),
-                         schooling_5yr = list(var = "schooling", every_n = 5),
+                         investment_avg = list(var = "investment"),
+                         schooling_last5 = list(var = "schooling", last = 5),
                          trade_final = list(var = "trade", periods = 1990)
                        ))
                        
@@ -175,6 +184,23 @@ scm_data_mixed <- scdata(df = germany_data,
                          covagg = list(
                            schooling_custom = list(var = "schooling", last = 5)
                          ))
+
+# With simplified covagg format
+scm_data_simplified <- scdata(df = germany_data,
+                              id.var = "country",
+                              time.var = "year",
+                              outcome.var = "gdp",
+                              period.pre = 1960:1990,
+                              period.post = 1991:2003,
+                              unit.tr = "West Germany",
+                              unit.co = c("USA", "UK", "France"),
+                              covagg = list(
+                                "Outcome + Covariates" = list(
+                                  label = "Outcome + Covariates",
+                                  per_period = "outcome_var",
+                                  pre_period_mean = c("investment", "trade")
+                                )
+                              ))
                          
 # With constant term (requires multiple features)
 scm_data_const <- scdata(df = germany_data,
@@ -187,8 +213,8 @@ scm_data_const <- scdata(df = germany_data,
                          unit.co = c("USA", "UK", "France"),
                          constant = TRUE,  # Enable constant term
                          covagg = list(
-                           gdp_avg = list(var = "gdp", average = "full_pre"),
-                           investment_avg = list(var = "investment", average = "full_pre"),
+                           gdp_avg = list(var = "gdp"),
+                           investment_avg = list(var = "investment"),
                            trade_periods = list(var = "trade", periods = c(1985, 1990))
                          ))
 }

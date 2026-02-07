@@ -19,8 +19,13 @@
 #'         \item \code{pre_period_mean} - Character vector: variables to average over pre-period
 #'         \item Use \code{"outcome_var"} to refer to the outcome variable
 #'       }
-#'     \item \strong{Traditional Format}: List of lists with \code{var}, \code{average}, \code{each}, etc.
+#'     \item \strong{Traditional Format}: List of lists with \code{var}, \code{periods}/\code{first}/\code{last},
+#'           \code{each}, optional \code{agg_fun}, and optional \code{label}.
 #'   }
+#'   Rules: do not mix simplified and traditional keys inside the same specification,
+#'   and for traditional entries use only one of \code{periods}, \code{first}, or
+#'   \code{last}. Use \code{"outcome_var"} in simplified format to reference the
+#'   current outcome variable.
 #'   Default is empty list.
 #' @param treated_period Numeric. First time period when treatment is active for the treated unit.
 #' @param min_period Numeric. Earliest time period available in the dataset.
@@ -119,7 +124,12 @@
 #'   outcomes = "gdp_per_capita",
 #'   col_name_unit_name = "state",
 #'   name_treated_unit = "California",
-#'   covagg = list(c("population", "income")),
+#'   covagg = list(
+#'     "All Mean" = list(
+#'       label = "All Mean",
+#'       pre_period_mean = c("population", "income", "outcome_var")
+#'     )
+#'   ),
 #'   treated_period = 2000,
 #'   min_period = 1990,
 #'   end_period = 2010,
@@ -235,11 +245,43 @@ spec_curve <- function(
   if (!any(c("data.frame", "data.table") %in% class(dataset))) {
     stop("dataset must be a data.frame or data.table")
   }
+  
+  validate_character(outcomes, "outcomes", length = length(outcomes))
+  validate_character(col_name_unit_name, "col_name_unit_name")
+  validate_character(col_name_period, "col_name_period")
+  validate_character(name_treated_unit, "name_treated_unit")
+  validate_numeric(treated_period, "treated_period")
+  validate_numeric(min_period, "min_period")
+  validate_numeric(end_period, "end_period")
+  validate_period_relationships(min_period, treated_period, end_period)
+  
+  validate_dataframe(
+    dataset,
+    arg_name = "dataset",
+    allow_empty = FALSE,
+    required_cols = c(outcomes, col_name_unit_name, col_name_period)
+  )
+  
+  validate_values_in_column(dataset, col_name_unit_name, name_treated_unit, "name_treated_unit")
+
+  validate_character(feature_weights, "feature_weights", length = length(feature_weights),
+                     choices = c("uniform", "optimize"))
+  validate_character(outcome_models, "outcome_models", length = length(outcome_models),
+                     choices = c("none", "augsynth", "ridge", "lasso", "ols"))
 
   # Validate inference_type parameter
   valid_inference_types <- c("placebo", "bootstrap", "all")
   if (!inference_type %in% valid_inference_types) {
     stop("inference_type must be one of: ", paste(valid_inference_types, collapse = ", "))
+  }
+  
+  # Validate donor_sample options early to avoid undefined behavior downstream
+  validate_character(donor_sample, "donor_sample", length = length(donor_sample),
+                     choices = c("all", "most_similar"))
+  
+  # Validate cores parameter
+  if (!is.numeric(cores) || length(cores) != 1 || cores < 1) {
+    stop("cores must be >= 1")
   }
 
 
@@ -719,7 +761,7 @@ spec_curve <- function(
     # Use foreach for parallel execution
     results_list <- foreach::foreach(
       i = 1:nrow(param_grid),
-      .packages = c('data.table', 'devtools', 'SCMs', 'optimx', 'kernlab'),  # Include all required packages
+      .packages = c('data.table', 'SCMs', 'optimx', 'kernlab'),  # Include all required packages
       .export = c('validate_covariate_spec', 'determine_processing_pattern',
                   'process_aggregate_arbitrary', 'process_aggregate_range',
                   'process_each_arbitrary', 'process_each_range',
@@ -996,4 +1038,3 @@ spec_curve <- function(
   if (verbose) message("Specification curve generation complete")
   return(final_results)
 }
-

@@ -1,274 +1,205 @@
 # SCMs: Synthetic Control Methods
 
-A comprehensive R package for Synthetic Control Methods featuring specification curve analysis with SHAP interpretability. The package's highlight is specification curves that can be colored by Shapley values, showing how much each specification feature contributes to the predicted treatment effect.
+R package for synthetic control workflows, including specification-curve analysis and SHAP-based diagnostics.
 
 ## Installation
 
+```bash
+# From the package root
+R CMD INSTALL --no-multiarch --no-demo --no-docs .
+```
+
 ```r
-# Install from source (ensure you're in the package directory)
-devtools::install()
+# Development workflow
+library(devtools)
+load_all(".")
 ```
 
 ## Quick Start
 
 ```r
 library(SCMs)
-library(data.table)
 
-# Load Basque Country dataset
-dataset <- fread(system.file("extdata/basque.csv", package = "SCMs"))
+set.seed(123)
+example_data <- expand.grid(
+  unit = c("treated", "c1", "c2", "c3"),
+  year = 2001:2010,
+  KEEP.OUT.ATTRS = FALSE,
+  stringsAsFactors = FALSE
+)
 
-# Create SCM data structure
+example_data$outcome <-
+  50 + 0.8 * (example_data$year - 2001) +
+  ifelse(example_data$unit == "treated" & example_data$year >= 2007, 3, 0) +
+  rnorm(nrow(example_data), 0, 0.5)
+
+example_data$cov1 <-
+  20 + 0.2 * (example_data$year - 2001) +
+  rnorm(nrow(example_data), 0, 0.3)
+
 scm_data <- scdata(
-  df = dataset,
-  id.var = "regionname", time.var = "year", outcome.var = "gdpcap",
-  period.pre = 1955:1969, period.post = 1970:1997,
-  unit.tr = "Basque Country (Pais Vasco)",
-  unit.co = setdiff(unique(dataset$regionname), "Basque Country (Pais Vasco)")
+  df = example_data,
+  id.var = "unit",
+  time.var = "year",
+  outcome.var = "outcome",
+  period.pre = 2001:2006,
+  period.post = 2007:2010,
+  unit.tr = "treated",
+  unit.co = c("c1", "c2", "c3"),
+  covagg = list(
+    outcome_path = list(var = "outcome", each = TRUE),
+    cov1_mean = list(var = "cov1")
+  )
 )
 
-# Estimate synthetic control
-results <- scest(data = scm_data, w.constr = list(name = "simplex"))
-
-# View results and run inference
-summary(results)
-scplot(results)
-inference_results <- inference_sc(results, dataset, inference_type = "placebo")
-```
-
-## Covariate Aggregation Guide
-
-The package's flexible covariate system allows sophisticated feature engineering for synthetic control matching. Each specification is a named list with variable name and aggregation method:
-
-### Basic Aggregation Types
-
-```r
-covagg = list(
-  # Average over all pre-treatment periods (default behavior)
-  gdp_mean = list(var = "gdp"),
-  
-  # Separate feature for each period
-  gdp_per_period = list(var = "gdp", each = TRUE),
-  
-  # Use specific periods only (averaged)
-  gdp_late_pre = list(var = "gdp", periods = c(1985, 1988, 1990)),
-  
-  # Use last N pre-treatment periods (averaged)
-  trade_last3 = list(var = "trade", last = 3)
+fit <- scest(
+  data = scm_data,
+  w.constr = list(name = "simplex"),
+  feature_weights = "optimize"
 )
-```
 
-### Advanced Aggregation Methods (Supported)
+summary(fit)
+scplot(fit)
 
-```r
-covagg = list(
-  # First N periods of pre-treatment (averaged)
-  early_investment = list(var = "investment", first = 5),
-  
-  # Last N periods before treatment (averaged)
-  late_trade = list(var = "trade", last = 3),
-  
-  # Custom aggregation function (must return a single numeric value)
-  gdp_median_last5 = list(var = "gdp", last = 5, agg_fun = median),
-  
-  # Each period for a specified subset
-  gdp_each_selected = list(var = "gdp", periods = c(1980, 1985), each = TRUE)
-)
-```
-
-### Complex Aggregation Examples
-
-```r
-# Multiple aggregations for same variable
-covagg = list(
-  # GDP in different forms
-  gdp_early = list(var = "gdp", periods = c(1970, 1975, 1980)),
-  gdp_recent = list(var = "gdp", last = 5),
-  gdp_each = list(var = "gdp", each = TRUE),
-  
-  # Trade patterns
-  trade_baseline = list(var = "trade", periods = 1970),
-  trade_recent = list(var = "trade", last = 5),
-  
-  # Investment timing
-  invest_early = list(var = "investment", first = 10),
-  invest_late = list(var = "investment", last = 5),
-  
-  # Population at selected milestones
-  pop_milestones = list(var = "population", periods = c(1970, 1975, 1980, 1985))
-)
-```
-
-### Realistic Example: Regional Economic Analysis
-
-```r
-# Comprehensive covariate specification for Basque Country analysis
-basque_covariates = list(
-  # GDP measures
-  gdp_baseline = list(var = "gdpcap", periods = c(1960, 1965)),    # Baseline level
-  gdp_pre_trend = list(var = "gdpcap", last = 5),                  # Pre-treatment trend
-  gdp_each = list(var = "gdpcap", each = TRUE),                    # All periods
-  
-  # Economic structure (sectoral composition)
-  agriculture = list(var = "sec.agriculture"),                      # Agricultural share
-  industry = list(var = "sec.industry"),                            # Industrial share
-  energy = list(var = "sec.energy"),                                # Energy sector
-  construction = list(var = "sec.construction"),                    # Construction
-  services = list(var = "sec.services.venta"),                      # Market services
-  
-  # Demographics and development
-  population_density = list(var = "popdens", last = 3),            # Population density (recent)
-  human_capital = list(var = "school.high", periods = c(1964, 1967, 1969)), # Education
-  
-  # Investment patterns  
-  investment_rate = list(var = "invest", first = 10),              # Early investment
-  investment_trend = list(var = "invest", last = 5)                # Investment momentum
-)
-```
-
-## Specification Curve Analysis with SHAP
-
-```r
-# Run comprehensive specification curve analysis
-spec_results <- spec_curve(
-  dataset = dataset,
-  outcomes = "gdpcap",
-  col_name_unit_name = "regionname",
-  name_treated_unit = "Basque Country (Pais Vasco)",
-  covagg = basque_covariates,  # Use complex covariate specification
-  treated_period = 1970,
-  min_period = 1955,
-  end_period = 1997,
-  col_name_period = "year",
-  feature_weights = c("uniform", "optimize"),
-  outcome_models = c("none", "augsynth", "lasso"),
-  constraints = list(
-    list(name = "simplex"),
-    list(name = "lasso", Q = 0.1),
-    list(name = "ridge", Q = 0.1)
-  ),
+placebo <- inference_sc(
+  fit,
+  dataset = example_data,
   inference_type = "placebo",
-  cores = 4
-)
-
-# Configure XGBoost + SHAP analysis
-xgboost_config <- create_xgboost_config(
-  dataset_name = "basque_terrorism",
-  treated_unit_name = "Basque Country (Pais Vasco)",
-  outcome_filter = "gdpcap",
-  spec_features = c("feat", "outcome_model", "const", "data_sample", "fw")
-)
-
-# Generate SHAP values
-shap_results <- run_xgboost_shap_analysis(spec_results$results, xgboost_config)
-
-# Create specification curve with SHAP coloring
-plot_spec_curve(
-  spec_results,
-  name_treated_unit = "Basque Country (Pais Vasco)",
-  outcomes = "gdpcap",
-  shap_values = shap_results$shapley,  # Color by SHAP importance
-  test_statistic = "treatment_effect"
+  verbose = FALSE
 )
 ```
 
-## Performance and Advanced Features
+## Covariate Aggregation (`covagg`)
 
-- **High-Performance Computing**: Optional clarabel solver for supported constraints (falls back when unsupported)
-- **Parallel Processing**: Handle 1000+ specifications efficiently with multi-core support
-- **Comprehensive Inference**: Multiple test statistics (RMSE ratio, treatment effect, normalized)
-- **Machine Learning Integration**: XGBoost + SHAP for specification interpretability
-- **Flexible Data Processing**: Sophisticated covariate aggregation system
+`covagg` controls how pre-period matching features are constructed.
 
-Enable high-performance optimization:
+Supported in both `scdata()` and `spec_curve()`:
+- **Simplified format** (recommended for specification grids)
+- **Traditional format** (fine-grained control)
+
+### Simplified format
+
 ```r
-# Use clarabel solver for faster computation
-options(SCMs.prefer_clarabel = TRUE)
+covagg = list(
+  "Outcome Only" = list(
+    label = "Outcome Only",
+    per_period = "outcome_var"
+  ),
+  "Outcome + Covariates" = list(
+    label = "Outcome + Covariates",
+    per_period = "outcome_var",
+    pre_period_mean = c("population", "income")
+  )
+)
 ```
 
-## Data Requirements
+### Traditional format
 
-Dataset should be in long format with:
-- **Unit identifier**: Column for units (countries, states, etc.)
-- **Time identifier**: Numeric time periods
-- **Outcome variable**: Numeric variable of interest
-- **Covariates**: Additional numeric matching variables
-
-```
-  country  year   gdp  trade  investment
-  Germany  1960  100    50      20
-  Germany  1961  105    55      22
-  France   1960   95    45      18
-  France   1961  100    48      19
+```r
+covagg = list(
+  gdp_mean = list(var = "gdp"),
+  gdp_each = list(var = "gdp", each = TRUE),
+  trade_last5 = list(var = "trade", last = 5),
+  invest_first4_median = list(var = "investment", first = 4, agg_fun = median)
+)
 ```
 
-## Examples and Documentation
+Rules:
+- Do not mix simplified and traditional keys inside the same specification.
+- Use only one of `periods`, `first`, or `last` per traditional entry.
+- Use `"outcome_var"` in simplified format to reference the current outcome.
 
-- **Quick Start**: `inst/examples/quick_start_example.R`
-- **Complete Workflow**: `inst/examples/basque_terrorism_example.R`
-
-### Basque Country Example
-
-The Basque terrorism example replicates and extends Abadie & Gardeazabal (2003), demonstrating how different software implementations can produce contradictory results:
+## Specification Curve + SHAP
 
 ```r
 library(SCMs)
 
-# Load Basque Country dataset
-dataset <- fread(system.file("extdata/basque.csv", package = "SCMs"))
+set.seed(42)
+d <- expand.grid(
+  unit = c("treated", "c1", "c2", "c3", "c4"),
+  year = 2001:2010,
+  KEEP.OUT.ATTRS = FALSE,
+  stringsAsFactors = FALSE
+)
 
-# Run specification curve analysis
+# Keep IDs simple/alphanumeric for robust matching across internal reshaping paths.
+d$unit_id <- gsub("[^A-Za-z0-9_]", "_", d$unit)
+
+d$outcome <-
+  100 + 0.5 * (d$year - 2001) +
+  ifelse(d$unit == "treated" & d$year >= 2007, 2, 0) +
+  rnorm(nrow(d), 0, 0.3)
+
+d$population <-
+  50 + 0.1 * (d$year - 2001) +
+  rnorm(nrow(d), 0, 0.2)
+
 spec_results <- spec_curve(
-  dataset = dataset,
-  outcomes = "gdpcap",
-  col_name_unit_name = "regionname",
-  name_treated_unit = "Basque Country (Pais Vasco)",
-  treated_period = 1970,
-  min_period = 1955,
-  end_period = 1997,
+  dataset = d,
+  outcomes = "outcome",
+  col_name_unit_name = "unit_id",
+  name_treated_unit = "treated",
+  covagg = list(
+    "Outcome Per Period" = list(
+      label = "Outcome Per Period",
+      per_period = "outcome_var"
+    ),
+    "Outcome Per Period + Pop Mean" = list(
+      label = "Outcome Per Period + Pop Mean",
+      per_period = "outcome_var",
+      pre_period_mean = "population"
+    )
+  ),
+  treated_period = 2007,
+  min_period = 2001,
+  end_period = 2010,
   col_name_period = "year",
   feature_weights = c("uniform", "optimize"),
-  outcome_models = c("none", "augsynth", "ridge"),
-  covagg = list(
-    time_averaged = list(
-      gdp_baseline = list(var = "gdpcap", periods = c(1960, 1965)),
-      sectors_avg = list(var = "sec.agriculture")
-    ),
-    per_period = list(
-      gdp_each = list(var = "gdpcap", each = TRUE),
-      sectors_each = list(var = "sec.agriculture", each = TRUE)
-    )
-  )
+  outcome_models = c("none", "ridge"),
+  donor_sample = "all",
+  constraints = list(list(name = "simplex")),
+  constants = FALSE,
+  cores = 1,
+  verbose = FALSE,
+  inference_type = "placebo"
 )
 
-# Generate SHAP interpretability
-xgboost_config <- create_xgboost_config(
-  dataset_name = "basque_terrorism",
-  treated_unit_name = "Basque Country (Pais Vasco)",
-  outcome_filter = "gdpcap",
-  spec_features = c("feat", "outcome_model", "const", "data_sample", "fw")
+xgb_cfg <- create_xgboost_config(
+  dataset_name = "toy",
+  treated_unit_name = "treated",
+  outcome_filter = "outcome",
+  spec_features = c("feat", "outcome_model", "const", "fw", "data_sample")
 )
-shap_results <- run_xgboost_shap_analysis(spec_results$results, xgboost_config)
 
-# Create specification curve with SHAP coloring
-plot_spec_curve(spec_results, shap_values = shap_results$shapley,
-                file_path_save = "basque_spec_curve_analysis.pdf")
+shap_results <- run_xgboost_shap_analysis(
+  spec_results$results,
+  xgb_cfg,
+  compute_loo = FALSE
+)
+
+plot_obj <- plot_spec_curve(
+  long_data = spec_results,
+  name_treated_unit = "treated",
+  outcomes = "outcome",
+  shap_values = shap_results$shapley,
+  show_pvalues = TRUE,
+  test_statistic = "treatment_effect"
+)
 ```
 
-**Key Finding**: The same conceptual SCM approach produces estimates ranging from large negative to large positive effects, demonstrating the critical importance of specification transparency.
+## Where `covagg` Is Documented
 
-![Specification Curve Analysis](inst/examples/basque_spec_curve.png)
+- `COVAGG.md`
+- `?scdata`
+- `?spec_curve`
 
-*Basque Country specification curve showing treatment effect estimates across multiple specifications, demonstrating how methodological choices drive variation in results.*
+## Data Requirements
 
-All examples demonstrate the full pipeline from data preparation through specification curve analysis with SHAP interpretability.
-
-<!-- ## Citation
-
-```
-Jelveh, Z. (2024). SCMs: Synthetic Control Methods with Advanced Analytics.
-R package version 0.1.0.
-``` -->
+Input data must be long format with:
+- unit identifier
+- time identifier
+- numeric outcome
+- optional numeric covariates
 
 ## Contact
 
