@@ -1,44 +1,78 @@
-# SCMs: Synthetic Control Methods
+# SCMs: Synthetic Control Workflows for Applied Research
 
-R package for synthetic control workflows, including specification-curve analysis and SHAP-based diagnostics.
+`SCMs` is an R package for running synthetic control analyses with a workflow that is explicit, reproducible, and easy to audit.
 
-## Installation
+It supports:
+- standard synthetic control estimation
+- placebo-based inference
+- specification-curve analysis across many defensible modeling choices
+- SHAP summaries to show which choices move estimated effects most
+
+This package is designed for applied users who want policy-facing results without hidden defaults.
+
+## Who This Is For
+
+This README is written for users with the technical background of an applied criminologist:
+- comfortable with R data frames
+- comfortable running model code
+- not looking to debug low-level optimization internals
+
+If that is your use case, start with the two workflows below:
+1. Single-run SCM (`scdata()` -> `scest()` -> `inference_sc()`)
+2. Robustness over many runs (`spec_curve()` -> `plot_spec_curve()`)
+
+## Install
 
 ```bash
-# From the package root
+# From the package root (repo/SCMs)
 R CMD INSTALL --no-multiarch --no-demo --no-docs .
 ```
 
+For development inside the repo:
+
 ```r
-# Development workflow
 library(devtools)
 load_all(".")
 ```
 
-## Quick Start
+## Data Requirements
+
+Input must be long panel data with one row per `unit x time`:
+- one unit ID column
+- one time column (numeric/integer/date)
+- one numeric outcome column
+- optional numeric covariates
+
+You must also define:
+- treated unit
+- donor pool (control units)
+- pre-treatment periods
+- post-treatment periods
+
+## Workflow 1: Single SCM Estimate + Placebo Inference
 
 ```r
 library(SCMs)
 
 set.seed(123)
-example_data <- expand.grid(
+df <- expand.grid(
   unit = c("treated", "c1", "c2", "c3"),
   year = 2001:2010,
   KEEP.OUT.ATTRS = FALSE,
   stringsAsFactors = FALSE
 )
 
-example_data$outcome <-
-  50 + 0.8 * (example_data$year - 2001) +
-  ifelse(example_data$unit == "treated" & example_data$year >= 2007, 3, 0) +
-  rnorm(nrow(example_data), 0, 0.5)
+df$outcome <-
+  50 + 0.8 * (df$year - 2001) +
+  ifelse(df$unit == "treated" & df$year >= 2007, 3, 0) +
+  rnorm(nrow(df), 0, 0.5)
 
-example_data$cov1 <-
-  20 + 0.2 * (example_data$year - 2001) +
-  rnorm(nrow(example_data), 0, 0.3)
+df$population <-
+  20 + 0.2 * (df$year - 2001) +
+  rnorm(nrow(df), 0, 0.3)
 
 scm_data <- scdata(
-  df = example_data,
+  df = df,
   id.var = "unit",
   time.var = "year",
   outcome.var = "outcome",
@@ -47,14 +81,8 @@ scm_data <- scdata(
   unit.tr = "treated",
   unit.co = c("c1", "c2", "c3"),
   covagg = list(
-    list(
-      var = "outcome_var",
-      partition_periods = list(type = "by_period")
-    ),
-    list(
-      var = "cov1",
-      compute = "mean"
-    )
+    list(var = "outcome_var", partition_periods = list(type = "by_period")),
+    list(var = "population", compute = "mean")
   )
 )
 
@@ -67,12 +95,12 @@ fit <- scest(
 summary(fit)
 scplot(fit)
 
-sc_result <- estimate_sc(
-  dataset = example_data,
+est <- estimate_sc(
+  dataset = df,
   outcome = "outcome",
   covagg = list(
     list(var = "outcome_var", partition_periods = list(type = "by_period")),
-    list(var = "cov1", compute = "mean")
+    list(var = "population", compute = "mean")
   ),
   col_name_unit_name = "unit",
   name_treated_unit = "treated",
@@ -85,73 +113,17 @@ sc_result <- estimate_sc(
   w.constr = list(name = "simplex")
 )
 
-placebo <- inference_sc(
-  sc_result,
-  dataset = example_data,
-  verbose = FALSE
-)
+placebo <- inference_sc(est, dataset = df, verbose = FALSE)
+placebo$abadie_significance
 ```
 
-## Covariate Aggregation (`covagg`)
+## Workflow 2: Specification Curve (Robustness Over Many Choices)
 
-`covagg` tells SCMs which pre-period moments become matching features.
-
-Each `covagg` entry is one operation with up to four fields:
-- `var`: variable name (or `"outcome_var"`)
-- `select_periods`: which pre-periods are used
-- `partition_periods`: how selected periods are grouped into features
-- `compute`: aggregation function (`"mean"` by default)
-
-Operation format:
-
-```r
-covagg = list(
-  list(
-    var = "outcome_var",
-    partition_periods = list(type = "by_period")
-  ),
-  list(
-    var = "population",
-    compute = "mean"
-  ),
-  list(
-    var = "income",
-    select_periods = list(type = "explicit", periods = 2001:2004),
-    compute = "mean"
-  )
-)
-```
-
-For `spec_curve()`, `covagg` is a named list of specifications, each with `operations`:
-
-```r
-covagg = list(
-  "Outcome Only" = list(
-    label = "Outcome Only",
-    operations = list(
-      list(var = "outcome_var", partition_periods = list(type = "by_period"))
-    )
-  ),
-  "Outcome + Population Mean" = list(
-    label = "Outcome + Population Mean",
-    operations = list(
-      list(var = "outcome_var", partition_periods = list(type = "by_period")),
-      list(var = "population", compute = "mean")
-    )
-  )
-)
-```
-
-Rules:
-- `select_periods = NULL` means all pre-periods.
-- `partition_periods = list(type = "by_period")` creates one feature per period.
-- `partition_periods = list(type = "all")` creates one aggregated feature.
-- Use `"outcome_var"` to reference the current outcome.
-
-## Specification Curve + SHAP
+Use this when you want to show how sensitive conclusions are across a prespecified set of modeling choices.
 
 ```r
 library(SCMs)
+library(data.table)
 
 set.seed(42)
 d <- expand.grid(
@@ -161,7 +133,7 @@ d <- expand.grid(
   stringsAsFactors = FALSE
 )
 
-# Keep IDs simple/alphanumeric for robust matching across internal reshaping paths.
+# Keep IDs alphanumeric for robust internal matching.
 d$unit_id <- gsub("[^A-Za-z0-9_]", "_", d$unit)
 
 d$outcome <-
@@ -185,8 +157,8 @@ spec_results <- spec_curve(
         list(var = "outcome_var", partition_periods = list(type = "by_period"))
       )
     ),
-    "Outcome Per Period + Pop Mean" = list(
-      label = "Outcome Per Period + Pop Mean",
+    "Outcome Per Period + Population Mean" = list(
+      label = "Outcome Per Period + Population Mean",
       operations = list(
         list(var = "outcome_var", partition_periods = list(type = "by_period")),
         list(var = "population", compute = "mean")
@@ -207,46 +179,69 @@ spec_results <- spec_curve(
   inference_type = "placebo"
 )
 
-xgb_cfg <- create_xgboost_config(
-  dataset_name = "toy",
-  treated_unit_name = "treated",
-  outcome_filter = "outcome",
-  spec_features = c("feat", "outcome_model", "const", "fw", "data_sample")
-)
-
-shap_results <- run_xgboost_shap_analysis(
-  spec_results$results,
-  xgb_cfg,
-  compute_loo = FALSE
-)
-
 plot_obj <- plot_spec_curve(
   long_data = spec_results,
   name_treated_unit = "treated",
   outcomes = "outcome",
-  shap_values = shap_results$shapley,
+  show_shap = FALSE,
   show_pvalues = TRUE,
   test_statistic = "treatment_effect"
 )
+
+plot_obj$final_plot
 ```
 
-## Where `covagg` Is Documented
+### Example Specification Curve Plot
 
+![Example specification curve plot](inst/examples/readme_spec_curve.png)
+
+## How to Think About `covagg` (Most Important Input)
+
+`covagg` defines which pre-treatment moments become matching features.
+
+Each operation can specify:
+- `var`: variable name, or `"outcome_var"`
+- `select_periods`: which pre-period years to include
+- `partition_periods`: how selected years are grouped into features
+- `compute`: summary function for each group (default is mean)
+
+Common patterns:
+- Outcome per-period trajectory:
+  - `list(var = "outcome_var", partition_periods = list(type = "by_period"))`
+- Covariate pre-period mean:
+  - `list(var = "population", compute = "mean")`
+- Covariate over custom years only:
+  - `list(var = "unemployment", select_periods = list(type = "explicit", periods = 2001:2004), compute = "mean")`
+
+For more details:
 - `COVAGG.md`
 - `?scdata`
 - `?spec_curve`
 
-## Data Requirements
+## Recommended Defaults for Applied Work
 
-Input data must be long format with:
-- unit identifier
-- time identifier
-- numeric outcome
-- optional numeric covariates
+If you are starting a real policy application, begin with:
+- `w.constr = list(name = "simplex")`
+- `feature_weights = "optimize"`
+- explicit `covagg` including per-period outcome + a small covariate set
+- `inference_type = "placebo"`
 
-## Contact
+Then run a specification curve before writing conclusions.
 
-Zubin Jelveh - zjelveh@umd.edu
+## Troubleshooting
+
+- `Missing covariate variable` error:
+  - A variable named in `covagg` does not exist in your dataset.
+- `treated unit not found` error:
+  - `name_treated_unit` does not match values in the unit column.
+- Unexpectedly unstable estimates:
+  - Reduce model complexity, simplify covariates, and inspect pre-treatment fit.
+
+## More Examples
+
+- `inst/examples/quick_start_example.R`
+- `inst/examples/basque_terrorism_example.R`
+- `inst/examples/german_reunification_example.R`
 
 ## License
 
