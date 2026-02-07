@@ -239,6 +239,23 @@ scdata <- function(df,
     return(aggfun(values))
   }
 
+  canonicalize_unit_ids <- function(ids, context) {
+    canon <- gsub("[^A-Za-z0-9_]", "_", ids)
+    canon <- gsub("_{2,}", "_", canon)
+    canon <- gsub("_+$", "", canon)
+
+    if (anyDuplicated(canon)) {
+      dup_vals <- unique(canon[duplicated(canon)])
+      stop(
+        "Unit ID normalization produced duplicate donor names in ", context, ": ",
+        paste(dup_vals, collapse = ", "),
+        ". Use unit identifiers that remain unique after normalization."
+      )
+    }
+
+    canon
+  }
+
   if (length(covagg) == 0) {
     covagg <- list(
       list(
@@ -511,27 +528,9 @@ scdata <- function(df,
 
         # Convert to matrix format
         B <- data.frame(t(agg_data$x))
+        colnames(B) <- canonicalize_unit_ids(as.character(agg_data$ID), "B matrix")
 
-        # IMPORTANT: Use the exact same transformation that Y.donors will use
-        # This matches the str_remove + gsub pattern in Y.donors creation
-        temp_names <- paste("gdpcap", agg_data$ID, sep = ".")
-        y_names_equivalent <- stringr::str_remove(temp_names, "gdpcap")
-        y_names_equivalent <- stringr::str_remove(y_names_equivalent, "\\.")
-        final_clean_names <- gsub('[^A-Za-z0-9_]', '_', y_names_equivalent)
-        final_clean_names <- gsub('_{2,}', '_', final_clean_names)
-        # Remove trailing underscores to match Y.donors
-        final_clean_names <- gsub('_+$', '', final_clean_names)
-
-        clean_unit_tr <- gsub('[^A-Za-z0-9_]', '_', unit.tr)
-        clean_unit_tr <- gsub('_{2,}', '_', clean_unit_tr)
-
-        # B matrix columns should match Y.donors exactly
-        # Only set column names if dimensions match
-        if (length(final_clean_names) == ncol(B)) {
-          colnames(B) <- final_clean_names
-        } else {
-          warning(paste("Column name dimension mismatch in aggregation: B has", ncol(B), "columns but", length(final_clean_names), "names"))
-        }
+        clean_unit_tr <- canonicalize_unit_ids(as.character(unit.tr), "treated-unit naming")
         rownames(B) <- paste(clean_unit_tr, cov_name, sep='.')
 
         idx2 = length(B_list) + 1
@@ -565,6 +564,7 @@ scdata <- function(df,
   colnames(aux)     <- stringr::str_remove(colnames(aux),"\\.")
   
   Y.donors <- as.matrix(aux[, colnames(aux) != "Time", drop=FALSE])
+  colnames(Y.donors) <- canonicalize_unit_ids(colnames(Y.donors), "Y.donors")
   
   Y.pre <- as.matrix(data.bal[rows.tr.pre, outcome.var])
   rownames(Y.pre) <- paste(unit.tr,as.character(data.bal[rows.tr.pre, "Time"]), sep=".")
@@ -598,7 +598,8 @@ scdata <- function(df,
   
   # if "Time" is not in numeric format the matrix becomes a matrix of characters,
   # this is why we do everything in one step
-  Y.donors.post <- as.matrix(aux.post[, colnames(aux) != "Time", drop=FALSE])
+  Y.donors.post <- as.matrix(aux.post[, colnames(aux.post) != "Time", drop=FALSE])
+  colnames(Y.donors.post) <- canonicalize_unit_ids(colnames(Y.donors.post), "Y.donors.post")
   
   # Y.donors.post columns should match B matrix columns (no unit.tr prefix)
   # colnames(Y.donors.post) <- clean_y_names_post
@@ -630,6 +631,7 @@ scdata <- function(df,
 
 
   P <- as.matrix(aux[, names(aux) != "Time"])
+  colnames(P) <- canonicalize_unit_ids(colnames(P), "P matrix")
   
   rownames(P) <- paste(unit.tr, as.character(aux[,'Time']), sep = ".")
   

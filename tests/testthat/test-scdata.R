@@ -246,6 +246,34 @@ test_that("scdata operation signatures can encode mixed period behavior", {
   expect_equal(nrow(result$B), 12)
 })
 
+test_that("scdata canonicalizes donor IDs consistently across feature and outcome matrices", {
+  set.seed(456)
+  weird_data <- expand.grid(
+    unit = c("Treated.Unit", "Donor-A", "Donor+B", "Donor C!"),
+    year = 2000:2006,
+    stringsAsFactors = FALSE
+  )
+  weird_data$y <- 10 + (weird_data$year - 2000) + rnorm(nrow(weird_data))
+
+  result <- scdata(
+    df = weird_data,
+    id.var = "unit",
+    time.var = "year",
+    outcome.var = "y",
+    period.pre = 2000:2004,
+    period.post = 2005:2006,
+    unit.tr = "Treated.Unit",
+    unit.co = c("Donor-A", "Donor+B", "Donor C!"),
+    covagg = list(
+      list(var = "outcome_var", partition_periods = list(type = "by_period"))
+    )
+  )
+
+  expect_setequal(colnames(result$B), colnames(result$Y.donors))
+  expect_setequal(colnames(result$B), colnames(result$Y.donors.post))
+  expect_setequal(colnames(result$B), colnames(result$P))
+})
+
 test_that("scdata handles constant terms correctly", {
   test_data <- create_test_data()
   

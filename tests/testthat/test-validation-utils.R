@@ -92,15 +92,3 @@ test_that("validate_values_in_column works correctly", {
   expect_error(validate_values_in_column(df, "state", "FL", "treated_unit"),
                "Values not found in column")
 })
-
-test_that("validate_s3_class works correctly", {
-  # Create test object with class
-  obj <- list(a = 1, b = 2)
-  class(obj) <- "test_class"
-  
-  expect_silent(validate_s3_class(obj, "test_class", "test_obj"))
-  
-  # Error case
-  expect_error(validate_s3_class(list(a = 1), "test_class", "test_obj"),
-               "must be an object of class 'test_class'")
-})

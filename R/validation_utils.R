@@ -132,20 +132,6 @@ validate_list <- function(x, arg_name, required_names = NULL, allow_null = TRUE)
   }
 }
 
-#' Validate Column Existence in Data
-#'
-#' @param data Data frame
-#' @param col_name Column name to check
-#' @param arg_name Name of argument (for error messages)
-#' @return NULL (throws error if validation fails)
-#' @keywords internal
-validate_column_exists <- function(data, col_name, arg_name) {
-  if (!col_name %in% names(data)) {
-    stop("Column '", col_name, "' (specified in '", arg_name, "') not found in data. ",
-         "Available columns: ", paste(names(data), collapse = ", "))
-  }
-}
-
 #' Validate Column is Numeric
 #'
 #' @param data Data frame
@@ -202,19 +188,5 @@ validate_period_relationships <- function(min_period, treated_period, end_period
     warning("Only ", pre_periods, " pre-treatment period(s) available. ",
             "Consider extending the pre-treatment window for more reliable estimation.",
             call. = FALSE)
-  }
-}
-
-#' Validate S3 Object Class
-#'
-#' @param obj Object to validate
-#' @param required_class Character. Required class name
-#' @param arg_name Name of argument (for error messages)
-#' @return NULL (throws error if validation fails)
-#' @keywords internal
-validate_s3_class <- function(obj, required_class, arg_name) {
-  if (!methods::is(obj, required_class)) {
-    stop("'", arg_name, "' must be an object of class '", required_class, "'. ",
-         "Received object of class: ", paste(class(obj), collapse = ", "))
   }
 }
