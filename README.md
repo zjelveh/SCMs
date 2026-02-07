@@ -195,6 +195,7 @@ plot_obj$final_plot
 ### Example Specification Curve Plot (Basque Data)
 
 ![Example specification curve plot](inst/examples/readme_spec_curve.png)
+Vector version: [`inst/examples/readme_spec_curve.pdf`](inst/examples/readme_spec_curve.pdf)
 
 ## How to Think About `covagg` (Most Important Input)
 
