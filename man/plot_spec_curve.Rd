@@ -23,7 +23,6 @@ plot_spec_curve(
   sort_by = "tau",
   filter_specs = NULL,
   show_shap = TRUE,
-  shap_config = list(compute_pvalues = TRUE, pvalue_type = "absolute"),
   shap_label_type = "absolute",
   show_predictions = FALSE,
   predictions = NULL,
@@ -116,14 +115,6 @@ list(constant = "TRUE", outcome_model = c("none", "augsynth")). Default is NULL 
 Default is TRUE.
 }}
 
-\item{shap_config}{List. Configuration for SHAP computation and significance testing with elements:
-\itemize{
-\item compute_pvalues: Logical. Whether to calculate SHAP significance via placebo inference.
-Requires multi-unit SHAP data (treated_unit_only = FALSE in XGBoost config). Default is TRUE.
-\item pvalue_type: Character. Method for SHAP significance testing: "absolute" or "signed".
-"absolute" ranks by |SHAP| values, "signed" uses two-sided rank-based test. Default is "absolute".
-}}
-
 \item{shap_label_type}{Character. How to display SHAP values in y-axis labels: "absolute" or "signed".
 \itemize{
 \item "absolute": Shows mean |SHAP| values, e.g., "ridge (0.123)"
@@ -161,7 +152,7 @@ List containing:
 \item panel_a: ggplot object for Panel A only (treatment effects)
 \item panel_b: ggplot object for Panel B only (feature groups/SHAP)
 \item plot_data_p1: data.table with Panel A plotting data including columns: Unit Name, Estimate, RMSE, Specification, unit_type, p_value (if available)
-\item plot_data_p2: data.table with Panel B plotting data including columns: Specification, feature_group, feature, shapley_value (if SHAP computed), shap_pvalue (if significance computed)
+\item plot_data_p2: data.table with Panel B plotting data including columns: Specification, feature_group, feature, shapley_value (if SHAP computed)
 \item computed_shap: Complete results from internal SHAP computation (NULL if external shap_values provided or show_shap=FALSE).
 Contains: results (feature importance), shapley (SHAP values), predictions (model predictions), models (trained XGBoost models), config (SHAP configuration)
 \item spec_curve_pvals: List with specification curve-level p-values calculated on filtered data:
@@ -198,11 +189,7 @@ spec_results <- run_spec_curve_analysis(
 plot_basic <- plot_spec_curve(
   long_data = spec_results,
   name_treated_unit = "TREATED_ID",
-  show_shap = TRUE,  # Automatically computes SHAP internally
-  shap_config = list(
-    compute_pvalues = TRUE,
-    pvalue_type = "absolute"
-  )
+  show_shap = TRUE  # Automatically computes SHAP internally
 )
 
 # ===== SPECIFICATION FILTERING EXAMPLES =====
@@ -232,8 +219,7 @@ plot_constraints <- plot_spec_curve(
   long_data = spec_results,
   name_treated_unit = "TREATED_ID",
   filter_specs = list(const = c("simplex", "lasso", "ridge")),
-  show_shap = TRUE,
-  shap_config = list(compute_pvalues = FALSE)  # Disable SHAP significance
+  show_shap = TRUE
 )
 
 # ===== DIFFERENT TEST STATISTICS =====
@@ -254,26 +240,13 @@ plot_rmse_ratio <- plot_spec_curve(
   show_shap = TRUE
 )
 
-# ===== SHAP SIGNIFICANCE TESTING =====
-
-# SHAP with signed significance testing
-plot_shap_signed <- plot_spec_curve(
-  long_data = spec_results,
-  name_treated_unit = "TREATED_ID",
-  show_shap = TRUE,
-  shap_config = list(
-    compute_pvalues = TRUE,
-    pvalue_type = "signed"  # Two-sided SHAP significance
-  )
-)
-
 # ===== EXTERNAL SHAP WORKFLOW (Advanced) =====
 
 # For advanced users who want external control over SHAP computation
 shap_config_external <- create_xgboost_config(
   dataset_name = "example",
   treated_unit_name = "TREATED_ID",
-  treated_unit_only = FALSE  # Multi-unit for significance testing
+  treated_unit_only = FALSE  # Multi-unit SHAP computation
 )
 external_shap <- run_xgboost_shap_analysis(spec_results, shap_config_external)
 

@@ -16,8 +16,8 @@ utils::globalVariables(c(
   "spec_combination",
   
   # SHAP and ML variables
-  "shapley_value", "shap_pvalue", "shap_summary", "shap_color", 
-  "shap_color_value", "shap_alpha_value", "mean_shap", "mean_abs_shap",
+  "shapley_value", "shap_summary", "shap_color", 
+  "shap_color_value", "mean_shap", "mean_abs_shap",
   "abs_mean_interaction_contribution", "mean_abs_shap_interaction",
   "total_abs_shap_value", "categorical_levels", "category", "component",
   "interaction_label", "interaction_partner", "interaction_percent", 

@@ -62,11 +62,6 @@
 #'   - Requires at least 3 unique specifications for internal computation
 #'   - Automatically detects available specification features (outcome_model, const, fw, feat, data_sample, constant)
 #'   Default is TRUE.
-#' @param shap_config List. Configuration for SHAP computation and significance testing with elements:
-#'   - compute_pvalues: Logical. Whether to calculate SHAP significance via placebo inference.
-#'     Requires multi-unit SHAP data (treated_unit_only = FALSE in XGBoost config). Default is TRUE.
-#'   - pvalue_type: Character. Method for SHAP significance testing: "absolute" or "signed".
-#'     "absolute" ranks by |SHAP| values, "signed" uses two-sided rank-based test. Default is "absolute".
 #' @param shap_label_type Character. How to display SHAP values in y-axis labels: "absolute" or "signed".
 #'   - "absolute": Shows mean |SHAP| values, e.g., "ridge (0.123)"
 #'   - "signed": Shows mean SHAP values with sign, e.g., "ridge (+0.089)" or "lasso (-0.045)"
@@ -95,7 +90,7 @@
 #'   \item panel_a: ggplot object for Panel A only (treatment effects)
 #'   \item panel_b: ggplot object for Panel B only (feature groups/SHAP)
 #'   \item plot_data_p1: data.table with Panel A plotting data including columns: Unit Name, Estimate, RMSE, Specification, unit_type, p_value (if available)
-#'   \item plot_data_p2: data.table with Panel B plotting data including columns: Specification, feature_group, feature, shapley_value (if SHAP computed), shap_pvalue (if significance computed)
+#'   \item plot_data_p2: data.table with Panel B plotting data including columns: Specification, feature_group, feature, shapley_value (if SHAP computed)
 #'   \item computed_shap: Complete results from internal SHAP computation (NULL if external shap_values provided or show_shap=FALSE). 
 #'     Contains: results (feature importance), shapley (SHAP values), predictions (model predictions), models (trained XGBoost models), config (SHAP configuration)
 #'   \item spec_curve_pvals: List with specification curve-level p-values calculated on filtered data:
@@ -121,11 +116,7 @@
 #' plot_basic <- plot_spec_curve(
 #'   long_data = spec_results,
 #'   name_treated_unit = "TREATED_ID",
-#'   show_shap = TRUE,  # Automatically computes SHAP internally
-#'   shap_config = list(
-#'     compute_pvalues = TRUE,
-#'     pvalue_type = "absolute"
-#'   )
+#'   show_shap = TRUE  # Automatically computes SHAP internally
 #' )
 #'
 #' # ===== SPECIFICATION FILTERING EXAMPLES =====
@@ -155,8 +146,7 @@
 #'   long_data = spec_results,
 #'   name_treated_unit = "TREATED_ID",
 #'   filter_specs = list(const = c("simplex", "lasso", "ridge")),
-#'   show_shap = TRUE,
-#'   shap_config = list(compute_pvalues = FALSE)  # Disable SHAP significance
+#'   show_shap = TRUE
 #' )
 #'
 #' # ===== DIFFERENT TEST STATISTICS =====
@@ -177,26 +167,13 @@
 #'   show_shap = TRUE
 #' )
 #'
-#' # ===== SHAP SIGNIFICANCE TESTING =====
-#'
-#' # SHAP with signed significance testing
-#' plot_shap_signed <- plot_spec_curve(
-#'   long_data = spec_results,
-#'   name_treated_unit = "TREATED_ID",
-#'   show_shap = TRUE,
-#'   shap_config = list(
-#'     compute_pvalues = TRUE,
-#'     pvalue_type = "signed"  # Two-sided SHAP significance
-#'   )
-#' )
-#'
 #' # ===== EXTERNAL SHAP WORKFLOW (Advanced) =====
 #'
 #' # For advanced users who want external control over SHAP computation
 #' shap_config_external <- create_xgboost_config(
 #'   dataset_name = "example",
 #'   treated_unit_name = "TREATED_ID",
-#'   treated_unit_only = FALSE  # Multi-unit for significance testing
+#'   treated_unit_only = FALSE  # Multi-unit SHAP computation
 #' )
 #' external_shap <- run_xgboost_shap_analysis(spec_results, shap_config_external)
 #'
@@ -252,10 +229,6 @@ plot_spec_curve <- function(
     sort_by = "tau",
     filter_specs = NULL,
     show_shap = TRUE,
-    shap_config = list(
-        compute_pvalues = TRUE,
-        pvalue_type = "absolute"
-    ),
     shap_label_type = "absolute",
     show_predictions = FALSE,
     predictions = NULL,
@@ -374,25 +347,6 @@ plot_spec_curve <- function(
     # Validate filter_specs structure
     if (!is.null(filter_specs) && !is.list(filter_specs)) {
         stop("filter_specs must be a named list or NULL")
-    }
-    
-    # Validate shap_config structure
-    if (!is.list(shap_config)) {
-        stop("shap_config must be a list")
-    }
-    
-    # Set default shap_config values
-    if (is.null(shap_config$compute_pvalues)) {
-        shap_config$compute_pvalues <- TRUE
-    }
-    if (is.null(shap_config$pvalue_type)) {
-        shap_config$pvalue_type <- "absolute"
-    }
-    
-    # Validate shap_config$pvalue_type
-    valid_shap_pvalue_types <- c("absolute", "signed")
-    if (!shap_config$pvalue_type %in% valid_shap_pvalue_types) {
-        stop("shap_config$pvalue_type must be one of: ", paste(valid_shap_pvalue_types, collapse = ", "))
     }
     
     # Validate shap_label_type
@@ -802,34 +756,6 @@ plot_spec_curve <- function(
                  "SHAP data must contain columns: ", paste(required_shap_cols, collapse = ", "))
         }
         
-        # Check for multi-unit SHAP data and calculate significance if requested
-        unique_units <- unique(shap_values$unit)
-        has_control_shaps <- length(unique_units) > 1 && any(unique_units != name_treated_unit)
-
-        if (has_control_shaps && shap_config$compute_pvalues) {
-            message("Found SHAP values for ", length(unique_units), " units (",
-                    sum(unique_units != name_treated_unit), " controls). Calculating SHAP significance using '", shap_config$pvalue_type, "' method...")
-            message("To disable SHAP significance testing, set shap_config$compute_pvalues = FALSE")
-
-            # Calculate SHAP significance on filtered data
-            shap_significance <- calculate_shap_significance(shap_values, name_treated_unit, pvalue_method = shap_config$pvalue_type)
-            # Merge significance data with SHAP values
-            shap_values <- merge(shap_values, shap_significance,
-                                 by = c("full_spec_id", "feature_group"), all.x = TRUE)
-
-            # Provide user feedback about significance results
-            treated_significance <- shap_significance[!is.na(shap_pvalue)]
-            if (nrow(treated_significance) > 0) {
-                n_significant <- sum(treated_significance$shap_pvalue < 0.05, na.rm = TRUE)
-                n_marginal <- sum(treated_significance$shap_pvalue >= 0.05 & treated_significance$shap_pvalue < 0.10, na.rm = TRUE)
-                total_tests <- nrow(treated_significance)
-                message("SHAP significance: ", n_significant, " significant (p<0.05), ",
-                        n_marginal, " marginal (p<0.10) out of ", total_tests, " tests")
-            }
-        } else if (has_control_shaps && !shap_config$compute_pvalues) {
-            message("Multi-unit SHAP data found but significance testing disabled by shap_config$compute_pvalues = FALSE")
-        }
-
         # Debug: Show data structures before merging
         message("DEBUG: SHAP merging diagnostics...")
         message("Panel B data structure (first 5 rows for treated unit):")
@@ -1268,8 +1194,7 @@ plot_spec_curve <- function(
     }
 
     # Create Panel B (Specification Choices and Shapley Values)
-    # Panel B: SHAP visualization with optional significance transparency
-    has_shap_significance <- "shap_pvalue" %in% names(plot_data_p2) && "shap_significance_level" %in% names(plot_data_p2)
+    # Panel B: SHAP visualization
 
     # Add SHAP values to feature labels if SHAP values are available
     if ("shapley_value" %in% names(plot_data_p2)) {
@@ -1391,19 +1316,9 @@ plot_spec_curve <- function(
 
     # Check if SHAP values are available in the data
     if ("shapley_value" %in% names(plot_data_p2)) {
-        # Prepare alpha mapping if significance is available
-        if (has_shap_significance) {
-            plot_data_p2[, shap_alpha_value := pmax(0.2, 1.0 - pmin(shap_pvalue, 1.0))]
-        }
-
         # Create base plot with continuous y-axis (tighter within-group, wider between-group)
-        if (has_shap_significance) {
-            p2 <- ggplot(plot_data_p2, aes(x = Specification, y = y_numeric)) +
-                geom_point(aes(color = shap_color_value, alpha = shap_alpha_value), shape = 15, size = 2.5)
-        } else {
-            p2 <- ggplot(plot_data_p2, aes(x = Specification, y = y_numeric)) +
-                geom_point(aes(color = shap_color_value), shape = 15, size = 2.5)
-        }
+        p2 <- ggplot(plot_data_p2, aes(x = Specification, y = y_numeric)) +
+            geom_point(aes(color = shap_color_value), shape = 15, size = 2.5)
 
         # Add color scale based on shap_label_type
         if (shap_label_type == "absolute") {
@@ -1427,15 +1342,6 @@ plot_spec_curve <- function(
             )
         }
 
-        # Add alpha scale if significance is available
-        if (has_shap_significance) {
-            p2 <- p2 + scale_alpha_continuous(
-                name = "SHAP Significance\n(Solid = Low p-value)",
-                range = c(0.2, 1.0),
-                breaks = c(0.2, 0.5, 0.95, 0.99, 0.999),
-                labels = c("p~1.0", "p~0.5", "p~0.05", "p~0.01", "p~0.0")
-            )
-        }
     } else {
         # No SHAP values - create basic specification plot
         p2 <- ggplot(plot_data_p2, aes(x = Specification, y = y_numeric)) +
@@ -1626,129 +1532,6 @@ plot_spec_curve <- function(
     )
     
     return(return_object)
-}
-
-#' Calculate SHAP Significance via Placebo Inference
-#'
-#' @title Calculate Statistical Significance of SHAP Values
-#' @description Performs placebo-style inference on SHAP values by ranking the treated unit's
-#' feature importance against control units for each specification and feature group.
-#'
-#' @param shap_data Data.table. SHAP values for multiple units with columns: unit, full_spec_id,
-#'   feature_group, feature, shapley_value
-#' @param treated_unit_name Character. Name of the treated unit
-#' @param pvalue_method Character. Method for calculating p-values: "absolute" or "signed".
-#'   - "absolute": Ranks based on absolute SHAP values.
-#'   - "signed": Ranks based on signed SHAP values, distinguishing positive and negative importance.
-#'
-#' @return Data.table with columns: full_spec_id, feature_group, shap_pvalue, shap_rank,
-#'   total_units, shap_significance_level
-#'
-#' @details
-#' For each specification x feature_group combination:
-#' \itemize{
-#'   \item Extracts relevant SHAP values for all units
-#'   \item Ranks units based on the chosen pvalue_method ("absolute" or "signed")
-#'   \item Calculates p-value based on treated unit's rank position
-#'   \item Assigns significance levels for visualization mapping
-#' }
-calculate_shap_significance <- function(shap_data, treated_unit_name, pvalue_method = "absolute") { # NEW PARAMETER
-
-    if (!data.table::is.data.table(shap_data)) {
-        shap_data <- data.table::as.data.table(shap_data)
-    }
-
-    # Input validation for pvalue_method
-    valid_pvalue_methods <- c("absolute", "signed")
-    if (!pvalue_method %in% valid_pvalue_methods) {
-        stop("pvalue_method must be one of: ", paste(valid_pvalue_methods, collapse = ", "))
-    }
-
-    # Calculate significance for each specification x feature_group combination
-    significance_results <- shap_data[, {
-
-        treated_shap <- shapley_value[unit == treated_unit_name]
-
-        if (length(treated_shap) == 0) {
-            # Treated unit not found for this spec x feature_group
-            list(
-                shap_pvalue = NA_real_,
-                shap_rank = NA_integer_,
-                total_units = .N,
-                shap_significance_level = NA_real_
-            )
-        } else {
-            if (pvalue_method == "absolute") {
-                # Original logic: Rank by absolute SHAP value (most important = rank 1)
-                shap_rank_val <- NA_integer_
-                abs_shap_values <- abs(shapley_value)
-                unit_ranks <- rank(-abs_shap_values, ties.method = "min")
-                treated_rank <- unit_ranks[unit == treated_unit_name][1]
-                p_value <- treated_rank / .N # One-sided test for unusual importance
-
-            } else if (pvalue_method == "signed") {
-                # Signed significance: Compare treated unit's signed SHAP to controls
-                # This is more complex as it implies a two-sided test around zero,
-                # or separate one-sided tests for positive/negative.
-                # A common approach for "signed" significance in placebo inference
-                # is to rank within the positive values and within the negative values.
-                # For simplicity here, we can consider a 'two-tailed' rank against zero.
-
-                # Rank negative SHAP values (more negative = lower rank)
-                # Rank positive SHAP values (more positive = lower rank of absolute)
-                # Then combine for a two-sided p-value.
-
-                # Let's use a simpler approach that mimics a t-test idea with ranks:
-                # How extreme is the treated unit's value compared to the distribution of controls?
-
-                # Rank all values. If a value is positive and large, its rank should be low.
-                # If a value is negative and large, its rank should be low.
-                # We need to rank by distance from zero for the magnitude, and then consider sign.
-
-                # For signed:
-                # 1. Rank units by their signed SHAP values in ascending order.
-                # 2. Get the rank of the treated unit.
-                # 3. Calculate p-value based on this rank, assuming a null of zero.
-                # This is effectively checking if the treated unit's SHAP value is unusually high OR unusually low.
-
-                # Rank based on the actual signed value (ascending rank: smallest value = 1)
-                signed_ranks_asc <- rank(shapley_value, ties.method = "average")
-                treated_signed_rank_asc <- signed_ranks_asc[unit == treated_unit_name][1]
-
-                # Rank based on the actual signed value (descending rank: largest value = 1)
-                signed_ranks_desc <- rank(-shapley_value, ties.method = "average")
-                treated_signed_rank_desc <- signed_ranks_desc[unit == treated_unit_name][1]
-
-                # The p-value is the smaller of (rank_asc / N) or (rank_desc / N)
-                # This approximates a two-sided p-value based on ranks.
-                p_value <- min(treated_signed_rank_asc / .N, treated_signed_rank_desc / .N) * 2 # Multiply by 2 for two-sided test
-                p_value <- pmin(p_value, 1.0) # Cap p-value at 1.0
-
-                # For signed significance, the rank `shap_rank` could be less intuitive
-                # as it's not simply "most important". We'll just store the one used for p-value.
-                shap_rank_val <- min(treated_signed_rank_asc, treated_signed_rank_desc)
-
-            } else {
-                # Should not happen due to validation, but as a safeguard
-                p_value <- NA_real_
-                shap_rank_val <- NA_integer_
-            }
-
-            # Create significance level for visualization mapping
-            significance_level <- ifelse(p_value < 0.05, 1.0,
-                                         ifelse(p_value < 0.10, 0.6, 0.3))
-
-            list(
-                shap_pvalue = p_value,
-                shap_rank = shap_rank_val, # Use the most extreme rank for reporting
-                total_units = .N,
-                shap_significance_level = significance_level
-            )
-        }
-
-    }, by = .(full_spec_id, feature_group)]
-
-    return(significance_results)
 }
 
 #' Calculate Specification Curve P-values on Filtered Data

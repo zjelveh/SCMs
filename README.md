@@ -183,7 +183,8 @@ plot_obj <- plot_spec_curve(
   long_data = spec_results,
   name_treated_unit = "treated",
   outcomes = "outcome",
-  show_shap = FALSE,
+  show_shap = TRUE,
+  show_predictions = TRUE,
   show_pvalues = TRUE,
   test_statistic = "treatment_effect"
 )
@@ -191,7 +192,7 @@ plot_obj <- plot_spec_curve(
 plot_obj$final_plot
 ```
 
-### Example Specification Curve Plot
+### Example Specification Curve Plot (Basque Data)
 
 ![Example specification curve plot](inst/examples/readme_spec_curve.png)
 

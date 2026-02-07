@@ -9,30 +9,22 @@ if (file.exists("DESCRIPTION") && requireNamespace("devtools", quietly = TRUE)) 
 }
 library(ggplot2)
 
-set.seed(42)
-d <- expand.grid(
-  unit = c("treated", "c1", "c2", "c3", "c4"),
-  year = 2001:2010,
-  KEEP.OUT.ATTRS = FALSE,
-  stringsAsFactors = FALSE
-)
+basque <- data.table::fread("inst/extdata/basque.csv")
+clean_id <- function(x) {
+  x <- gsub("[^A-Za-z0-9_]", "_", x)
+  x <- gsub("_{2,}", "_", x)
+  x <- gsub("_+$", "", x)
+  x
+}
+basque$region_id <- clean_id(basque$regionname)
 
-d$unit_id <- gsub("[^A-Za-z0-9_]", "_", d$unit)
-
-d$outcome <-
-  100 + 0.5 * (d$year - 2001) +
-  ifelse(d$unit == "treated" & d$year >= 2007, 2, 0) +
-  rnorm(nrow(d), 0, 0.3)
-
-d$population <-
-  50 + 0.1 * (d$year - 2001) +
-  rnorm(nrow(d), 0, 0.2)
+treated_unit <- clean_id("Basque Country (Pais Vasco)")
 
 spec_results <- spec_curve(
-  dataset = d,
-  outcomes = "outcome",
-  col_name_unit_name = "unit_id",
-  name_treated_unit = "treated",
+  dataset = basque,
+  outcomes = "gdpcap",
+  col_name_unit_name = "region_id",
+  name_treated_unit = treated_unit,
   covagg = list(
     "Outcome Per Period" = list(
       label = "Outcome Per Period",
@@ -40,17 +32,20 @@ spec_results <- spec_curve(
         list(var = "outcome_var", partition_periods = list(type = "by_period"))
       )
     ),
-    "Outcome Per Period + Population Mean" = list(
-      label = "Outcome Per Period + Population Mean",
+    "Outcome Mean" = list(
+      label = "Outcome Mean",
       operations = list(
-        list(var = "outcome_var", partition_periods = list(type = "by_period")),
-        list(var = "population", compute = "mean")
+        list(
+          var = "outcome_var",
+          partition_periods = list(type = "all"),
+          compute = "mean"
+        )
       )
     )
   ),
-  treated_period = 2007,
-  min_period = 2001,
-  end_period = 2010,
+  treated_period = 1970,
+  min_period = 1955,
+  end_period = 1997,
   col_name_period = "year",
   feature_weights = c("uniform", "optimize"),
   outcome_models = c("none", "ridge"),
@@ -64,9 +59,10 @@ spec_results <- spec_curve(
 
 plot_obj <- plot_spec_curve(
   long_data = spec_results,
-  name_treated_unit = "treated",
-  outcomes = "outcome",
-  show_shap = FALSE,
+  name_treated_unit = treated_unit,
+  outcomes = "gdpcap",
+  show_shap = TRUE,
+  show_predictions = TRUE,
   show_pvalues = TRUE,
   test_statistic = "treatment_effect"
 )
