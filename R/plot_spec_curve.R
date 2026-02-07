@@ -881,18 +881,40 @@ plot_spec_curve <- function(
                               by.y = c('unit', 'full_spec_id', 'feature_group', 'feature'),
                               all.x = TRUE)
         
-        # Debug: Check merge success rate
-        treated_rows_before <- nrow(panel_b_data_before_merge[unit_name == name_treated_unit])
-        treated_rows_with_shap <- nrow(panel_b_data[unit_name == name_treated_unit & !is.na(shapley_value)])
-        merge_success_rate <- treated_rows_with_shap / treated_rows_before * 100
-        message("SHAP merge success: ", treated_rows_with_shap, "/", treated_rows_before, 
-                " (", round(merge_success_rate, 1), "%) rows got SHAP values")
+        # Debug: Check merge success rate on mergeable rows only.
+        # Panel B may contain feature groups that are intentionally absent from SHAP
+        # (e.g., non-varying groups removed before model fitting), so the denominator
+        # should be restricted to groups that exist in SHAP for the treated unit.
+        treated_before <- panel_b_data_before_merge[unit_name == name_treated_unit]
+        treated_after <- panel_b_data[unit_name == name_treated_unit]
+        shap_groups_treated <- unique(shap_aggregated[unit == name_treated_unit]$feature_group)
         
-        if (merge_success_rate < 50) {
-            warning("Low SHAP merge success rate (", round(merge_success_rate, 1), "%). ",
-                    "Feature name mismatch may still exist between panel_b_data and aggregated SHAP values.")
+        if (length(shap_groups_treated) == 0) {
+            warning("No treated-unit SHAP feature groups available after aggregation. ",
+                    "Cannot assess SHAP merge coverage.")
         } else {
-            message("SHAP merging successful - aggregation approach resolved feature granularity mismatch")
+            treated_mergeable_before <- treated_before[feature_group %in% shap_groups_treated]
+            treated_mergeable_after <- treated_after[feature_group %in% shap_groups_treated]
+            mergeable_rows_before <- nrow(treated_mergeable_before)
+            mergeable_rows_with_shap <- nrow(treated_mergeable_after[!is.na(shapley_value)])
+            
+            if (mergeable_rows_before == 0) {
+                warning("No mergeable Panel B rows found for treated unit across SHAP feature groups. ",
+                        "Feature group naming mismatch may exist.")
+            } else {
+                merge_success_rate <- mergeable_rows_with_shap / mergeable_rows_before * 100
+                message("SHAP merge success (mergeable rows): ",
+                        mergeable_rows_with_shap, "/", mergeable_rows_before,
+                        " (", round(merge_success_rate, 1), "%)")
+                
+                if (merge_success_rate < 50) {
+                    warning("Low SHAP merge success rate on mergeable rows (",
+                            round(merge_success_rate, 1), "%). ",
+                            "Feature group/value mismatch may still exist between panel_b_data and aggregated SHAP values.")
+                } else {
+                    message("SHAP merging successful on mergeable rows.")
+                }
+            }
         }
     }
 
@@ -1858,5 +1880,4 @@ calculate_spec_curve_pvalues_filtered <- function(filtered_results, abadie_infer
         stouffer_pvalues = stouffer_results
     ))
 }
-
 
