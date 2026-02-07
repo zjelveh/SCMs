@@ -712,7 +712,7 @@ scdata <- function(df,
   
   # Matrix B kept unchanged - constant terms now handled in separate C matrix
 
-  # Create C matrix for covariate adjustments (following SCPI approach)
+  # Create constant-design matrix C for intercept handling
   C <- NULL
   if (constant == TRUE) {
     C <- matrix(1, nrow = nrow(B), ncol = 1)
@@ -720,7 +720,7 @@ scdata <- function(df,
     rownames(C) <- rownames(B)
   }
 
-  # Combine matrices following SCPI structure: X = [A, B, C]
+  # Combine matrices for missing-data filtering: X = [A, B, C]
   if (!is.null(C)) {
     X <- cbind(A, B, C)
   } else {
