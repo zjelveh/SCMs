@@ -1256,8 +1256,8 @@ plot_spec_curve <- function(
     fg_order <- sort(unique(as.character(plot_data_p2$feature_group)))
 
     y_pos <- 1.0
-    within_group_step <- 0.55  # tighter spacing within categories
-    between_group_gap <- 1.8   # wider gap between categories
+    within_group_step <- 0.70  # improve readability between adjacent feature labels
+    between_group_gap <- 2.10  # keep clear separation between feature groups
     group_boundaries <- list()
     y_mapping <- data.table::data.table(
         feature_group = character(0),
@@ -1402,7 +1402,7 @@ plot_spec_curve <- function(
     cat_y_npc <- sapply(fg_order, function(fg) to_npc(group_disc_boundaries[[fg]]$mid))
     cat_grob <- grid::textGrob(
         label = cat_labels_text,
-        x = grid::unit(0.5, "npc"),
+        x = grid::unit(0.56, "npc"),
         y = grid::unit(cat_y_npc, "npc"),
         hjust = 0.5, vjust = 0.5,
         gp = grid::gpar(fontsize = 9, fontface = "bold")
@@ -1417,10 +1417,10 @@ plot_spec_curve <- function(
         x = grid::unit(1, "npc"),
         y = grid::unit(subcat_y_npc, "npc"),
         hjust = 1, vjust = 0.5,
-        gp = grid::gpar(fontsize = 8),
+        gp = grid::gpar(fontsize = 8, lineheight = 1.1),
         default.units = "npc",
-        padding = grid::unit(c(0, 4, 0, 0), "pt"),
-        margin = grid::unit(c(0, 2, 0, 0), "pt"),
+        padding = grid::unit(c(1, 8, 1, 1), "pt"),
+        margin = grid::unit(c(1, 3, 1, 1), "pt"),
         box_gp = grid::gpar(col = NA, fill = NA)
     )
 
@@ -1430,8 +1430,8 @@ plot_spec_curve <- function(
     p2_panel_row_b <- max(p2_grob$layout$b[p2_panel_idx])
 
     # Insert category column (col 1) and subcategory column (col 2) at left
-    p2_grob <- gtable::gtable_add_cols(p2_grob, grid::unit(1.5, "cm"), pos = 0)
-    p2_grob <- gtable::gtable_add_cols(p2_grob, grid::unit(4.0, "cm"), pos = 1)
+    p2_grob <- gtable::gtable_add_cols(p2_grob, grid::unit(1.9, "cm"), pos = 0)
+    p2_grob <- gtable::gtable_add_cols(p2_grob, grid::unit(4.8, "cm"), pos = 1)
 
     p2_grob <- gtable::gtable_add_grob(p2_grob, cat_grob,
         t = p2_panel_row_t, b = p2_panel_row_b,
@@ -1496,6 +1496,8 @@ plot_spec_curve <- function(
 
     # Combine panels
     final_plot <- gridExtra::gtable_rbind(p1_grob, p2_grob, size = "last")
+    # Add a small global left gutter so category labels are not flush with image edge.
+    final_plot <- gtable::gtable_add_cols(final_plot, grid::unit(0.45, "cm"), pos = 0)
 
     # Set Panel A panel row height so it gets ~30% of figure
     p1_panel_row <- unique(p1_grob$layout$t[p1_panel_ids])
