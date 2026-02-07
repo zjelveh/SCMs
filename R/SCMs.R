@@ -80,8 +80,8 @@
 #'   \item Multiple constraint types: simplex, lasso, ridge, OLS
 #'   \item Various outcome models: OLS, Ridge, Lasso, Augmented Synthetic Control
 #'   \item Parallel processing for specification curve analysis
-#'   \item SCPI-based inference for prediction intervals
 #'   \item Placebo-based inference for statistical significance
+#'   \item Bootstrap null inference for additional uncertainty assessment
 #' }
 #'
 NULL
