@@ -641,8 +641,11 @@ run_advanced_shap_analysis <- function(spec_results, xgboost_config = NULL) {
     )
   }
 
-  # Run XGBoost SHAP analysis
-  shap_results <- run_xgboost_shap_analysis(spec_results, xgboost_config)
+  # Run XGBoost SHAP analysis on long-format specification results
+  shap_results <- run_xgboost_shap_analysis(
+    long_data = spec_results$results,
+    config = xgboost_config
+  )
 
   return(shap_results)
 }

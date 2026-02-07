@@ -2,7 +2,7 @@
 % Please edit documentation in R/xgboost_shap_analysis.R
 \name{create_xgboost_config}
 \alias{create_xgboost_config}
-\title{Execute Complete XGBoost and SHAP Analysis Pipeline}
+\title{Create Configuration for Direct Long Format Analysis}
 \usage{
 create_xgboost_config(
   dataset_name,
@@ -39,41 +39,19 @@ If NULL, uses an internal default grid.}
 
 \item{xgboost_params}{List. Fixed parameters for XGBoost training. If NULL,
 defaults are used. If tune_xgboost is TRUE, xgboost_params must be NULL.}
-
-\item{config}{List. Configuration object from \code{create_xgboost_config}.}
 }
 \value{
-List containing:
-\itemize{
-\item \code{results} - Feature importance results for all units
-\item \code{shapley} - SHAP values for all units
-\item \code{predictions} - Predictions for all units
-\item \code{config} - Original configuration object
-}
-
 List containing configuration parameters.
 }
 \description{
-Runs the complete pipeline for XGBoost modeling and SHAP analysis
-on specification curve results for all units in the dataset.
-
 Creates configuration for XGBoost analysis that works directly
 with long format data from spec_curve().
 }
-\details{
-Run Complete XGBoost SHAP Analysis
-}
 \examples{
-\dontrun{
-# Create configuration and run analysis
-config <- create_xgboost_config(
-  dataset_name = "homicide_study",
-  file_path = "results/spec_curve_results.csv", 
-  treated_unit_name = "PAPEP0000"
+xgb_cfg <- create_xgboost_config(
+  dataset_name = "toy",
+  treated_unit_name = "treated",
+  outcome_filter = "outcome",
+  spec_features = c("feat", "outcome_model", "const", "fw", "data_sample")
 )
-
-results <- run_xgboost_shap_analysis(config)
-}
-Create Configuration for Direct Long Format XGBoost Analysis
-
 }

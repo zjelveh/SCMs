@@ -1,34 +1,3 @@
-#' Run Complete XGBoost SHAP Analysis
-#'
-#' @title Execute Complete XGBoost and SHAP Analysis Pipeline
-#' @description Runs the complete pipeline for XGBoost modeling and SHAP analysis
-#' on specification curve results for all units in the dataset.
-#'
-#' @param config List. Configuration object from \code{create_xgboost_config}.
-#'
-#' @return List containing:
-#'   \itemize{
-#'     \item \code{results} - Feature importance results for all units
-#'     \item \code{shapley} - SHAP values for all units
-#'     \item \code{predictions} - Predictions for all units
-#'     \item \code{config} - Original configuration object
-#'   }
-#'
-#' @export
-#'
-#' @examples
-#' \dontrun{
-#' # Create configuration and run analysis
-#' config <- create_xgboost_config(
-#'   dataset_name = "homicide_study",
-#'   file_path = "results/spec_curve_results.csv", 
-#'   treated_unit_name = "PAPEP0000"
-#' )
-#' 
-#' results <- run_xgboost_shap_analysis(config)
-#' }
-#' Create Configuration for Direct Long Format XGBoost Analysis
-#'
 #' @title Create Configuration for Direct Long Format Analysis
 #' @description Creates configuration for XGBoost analysis that works directly
 #' with long format data from spec_curve().
@@ -51,6 +20,14 @@
 #' @return List containing configuration parameters.
 #'
 #' @export
+#'
+#' @examples
+#' xgb_cfg <- create_xgboost_config(
+#'   dataset_name = "toy",
+#'   treated_unit_name = "treated",
+#'   outcome_filter = "outcome",
+#'   spec_features = c("feat", "outcome_model", "const", "fw", "data_sample")
+#' )
 create_xgboost_config <- function(dataset_name, 
                                         treated_unit_name,
                                         outcome_filter = NULL,
@@ -303,11 +280,11 @@ tune_xgboost_params <- function(unit_data, config, all_factor_levels = NULL) {
 #'
 #' @title Run Direct XGBoost Analysis on Long Format Data
 #' @description Performs XGBoost modeling and SHAP analysis directly on long format
-#' data from spec_curve(..., output_format = "long"). This eliminates the need
-#' for CSV files and complex data reconstruction.
+#' data produced by \code{spec_curve()} or \code{run_spec_curve_analysis()}.
 #'
-#' @param long_data Data.table. Long format data from spec_curve analysis.
+#' @param long_data Data.table. Long format data (typically \code{spec_results$results}).
 #' @param config List. Configuration object from \code{create_xgboost_config}.
+#' @param compute_loo Logical. If TRUE (default), compute leave-one-out predictions.
 #'
 #' @return List containing:
 #'   \itemize{
@@ -318,6 +295,20 @@ tune_xgboost_params <- function(unit_data, config, all_factor_levels = NULL) {
 #'   }
 #'
 #' @export
+#'
+#' @examples
+#' \dontrun{
+#' spec_results <- run_spec_curve_analysis(dataset, params)
+#' xgb_cfg <- create_xgboost_config(
+#'   dataset_name = "toy",
+#'   treated_unit_name = "treated",
+#'   outcome_filter = "outcome"
+#' )
+#' shap_results <- run_xgboost_shap_analysis(
+#'   long_data = spec_results$results,
+#'   config = xgb_cfg
+#' )
+#' }
 run_xgboost_shap_analysis <- function(long_data, config, compute_loo = TRUE) {
   if (!requireNamespace("xgboost", quietly = TRUE)) {
     stop("Package 'xgboost' is required for SHAP analysis. Install with: install.packages('xgboost')", call. = FALSE)

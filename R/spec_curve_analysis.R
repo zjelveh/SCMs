@@ -123,9 +123,6 @@ run_spec_curve_analysis <- function(dataset, params, cores = 1, output_dir = NUL
   
   actual_outcomes <- all_params$outcomes
   
-  # Remove output_format parameter (no longer used)
-  all_params$output_format <- NULL
-  
   # Call spec_curve with all parameters
   results <- do.call(spec_curve, all_params)
   

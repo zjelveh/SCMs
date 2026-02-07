@@ -7,9 +7,11 @@
 run_xgboost_shap_analysis(long_data, config, compute_loo = TRUE)
 }
 \arguments{
-\item{long_data}{Data.table. Long format data from spec_curve analysis.}
+\item{long_data}{Data.table. Long format data (typically \code{spec_results$results}).}
 
 \item{config}{List. Configuration object from \code{create_xgboost_config}.}
+
+\item{compute_loo}{Logical. If TRUE (default), compute leave-one-out predictions.}
 }
 \value{
 List containing:
@@ -22,9 +24,22 @@ List containing:
 }
 \description{
 Performs XGBoost modeling and SHAP analysis directly on long format
-data from spec_curve(..., output_format = "long"). This eliminates the need
-for CSV files and complex data reconstruction.
+data produced by \code{spec_curve()} or \code{run_spec_curve_analysis()}.
 }
 \details{
 Run XGBoost SHAP Analysis on Long Format Data
+}
+\examples{
+\dontrun{
+spec_results <- run_spec_curve_analysis(dataset, params)
+xgb_cfg <- create_xgboost_config(
+  dataset_name = "toy",
+  treated_unit_name = "treated",
+  outcome_filter = "outcome"
+)
+shap_results <- run_xgboost_shap_analysis(
+  long_data = spec_results$results,
+  config = xgb_cfg
+)
+}
 }
