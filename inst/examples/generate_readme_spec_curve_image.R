@@ -157,6 +157,7 @@ plot_obj <- plot_spec_curve(
   outcomes = outcome,
   show_shap = TRUE,
   shap_label_type = "signed",
+  richtext_feature_labels = FALSE,
   shap_values = shap_result$shapley,
   show_predictions = TRUE,
   predictions = shap_result$predictions,

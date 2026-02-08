@@ -24,6 +24,7 @@ plot_spec_curve(
   filter_specs = NULL,
   show_shap = TRUE,
   shap_label_type = "absolute",
+  richtext_feature_labels = TRUE,
   show_predictions = FALSE,
   predictions = NULL,
   xgboost_params = NULL,
@@ -121,6 +122,10 @@ Default is TRUE.
 \item "signed": Shows mean SHAP values with sign, e.g., "ridge (+0.089)" or "lasso (-0.045)"
 Default is "absolute".
 }}
+
+\item{richtext_feature_labels}{Logical. Whether to render Panel B feature labels
+using rich HTML text (colored SHAP values). Set to FALSE for plain text labels,
+which can be more robust in some SVG renderers (e.g., GitHub). Default is TRUE.}
 
 \item{show_predictions}{Logical. Whether to display predicted treatment effects from XGBoost models
 alongside actual treatment effects in Panel A. Uses leave-one-out cross-validation predictions
