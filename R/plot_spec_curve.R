@@ -1220,7 +1220,7 @@ plot_spec_curve <- function(
         treated_curve <- spec_curve_pvals$treated_summary
 
         if (!is.null(treated_curve) && nrow(treated_curve) > 0) {
-            req_cols <- c("curve_statistic", "weighting", "estimate", "p_value", "n_extreme", "n_placebos")
+            req_cols <- c("curve_statistic", "weighting", "p_value", "n_extreme", "n_placebos")
             missing_cols <- setdiff(req_cols, names(treated_curve))
             if (length(missing_cols) > 0) {
                 stop(
@@ -1234,17 +1234,19 @@ plot_spec_curve <- function(
             treated_curve[, weight_rank := ifelse(weighting == "none", 1L, 2L)]
             data.table::setorder(treated_curve, stat_rank, weight_rank)
 
-            format_rank_piece <- function(row_dt, stat_symbol) {
-                rank_num <- as.integer(row_dt$n_extreme) + 1L
-                rank_den <- as.integer(row_dt$n_placebos) + 1L
-                rank_label <- if (isTRUE(two_sided)) {
+            rank_label_from_symbol <- function(stat_symbol) {
+                if (isTRUE(two_sided)) {
                     paste0("rank(|", stat_symbol, "|)")
                 } else {
                     paste0("rank(", stat_symbol, ")")
                 }
+            }
+
+            format_rank_value <- function(row_dt) {
+                rank_num <- as.integer(row_dt$n_extreme) + 1L
+                rank_den <- as.integer(row_dt$n_placebos) + 1L
                 sprintf(
-                    "%s: %d/%d (p = %.3f)",
-                    rank_label,
+                    "%d/%d (p = %.3f)",
                     rank_num,
                     rank_den,
                     row_dt$p_value
@@ -1263,9 +1265,9 @@ plot_spec_curve <- function(
                 annotation_lines <- c(
                     annotation_lines,
                     sprintf(
-                        "Median tau = %.3f; %s",
-                        median_row$estimate,
-                        format_rank_piece(median_row, "median tau")
+                        "Median %s: %s",
+                        rank_label_from_symbol("median tau"),
+                        format_rank_value(median_row)
                     )
                 )
             }
@@ -1277,20 +1279,19 @@ plot_spec_curve <- function(
 
                 if (nrow(row_none) > 0 && nrow(row_wt) > 0) {
                     line_w <- sprintf(
-                        "Wilcoxon SR [none/wt] = %.3f / %.3f; %s / %s",
-                        row_none$estimate[1],
-                        row_wt$estimate[1],
-                        format_rank_piece(row_none[1], "W_SR"),
-                        format_rank_piece(row_wt[1], "W_SR")
+                        "Wilcoxon SR %s [none/wt]: %s / %s",
+                        rank_label_from_symbol("W_SR"),
+                        format_rank_value(row_none[1]),
+                        format_rank_value(row_wt[1])
                     )
                 } else {
                     row_one <- wilcox_rows[1]
                     weight_tag <- if (row_one$weighting == "pre_rmspe_percentile") " [wt]" else " [none]"
                     line_w <- sprintf(
-                        "Wilcoxon SR%s = %.3f; %s",
+                        "Wilcoxon SR %s%s: %s",
+                        rank_label_from_symbol("W_SR"),
                         weight_tag,
-                        row_one$estimate,
-                        format_rank_piece(row_one, "W_SR")
+                        format_rank_value(row_one)
                     )
                 }
                 annotation_lines <- c(annotation_lines, line_w)
