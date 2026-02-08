@@ -26,13 +26,15 @@ utils::globalVariables(c(
   
   # Statistical inference variables
   "p_value", "p_value_one_sided", "p_value_two_tailed", "significance_category",
-  "is_significant", "is_treated", "pval_rank_med", "pval_rank_z", 
-  "rank_med", "rank_z", "zscore", "test_statistic_value",
+  "is_significant", "is_treated", "test_statistic_value",
+  "tau_s", "spec_count", "spec_ids", "n_unique_rmse", "pre_rmspe",
+  "curve_statistic", "n_specs", "n_extreme", "n_placebos", "estimate",
+  "stat_rank", "weight_rank", "weighting",
   
   # Treatment effect variables
   "avg_tau", "ave_tau", "avg_treatment_effect", "median_tau", 
   "post_pre_ratio", "pre_rmse", "rmse", "predicted_loo",
-  "diff_with_treated", "treated_unit", "mean_z", "unit",
+  "diff_with_treated", "treated_unit", "unit",
   
   # Outcome and covariate processing
   "magnitude", "label", "new_specification", "original_feature",

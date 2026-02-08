@@ -31,6 +31,30 @@
 #' @param p_threshold Numeric. P-value threshold for significance coloring. Default is 0.05.
 #' @param prefer_bootstrap_pvalues Logical. Whether to prefer bootstrap p-values over Abadie p-values
 #'   when both are available. Default is FALSE (prefer Abadie).
+#' @param curve_stat Character vector. Curve-level statistics to compute for placebo-in-space
+#'   inference annotation. Options: \code{"median"} and \code{"wilcoxon_sr"}.
+#'   Default is \code{c("median", "wilcoxon_sr")}.
+#' @param weighting Character vector. Weighting modes to evaluate for curve-level statistics.
+#'   Options: \code{"none"} and \code{"pre_rmspe_percentile"}.
+#'   Default is \code{c("none", "pre_rmspe_percentile")}.
+#'   Weighting affects \code{"wilcoxon_sr"}; \code{"median"} is reported for each requested
+#'   weighting mode for completeness.
+#' @param two_sided Logical. If \code{TRUE} (default), curve-level p-values use absolute-tail
+#'   placebo comparison: \code{(1 + sum(abs(placebo) >= abs(observed))) / (J + 1)}.
+#'   If \code{FALSE}, one-sided comparison is used with \code{expected_direction} from
+#'   \code{long_data} (\code{"negative"} or \code{"positive"} required).
+#' @param grid_policy Character. How to handle incomplete placebo specification grids when
+#'   computing curve-level p-values. Options:
+#'   \itemize{
+#'     \item \code{"strict"} (default): fail if any placebo unit is missing/has extra specs.
+#'     \item \code{"drop_incomplete_units"}: keep full treated spec grid, drop placebo units
+#'       that do not exactly match it.
+#'     \item \code{"intersect_specs"}: keep all units, restrict to specs shared by all units.
+#'   }
+#' @param min_placebos Integer. Minimum number of placebo units required after applying
+#'   \code{grid_policy}. Default is 1.
+#' @param min_specs Integer. Minimum number of specifications required after applying
+#'   \code{grid_policy}. Default is 2.
 #' @param test_statistic Character. Which test statistic p-values to use for coloring.
 #'   Options: "rmse_ratio" (default), "treatment_effect", "normalized_te".
 #'   Only applies to Abadie placebo inference which provides multiple test statistics.
@@ -97,7 +121,10 @@
 #'   \item computed_shap: Complete results from internal SHAP computation (NULL if external shap_values provided or show_shap=FALSE). 
 #'     Contains: results (feature importance), shapley (SHAP values), predictions (model predictions), models (trained XGBoost models), config (SHAP configuration)
 #'   \item spec_curve_pvals: List with specification curve-level p-values calculated on filtered data:
-#'     median_tau_pvalues (median treatment effect ranks), stouffer_pvalues (Stouffer's Z-method ranks). NULL if no inference data available
+#'     \code{treated_summary} (treated-unit curve estimates and p-values) and
+#'     \code{stats_by_unit} (curve statistics for treated and placebo units), plus
+#'     \code{attrition_report} summarizing unit/spec retention under \code{grid_policy}.
+#'     NULL if no inference data available.
 #'   \item filtered_specs: Integer count of specifications remaining after filtering (before filtering if filter_specs=NULL)
 #'   \item feature_groups_displayed: Character vector of feature groups shown in Panel B (only groups with variation in filtered data)
 #' }
@@ -226,6 +253,12 @@ plot_spec_curve <- function(
     show_pvalues = FALSE,
     p_threshold = 0.05,
     prefer_bootstrap_pvalues = FALSE,
+    curve_stat = c("median", "wilcoxon_sr"),
+    weighting = c("none", "pre_rmspe_percentile"),
+    two_sided = TRUE,
+    grid_policy = "strict",
+    min_placebos = 1L,
+    min_specs = 2L,
     test_statistic = "rmse_ratio",
     null_distribution = "placebo",
     crop_outliers = "none",
@@ -358,6 +391,46 @@ plot_spec_curve <- function(
     if (!shap_label_type %in% valid_shap_label_types) {
         stop("shap_label_type must be one of: ", paste(valid_shap_label_types, collapse = ", "))
     }
+
+    # Validate curve-level inference settings
+    valid_curve_stats <- c("median", "wilcoxon_sr")
+    if (!is.character(curve_stat) || length(curve_stat) < 1) {
+        stop("curve_stat must be a non-empty character vector.")
+    }
+    curve_stat <- unique(curve_stat)
+    invalid_curve_stats <- setdiff(curve_stat, valid_curve_stats)
+    if (length(invalid_curve_stats) > 0) {
+        stop("curve_stat contains invalid values: ", paste(invalid_curve_stats, collapse = ", "),
+             ". Valid options are: ", paste(valid_curve_stats, collapse = ", "))
+    }
+
+    valid_weighting <- c("none", "pre_rmspe_percentile")
+    if (!is.character(weighting) || length(weighting) < 1) {
+        stop("weighting must be a non-empty character vector.")
+    }
+    weighting <- unique(weighting)
+    invalid_weighting <- setdiff(weighting, valid_weighting)
+    if (length(invalid_weighting) > 0) {
+        stop("weighting contains invalid values: ", paste(invalid_weighting, collapse = ", "),
+             ". Valid options are: ", paste(valid_weighting, collapse = ", "))
+    }
+    if (!is.logical(two_sided) || length(two_sided) != 1 || is.na(two_sided)) {
+        stop("two_sided must be a single TRUE/FALSE value.")
+    }
+    valid_grid_policy <- c("strict", "drop_incomplete_units", "intersect_specs")
+    if (!is.character(grid_policy) || length(grid_policy) != 1 || !grid_policy %in% valid_grid_policy) {
+        stop("grid_policy must be one of: ", paste(valid_grid_policy, collapse = ", "))
+    }
+    if (!is.numeric(min_placebos) || length(min_placebos) != 1 || is.na(min_placebos) ||
+        is.infinite(min_placebos) || min_placebos < 1 || min_placebos %% 1 != 0) {
+        stop("min_placebos must be a single integer >= 1.")
+    }
+    if (!is.numeric(min_specs) || length(min_specs) != 1 || is.na(min_specs) ||
+        is.infinite(min_specs) || min_specs < 2 || min_specs %% 1 != 0) {
+        stop("min_specs must be a single integer >= 2.")
+    }
+    min_placebos <- as.integer(min_placebos)
+    min_specs <- as.integer(min_specs)
 
     # Input validation and data extraction
     if (is.list(long_data) && "results" %in% names(long_data)) {
@@ -1119,76 +1192,124 @@ plot_spec_curve <- function(
     # and avoids unnecessary inference work when p-values are hidden.
     spec_curve_pvals <- NULL
     if (show_pvalues && is.list(long_data)) {
-        # Get expected direction from long_data or default to negative
-        expected_direction <- if (!is.null(long_data$expected_direction)) long_data$expected_direction else "negative"
+        expected_direction <- if (!is.null(long_data$expected_direction)) long_data$expected_direction else NULL
 
-        # Get abadie inference if available
-        abadie_inference <- if (!is.null(long_data$abadie_inference)) long_data$abadie_inference else NULL
+        if (!two_sided) {
+            if (is.null(expected_direction) || !expected_direction %in% c("negative", "positive")) {
+                stop("two_sided=FALSE requires long_data$expected_direction to be either 'negative' or 'positive'.")
+            }
+        } else if (is.null(expected_direction)) {
+            expected_direction <- "two_sided"
+        }
 
         # Calculate p-values on the filtered data (sc_results_df after all filtering)
         spec_curve_pvals <- calculate_spec_curve_pvalues_filtered(
             filtered_results = sc_results_df,
-            abadie_inference = abadie_inference,
+            curve_stat = curve_stat,
+            weighting = weighting,
+            two_sided = two_sided,
             expected_direction = expected_direction,
-            name_treated_unit = name_treated_unit
+            grid_policy = grid_policy,
+            min_placebos = min_placebos,
+            min_specs = min_specs
         )
     }
 
     # Add specification curve p-values annotation if calculated
     if (!is.null(spec_curve_pvals)) {
+        treated_curve <- spec_curve_pvals$treated_summary
 
-        # Extract treated unit p-values for both test statistics
-        treated_median_pval <- NULL
-        treated_stouffer_pval <- NULL
-
-        # Get median tau p-value for treated unit
-        if (!is.null(spec_curve_pvals$median_tau_pvalues)) {
-            median_pvals <- spec_curve_pvals$median_tau_pvalues
-            treated_median_data <- median_pvals[unit_type == "treated"]
-            if (nrow(treated_median_data) > 0) {
-                treated_median_pval <- treated_median_data$pval_rank_med[1]
+        if (!is.null(treated_curve) && nrow(treated_curve) > 0) {
+            req_cols <- c("curve_statistic", "weighting", "estimate", "p_value", "n_extreme", "n_placebos")
+            missing_cols <- setdiff(req_cols, names(treated_curve))
+            if (length(missing_cols) > 0) {
+                stop(
+                    "treated_summary is missing required columns for curve-level annotation: ",
+                    paste(missing_cols, collapse = ", ")
+                )
             }
-        }
 
-        # Get Stouffer's method p-value for treated unit
-        if (!is.null(spec_curve_pvals$stouffer_pvalues) && nrow(spec_curve_pvals$stouffer_pvalues) > 0) {
-            stouffer_pvals <- spec_curve_pvals$stouffer_pvalues
-            treated_stouffer_data <- stouffer_pvals[unit_type == "treated"]
-            if (nrow(treated_stouffer_data) > 0) {
-                treated_stouffer_pval <- treated_stouffer_data$pval_rank_z[1]
+            treated_curve <- data.table::copy(treated_curve)
+            treated_curve[, stat_rank := ifelse(curve_statistic == "median", 1L, 2L)]
+            treated_curve[, weight_rank := ifelse(weighting == "none", 1L, 2L)]
+            data.table::setorder(treated_curve, stat_rank, weight_rank)
+
+            format_rank_piece <- function(row_dt, stat_symbol) {
+                rank_num <- as.integer(row_dt$n_extreme) + 1L
+                rank_den <- as.integer(row_dt$n_placebos) + 1L
+                rank_label <- if (isTRUE(two_sided)) {
+                    paste0("rank(|", stat_symbol, "|)")
+                } else {
+                    paste0("rank(", stat_symbol, ")")
+                }
+                sprintf(
+                    "%s: %d/%d (p = %.3f)",
+                    rank_label,
+                    rank_num,
+                    rank_den,
+                    row_dt$p_value
+                )
             }
-        }
 
-        # Create annotation text if we have at least one p-value
-        if (!is.null(treated_median_pval) || !is.null(treated_stouffer_pval)) {
             annotation_lines <- c()
 
-            if (!is.null(treated_median_pval)) {
-                treated_median_rank <- treated_median_data$rank_med[1]
-                # Calculate total units from the full median_pvals data
-                total_median_units <- nrow(median_pvals)
-                annotation_lines <- c(annotation_lines, sprintf("Median tau: p = %.3f (rank %d/%d)", treated_median_pval, treated_median_rank, total_median_units))
+            median_rows <- treated_curve[curve_statistic == "median"]
+            if (nrow(median_rows) > 0) {
+                median_row <- if ("none" %in% median_rows$weighting) {
+                    median_rows[weighting == "none"][1]
+                } else {
+                    median_rows[1]
+                }
+                annotation_lines <- c(
+                    annotation_lines,
+                    sprintf(
+                        "Median tau = %.3f; %s",
+                        median_row$estimate,
+                        format_rank_piece(median_row, "median tau")
+                    )
+                )
             }
 
-            if (!is.null(treated_stouffer_pval)) {
-                treated_stouffer_rank <- treated_stouffer_data$rank_z[1]
-                # Calculate total units from the full stouffer_pvals data
-                total_stouffer_units <- nrow(stouffer_pvals)
-                annotation_lines <- c(annotation_lines, sprintf("Stouffer: p = %.3f (rank %d/%d)", treated_stouffer_pval, treated_stouffer_rank, total_stouffer_units))
+            wilcox_rows <- treated_curve[curve_statistic == "wilcoxon_sr"]
+            if (nrow(wilcox_rows) > 0) {
+                row_none <- wilcox_rows[weighting == "none"]
+                row_wt <- wilcox_rows[weighting == "pre_rmspe_percentile"]
+
+                if (nrow(row_none) > 0 && nrow(row_wt) > 0) {
+                    line_w <- sprintf(
+                        "Wilcoxon SR [none/wt] = %.3f / %.3f; %s / %s",
+                        row_none$estimate[1],
+                        row_wt$estimate[1],
+                        format_rank_piece(row_none[1], "W_SR"),
+                        format_rank_piece(row_wt[1], "W_SR")
+                    )
+                } else {
+                    row_one <- wilcox_rows[1]
+                    weight_tag <- if (row_one$weighting == "pre_rmspe_percentile") " [wt]" else " [none]"
+                    line_w <- sprintf(
+                        "Wilcoxon SR%s = %.3f; %s",
+                        weight_tag,
+                        row_one$estimate,
+                        format_rank_piece(row_one, "W_SR")
+                    )
+                }
+                annotation_lines <- c(annotation_lines, line_w)
             }
 
-            spec_annotation_text <- paste(annotation_lines, collapse = "\n")
+            if (length(annotation_lines) > 0) {
+                spec_annotation_text <- paste(annotation_lines, collapse = "\n")
 
-            # Add annotation to upper-right of Panel A with semi-transparent background
-            p1 <- p1 +
-                annotate("label",
-                        x = Inf, y = Inf,
-                        label = spec_annotation_text,
-                        hjust = 1.05, vjust = 1.2,
-                        size = 2.8, color = "#000000",
-                        fontface = "plain",
-                        fill = "white", alpha = 0.8,
-                        linewidth = 0.3)
+                # Add annotation to upper-right of Panel A with semi-transparent background
+                p1 <- p1 +
+                    annotate("label",
+                            x = Inf, y = Inf,
+                            label = spec_annotation_text,
+                            hjust = 1.05, vjust = 1.2,
+                            size = 2.8, color = "#000000",
+                            fontface = "plain",
+                            fill = "white", alpha = 0.8,
+                            linewidth = 0.3)
+            }
         }
     }
 
@@ -1569,133 +1690,437 @@ plot_spec_curve <- function(
     return(return_object)
 }
 
+# Validate numeric vectors for curve-level statistics (fail hard).
+validate_curve_numeric_vector <- function(x, arg_name, min_length = 2L) {
+    if (!is.numeric(x)) {
+        stop(arg_name, " must be numeric.")
+    }
+    if (length(x) < min_length) {
+        stop(arg_name, " must have at least ", min_length, " elements.")
+    }
+    bad_idx <- which(is.na(x) | is.nan(x) | is.infinite(x))
+    if (length(bad_idx) > 0) {
+        idx_msg <- paste(utils::head(bad_idx, 10), collapse = ", ")
+        stop(arg_name, " contains NA/NaN/Inf at indices: ", idx_msg)
+    }
+}
+
+# Midrank percentile transform in (0,1).
+percentile_rank <- function(x, arg_name = "x") {
+    validate_curve_numeric_vector(x, arg_name, min_length = 2L)
+    ranks <- base::rank(x, ties.method = "average")
+    percentiles <- ranks / (length(x) + 1)
+    if (any(!(percentiles > 0 & percentiles < 1))) {
+        stop("percentile_rank produced values outside (0,1) for ", arg_name)
+    }
+    percentiles
+}
+
+curve_stat_median <- function(tau) {
+    validate_curve_numeric_vector(tau, "tau", min_length = 2L)
+    stats::median(tau)
+}
+
+curve_stat_wilcoxon_sr <- function(tau) {
+    validate_curve_numeric_vector(tau, "tau", min_length = 2L)
+    sr <- sum(sign(tau) * base::rank(abs(tau), ties.method = "average"))
+    if (!is.finite(sr)) {
+        stop("curve_stat_wilcoxon_sr produced a non-finite value.")
+    }
+    sr
+}
+
+curve_stat_wilcoxon_sr_weighted <- function(tau, pre_rmspe) {
+    validate_curve_numeric_vector(tau, "tau", min_length = 2L)
+    validate_curve_numeric_vector(pre_rmspe, "pre_rmspe", min_length = 2L)
+    if (length(tau) != length(pre_rmspe)) {
+        stop("tau and pre_rmspe must have identical lengths.")
+    }
+    signed_ranks <- sign(tau) * base::rank(abs(tau), ties.method = "average")
+    pw <- percentile_rank(pre_rmspe, arg_name = "pre_rmspe")
+    w <- 1 - pw
+    w_sum <- sum(w)
+    if (!is.finite(w_sum) || w_sum <= 0) {
+        stop("sum(w) must be positive and finite for curve_stat_wilcoxon_sr_weighted.")
+    }
+    sr_w <- sum(w * signed_ranks) / w_sum
+    if (!is.finite(sr_w)) {
+        stop("curve_stat_wilcoxon_sr_weighted produced a non-finite value.")
+    }
+    sr_w
+}
+
+compute_placebo_curve_pvalue <- function(observed_stat, placebo_stats, two_sided = TRUE,
+                                         expected_direction = "two_sided", stat_name = "curve_stat") {
+    if (!is.numeric(observed_stat) || length(observed_stat) != 1 || is.na(observed_stat) ||
+        is.nan(observed_stat) || is.infinite(observed_stat)) {
+        stop("Observed ", stat_name, " must be a finite numeric scalar.")
+    }
+    validate_curve_numeric_vector(placebo_stats, paste0("placebo_", stat_name), min_length = 1L)
+    j <- length(placebo_stats)
+
+    if (two_sided) {
+        n_extreme <- sum(abs(placebo_stats) >= abs(observed_stat))
+    } else if (expected_direction == "negative") {
+        n_extreme <- sum(placebo_stats <= observed_stat)
+    } else if (expected_direction == "positive") {
+        n_extreme <- sum(placebo_stats >= observed_stat)
+    } else {
+        stop("For one-sided curve p-values, expected_direction must be 'negative' or 'positive'.")
+    }
+
+    list(
+        p_value = (1 + n_extreme) / (j + 1),
+        n_extreme = n_extreme,
+        n_placebos = j
+    )
+}
+
 #' Calculate Specification Curve P-values on Filtered Data
 #'
-#' @title Calculate Cross-Specification P-values for Filtered Results
-#' @description Calculates specification curve-level p-values by aggregating treatment effects
-#' across filtered specifications and ranking units. Implements two test statistics:
-#' 1) Median treatment effect across specifications, 2) Average Z-score (Stouffer's method).
-#' This function operates on the filtered data that will actually be plotted.
+#' @title Calculate Placebo-in-Space Curve-Level Inference
+#' @description Calculates curve-level statistics and p-values on filtered specification-curve
+#' results using placebo-in-space comparison. Supports signed median and
+#' Wilcoxon signed-rank curve statistics.
 #'
-#' @param filtered_results Data.table. Filtered results data (post-filtering by outcomes, RMSE, etc.)
-#' @param abadie_inference List. Abadie inference results from original spec_curve output
-#' @param expected_direction Character. Expected direction of treatment effect: "negative", "positive", or "two_sided"
-#' @param name_treated_unit Character. Name of the treated unit for filtering inference results
+#' @param filtered_results Data.table. Filtered results data (post-filtering by outcomes, RMSE, etc.).
+#' @param curve_stat Character vector. Curve-level statistics to compute:
+#'   \code{"median"}, \code{"wilcoxon_sr"}.
+#' @param weighting Character vector. Weighting mode(s) for \code{"wilcoxon_sr"}:
+#'   \code{"none"} or \code{"pre_rmspe_percentile"}.
+#' @param two_sided Logical. Whether to compute two-sided p-values using absolute-value tails.
+#' @param expected_direction Character. Expected sign direction for one-sided tests
+#'   (\code{"negative"} or \code{"positive"}). Ignored when \code{two_sided = TRUE}.
+#' @param grid_policy Character. Grid mismatch policy:
+#'   \code{"strict"}, \code{"drop_incomplete_units"}, \code{"intersect_specs"}.
+#' @param min_placebos Integer. Minimum number of placebo units required after applying
+#'   \code{grid_policy}. Must be >= 1.
+#' @param min_specs Integer. Minimum number of specifications required after applying
+#'   \code{grid_policy}. Must be >= 2.
 #'
-#' @return List containing specification curve p-values:
+#' @return List with:
 #' \itemize{
-#'   \item median_tau_pvalues: P-values based on median treatment effect across filtered specifications
-#'   \item stouffer_pvalues: P-values based on average Z-score across filtered specifications (Stouffer's method)
+#'   \item \code{treated_summary}: Treated-unit curve statistics and p-values.
+#'   \item \code{stats_by_unit}: Curve statistics for treated and placebo units.
+#'   \item \code{attrition_report}: Unit/spec retention summary under \code{grid_policy}.
 #' }
 #'
 #' @details
-#' This function calculates p-values on the subset of data that will actually be visualized,
-#' ensuring that the statistical inference matches the displayed results. Key features:
-#' \itemize{
-#'   \item Works on filtered data (by RMSE threshold, outcomes, etc.)
-#'   \item Calculates median treatment effect for each unit across filtered specifications only
-#'   \item Converts individual specification p-values to Z-scores and averages them
-#'   \item Ranks all units based on filtered results and assigns p-values
-#'   \item Accounts for expected direction when ranking (negative vs positive effects)
-#' }
-calculate_spec_curve_pvalues_filtered <- function(filtered_results, abadie_inference = NULL, expected_direction = "negative", name_treated_unit = NULL) {
-
+#' For each unit and specification, this function uses the signed per-spec effect summary
+#' \code{tau_s}. Median remains signed, but two-sided p-values always compare absolute tails
+#' against placebo-unit curve statistics:
+#' \deqn{p = (1 + \#\{|T_j| \ge |T_{treated}|\})/(J+1).}
+#' For \code{wilcoxon_sr}, each unit statistic is
+#' \deqn{\sum_{s=1}^S sign(\tau_s)\,rank(|\tau_s|)}
+#' with ties handled by midranks (\code{ties.method="average"}).
+calculate_spec_curve_pvalues_filtered <- function(
+    filtered_results,
+    curve_stat = c("median", "wilcoxon_sr"),
+    weighting = c("none", "pre_rmspe_percentile"),
+    two_sided = TRUE,
+    expected_direction = "two_sided",
+    grid_policy = "strict",
+    min_placebos = 1L,
+    min_specs = 2L
+) {
+    if (!data.table::is.data.table(filtered_results)) {
+        filtered_results <- data.table::as.data.table(filtered_results)
+    }
     if (nrow(filtered_results) == 0) {
-        return(list(
-            median_tau_pvalues = data.table(),
-            stouffer_pvalues = data.table()
-        ))
+        stop("filtered_results is empty. Cannot compute curve-level inference.")
     }
 
-    # Test Statistic 1: Median Treatment Effect Across Filtered Specifications
-    # Calculate average tau for each unit across filtered specs (post-period only)
-    avg_tau_by_spec <- filtered_results[post_period == TRUE, .(
-        ave_tau = mean(tau)
-    ), by = .(full_spec_id, unit_name, unit_type)]
+    valid_curve_stats <- c("median", "wilcoxon_sr")
+    curve_stat <- unique(curve_stat)
+    invalid_curve_stats <- setdiff(curve_stat, valid_curve_stats)
+    if (length(invalid_curve_stats) > 0) {
+        stop("Invalid curve_stat values: ", paste(invalid_curve_stats, collapse = ", "))
+    }
+    if (!is.character(weighting) || length(weighting) < 1) {
+        stop("weighting must be a non-empty character vector.")
+    }
+    weighting <- unique(weighting)
+    valid_weighting <- c("none", "pre_rmspe_percentile")
+    invalid_weighting <- setdiff(weighting, valid_weighting)
+    if (length(invalid_weighting) > 0) {
+        stop("Invalid weighting values: ", paste(invalid_weighting, collapse = ", "))
+    }
+    if (!is.logical(two_sided) || length(two_sided) != 1 || is.na(two_sided)) {
+        stop("two_sided must be a single TRUE/FALSE value.")
+    }
+    if (!two_sided && !expected_direction %in% c("negative", "positive")) {
+        stop("For one-sided curve p-values, expected_direction must be 'negative' or 'positive'.")
+    }
+    valid_grid_policy <- c("strict", "drop_incomplete_units", "intersect_specs")
+    if (!is.character(grid_policy) || length(grid_policy) != 1 || !grid_policy %in% valid_grid_policy) {
+        stop("grid_policy must be one of: ", paste(valid_grid_policy, collapse = ", "))
+    }
+    if (!is.numeric(min_placebos) || length(min_placebos) != 1 || is.na(min_placebos) ||
+        is.infinite(min_placebos) || min_placebos < 1 || min_placebos %% 1 != 0) {
+        stop("min_placebos must be a single integer >= 1.")
+    }
+    if (!is.numeric(min_specs) || length(min_specs) != 1 || is.na(min_specs) ||
+        is.infinite(min_specs) || min_specs < 2 || min_specs %% 1 != 0) {
+        stop("min_specs must be a single integer >= 2.")
+    }
+    min_placebos <- as.integer(min_placebos)
+    min_specs <- as.integer(min_specs)
 
-    # Get median of those averages for each unit across filtered specifications
-    median_tau_by_unit <- avg_tau_by_spec[, .(
-        median_tau = median(ave_tau),
-        n_specs = .N
+    required_cols <- c("full_spec_id", "unit_name", "unit_type", "post_period", "tau")
+    missing_cols <- setdiff(required_cols, names(filtered_results))
+    if (length(missing_cols) > 0) {
+        stop("filtered_results is missing required columns: ", paste(missing_cols, collapse = ", "))
+    }
+
+    analysis_dt <- filtered_results[unit_type %in% c("treated", "control")]
+    if (nrow(analysis_dt) == 0) {
+        stop("No treated/control rows available after filtering.")
+    }
+
+    tau_by_spec <- analysis_dt[post_period == TRUE, .(
+        tau_s = mean(tau)
+    ), by = .(full_spec_id, unit_name, unit_type)]
+    if (nrow(tau_by_spec) == 0) {
+        stop("No post-period rows available for curve-level inference.")
+    }
+    bad_tau <- tau_by_spec[is.na(tau_s) | is.nan(tau_s) | is.infinite(tau_s)]
+    if (nrow(bad_tau) > 0) {
+        bad_msg <- paste(utils::head(
+            paste0(bad_tau$unit_name, "@", bad_tau$full_spec_id), 10
+        ), collapse = ", ")
+        stop("Non-finite tau_s detected for: ", bad_msg)
+    }
+
+    treated_units <- unique(tau_by_spec[unit_type == "treated", unit_name])
+    if (length(treated_units) != 1) {
+        stop("Expected exactly one treated unit in filtered results; found ", length(treated_units), ".")
+    }
+    treated_unit <- treated_units[[1]]
+
+    placebo_units <- unique(tau_by_spec[unit_type == "control", unit_name])
+    if (length(placebo_units) < 1) {
+        stop("At least one placebo/control unit is required for curve-level inference.")
+    }
+
+    treated_spec_ids <- sort(unique(tau_by_spec[unit_name == treated_unit, full_spec_id]))
+    treated_s <- length(treated_spec_ids)
+    if (treated_s < min_specs) {
+        stop("Treated unit has only ", treated_s, " specifications; require at least min_specs = ", min_specs, ".")
+    }
+
+    unit_spec_sets <- tau_by_spec[, .(
+        spec_count = uniqueN(full_spec_id),
+        spec_ids = list(sort(unique(full_spec_id)))
     ), by = .(unit_name, unit_type)]
 
-    # Rank units based on expected direction and assign p-values
-    if (expected_direction == "negative") {
-        # Most negative gets rank 1 (lowest p-value)
-        median_tau_by_unit[, rank_med := rank(median_tau, ties.method = "min")]
-    } else if (expected_direction == "positive") {
-        # Most positive gets rank 1 (lowest p-value)
-        median_tau_by_unit[, rank_med := rank(-median_tau, ties.method = "min")]
+    units_initial <- uniqueN(unit_spec_sets$unit_name)
+    placebos_initial <- uniqueN(unit_spec_sets[unit_type == "control", unit_name])
+    specs_initial <- treated_s
+
+    spec_match <- data.table::copy(unit_spec_sets)
+    spec_match[, grid_matches_treated :=
+        (spec_count == treated_s) &
+        vapply(spec_ids, identical, logical(1), treated_spec_ids)
+    ]
+
+    dropped_units <- data.table::data.table(
+        unit_name = character(),
+        unit_type = character(),
+        reason = character()
+    )
+    kept_units <- character()
+    final_spec_ids <- treated_spec_ids
+
+    if (grid_policy == "strict") {
+        bad_units_dt <- spec_match[unit_type == "control" & !grid_matches_treated]
+        if (nrow(bad_units_dt) > 0) {
+            bad_units <- paste(utils::head(bad_units_dt$unit_name, 10), collapse = ", ")
+            stop("All units must share the exact same specification grid. Problematic units: ", bad_units)
+        }
+        kept_units <- spec_match$unit_name
+    } else if (grid_policy == "drop_incomplete_units") {
+        kept_units <- spec_match[unit_type == "treated" | grid_matches_treated, unit_name]
+        dropped_units <- spec_match[unit_type == "control" & !grid_matches_treated, .(
+            unit_name = unit_name,
+            unit_type = unit_type,
+            reason = "grid_mismatch_vs_treated"
+        )]
+    } else if (grid_policy == "intersect_specs") {
+        unit_spec_lists <- unit_spec_sets$spec_ids
+        final_spec_ids <- Reduce(intersect, unit_spec_lists)
+        final_spec_ids <- sort(final_spec_ids)
+        kept_units <- spec_match$unit_name
     } else {
-        # Two-sided: rank by absolute value (most extreme gets rank 1)
-        median_tau_by_unit[, rank_med := rank(-abs(median_tau), ties.method = "min")]
+        stop("Unhandled grid_policy: ", grid_policy)
     }
 
-    # Calculate p-values
-    median_tau_by_unit[, pval_rank_med := rank_med / .N]
+    s <- length(final_spec_ids)
+    if (s < min_specs) {
+        stop("After applying grid_policy='", grid_policy, "', only ", s,
+             " shared specifications remain; require at least min_specs = ", min_specs, ".")
+    }
 
-    # Test Statistic 2: Average Z-score (Stouffer's Method)
-    # Filter Abadie inference to match filtered specifications
-    stouffer_results <- data.table()
+    kept_placebos <- uniqueN(spec_match[unit_name %in% kept_units & unit_type == "control", unit_name])
+    if (kept_placebos < min_placebos) {
+        stop("After applying grid_policy='", grid_policy, "', only ", kept_placebos,
+             " placebo units remain; require at least min_placebos = ", min_placebos, ".")
+    }
 
-    if (!is.null(abadie_inference) && "p_values_rmse_ratio" %in% names(abadie_inference)) {
+    kept_units <- sort(unique(kept_units))
+    tau_by_spec <- tau_by_spec[unit_name %in% kept_units & full_spec_id %in% final_spec_ids]
 
-        abadie_pvals <- as.data.table(abadie_inference$p_values_rmse_ratio)
+    pre_rmspe_by_spec <- NULL
+    if ("wilcoxon_sr" %in% curve_stat && "pre_rmspe_percentile" %in% weighting) {
+        if (!"rmse" %in% names(analysis_dt)) {
+            stop("weighting='pre_rmspe_percentile' requires a finite 'rmse' column in filtered_results.")
+        }
+        pre_rmspe_by_spec <- analysis_dt[, .(
+            n_unique_rmse = uniqueN(rmse),
+            pre_rmspe = rmse[1]
+        ), by = .(full_spec_id, unit_name, unit_type)]
+        pre_rmspe_by_spec <- pre_rmspe_by_spec[
+            unit_name %in% kept_units & full_spec_id %in% final_spec_ids
+        ]
 
-        # Get the specifications that remain after filtering
-        filtered_spec_ids <- unique(filtered_results$full_spec_id)
+        inconsistent_rmse <- pre_rmspe_by_spec[n_unique_rmse != 1]
+        if (nrow(inconsistent_rmse) > 0) {
+            bad_msg <- paste(utils::head(
+                paste0(inconsistent_rmse$unit_name, "@", inconsistent_rmse$full_spec_id), 10
+            ), collapse = ", ")
+            stop("rmse must be unique per unit/specification. Violations: ", bad_msg)
+        }
 
-        # Filter Abadie p-values to match filtered specifications
-        abadie_pvals_filtered <- abadie_pvals[full_spec_id %in% filtered_spec_ids]
+        bad_pre <- pre_rmspe_by_spec[is.na(pre_rmspe) | is.nan(pre_rmspe) | is.infinite(pre_rmspe)]
+        if (nrow(bad_pre) > 0) {
+            bad_msg <- paste(utils::head(
+                paste0(bad_pre$unit_name, "@", bad_pre$full_spec_id), 10
+            ), collapse = ", ")
+            stop("pre_rmspe contains NA/NaN/Inf for: ", bad_msg)
+        }
 
-        if (nrow(abadie_pvals_filtered) > 0) {
-            # Merge treatment effects with filtered p-values
-            tau_pval_merged <- merge(
-                avg_tau_by_spec,
-                abadie_pvals_filtered[, .(full_spec_id, unit_name, p_value_one_sided)],
-                by = c('full_spec_id', 'unit_name'),
-                all.x = TRUE
-            )
-
-            # Convert p-values to Z-scores
-            tau_pval_merged[, zscore := qnorm(p_value_one_sided, mean = 0, sd = 1, lower.tail = TRUE)]
-
-            # Handle extreme p-values
-            tau_pval_merged[p_value_one_sided == 1, zscore := 4.25]
-            tau_pval_merged[p_value_one_sided == 0, zscore := -4.25]
-            tau_pval_merged[is.na(zscore), zscore := 0]    # Handle any remaining NAs
-
-            # Calculate mean Z-score for each unit across filtered specifications
-            mean_z_by_unit <- tau_pval_merged[, .(
-                mean_z = mean(zscore, na.rm = TRUE),
-                n_specs_with_pvals = sum(!is.na(zscore))
-            ), by = .(unit_name, unit_type)]
-
-            # Only proceed if we have units with p-values
-            if (nrow(mean_z_by_unit) > 0) {
-                # Rank units by mean Z-score based on expected direction
-                if (expected_direction == "negative") {
-                    # Most negative Z-score gets rank 1 (most significant in negative direction)
-                    mean_z_by_unit[, rank_z := rank(mean_z, ties.method = "min")]
-                } else if (expected_direction == "positive") {
-                    # Most positive Z-score gets rank 1 (most significant in positive direction)
-                    mean_z_by_unit[, rank_z := rank(-mean_z, ties.method = "min")]
-                } else {
-                    # Two-sided: most extreme (absolute) Z-score gets rank 1
-                    mean_z_by_unit[, rank_z := rank(-abs(mean_z), ties.method = "min")]
-                }
-
-                # Calculate p-values
-                mean_z_by_unit[, pval_rank_z := rank_z / .N]
-
-                stouffer_results <- mean_z_by_unit
-            }
+        pre_spec_sets <- pre_rmspe_by_spec[, .(
+            spec_count = uniqueN(full_spec_id),
+            spec_ids = list(sort(unique(full_spec_id)))
+        ), by = .(unit_name, unit_type)]
+        bad_pre_specs <- pre_spec_sets[
+            spec_count != s | !vapply(spec_ids, identical, logical(1), treated_spec_ids)
+        ]
+        if (nrow(bad_pre_specs) > 0) {
+            bad_units <- paste(utils::head(bad_pre_specs$unit_name, 10), collapse = ", ")
+            stop("pre_rmspe grid does not match treated specification grid for units: ", bad_units)
         }
     }
 
-    # Return both test statistics
-    return(list(
-        median_tau_pvalues = median_tau_by_unit,
-        stouffer_pvalues = stouffer_results
-    ))
+    units_in_order <- unit_spec_sets[unit_name %in% kept_units][order(unit_type, unit_name), unit_name]
+    stats_list <- vector("list", length(units_in_order))
+
+    for (i in seq_along(units_in_order)) {
+        unit_i <- units_in_order[[i]]
+
+        tau_i <- tau_by_spec[unit_name == unit_i][
+            match(final_spec_ids, full_spec_id), tau_s
+        ]
+        if (anyNA(tau_i)) {
+            stop("Missing tau_s values after specification alignment for unit ", unit_i, ".")
+        }
+
+        unit_type_i <- tau_by_spec[unit_name == unit_i, unit_type][1]
+        pre_i <- NULL
+        if ("wilcoxon_sr" %in% curve_stat && "pre_rmspe_percentile" %in% weighting) {
+            pre_i <- pre_rmspe_by_spec[unit_name == unit_i][
+                match(final_spec_ids, full_spec_id), pre_rmspe
+            ]
+            if (anyNA(pre_i)) {
+                stop("Missing pre_rmspe values after specification alignment for unit ", unit_i, ".")
+            }
+        }
+
+        rows <- list()
+        for (stat_i in curve_stat) {
+            for (w_i in weighting) {
+                if (stat_i == "median") {
+                    estimate_i <- curve_stat_median(tau_i)
+                } else if (stat_i == "wilcoxon_sr" && w_i == "none") {
+                    estimate_i <- curve_stat_wilcoxon_sr(tau_i)
+                } else if (stat_i == "wilcoxon_sr" && w_i == "pre_rmspe_percentile") {
+                    estimate_i <- curve_stat_wilcoxon_sr_weighted(tau_i, pre_i)
+                } else {
+                    stop("Unhandled curve statistic / weighting combination: ", stat_i, " + ", w_i)
+                }
+
+                rows[[length(rows) + 1L]] <- data.table(
+                    unit_name = unit_i,
+                    unit_type = unit_type_i,
+                    curve_statistic = stat_i,
+                    weighting = w_i,
+                    estimate = estimate_i,
+                    n_specs = s
+                )
+            }
+        }
+        stats_list[[i]] <- data.table::rbindlist(rows)
+    }
+    stats_by_unit <- data.table::rbindlist(stats_list)
+
+    stat_combos <- unique(stats_by_unit[, .(curve_statistic, weighting)])
+    stat_combos[, stat_rank := ifelse(curve_statistic == "median", 1L, 2L)]
+    stat_combos[, weight_rank := ifelse(weighting == "none", 1L, 2L)]
+    data.table::setorder(stat_combos, stat_rank, weight_rank)
+
+    treated_summary_list <- vector("list", nrow(stat_combos))
+    for (k in seq_len(nrow(stat_combos))) {
+        stat_k <- stat_combos$curve_statistic[k]
+        weight_k <- stat_combos$weighting[k]
+        observed <- stats_by_unit[
+            unit_name == treated_unit & curve_statistic == stat_k & weighting == weight_k, estimate
+        ]
+        if (length(observed) != 1) {
+            stop("Expected exactly one treated-unit value for curve statistic '", stat_k,
+                 "' with weighting '", weight_k, "'.")
+        }
+        placebo <- stats_by_unit[
+            unit_type == "control" & curve_statistic == stat_k & weighting == weight_k, estimate
+        ]
+        p_info <- compute_placebo_curve_pvalue(
+            observed_stat = observed,
+            placebo_stats = placebo,
+            two_sided = two_sided,
+            expected_direction = expected_direction,
+            stat_name = stat_k
+        )
+        treated_summary_list[[k]] <- data.table(
+            curve_statistic = stat_k,
+            weighting = weight_k,
+            estimate = observed,
+            p_value = p_info$p_value,
+            n_extreme = p_info$n_extreme,
+            n_placebos = p_info$n_placebos,
+            two_sided = two_sided
+        )
+    }
+    treated_summary <- data.table::rbindlist(treated_summary_list)
+    treated_summary[, stat_rank := ifelse(curve_statistic == "median", 1L, 2L)]
+    treated_summary[, weight_rank := ifelse(weighting == "none", 1L, 2L)]
+    data.table::setorder(treated_summary, stat_rank, weight_rank)
+    treated_summary[, c("stat_rank", "weight_rank") := NULL]
+
+    attrition_report <- data.table::data.table(
+        grid_policy = grid_policy,
+        n_units_initial = units_initial,
+        n_units_kept = uniqueN(kept_units),
+        n_units_dropped = nrow(dropped_units),
+        n_placebos_initial = placebos_initial,
+        n_placebos_kept = kept_placebos,
+        n_specs_treated = specs_initial,
+        n_specs_final = s
+    )
+    dropped_spec_ids <- setdiff(treated_spec_ids, final_spec_ids)
+
+    list(
+        treated_summary = treated_summary,
+        stats_by_unit = stats_by_unit,
+        attrition_report = attrition_report,
+        dropped_units = dropped_units,
+        dropped_spec_ids = dropped_spec_ids
+    )
 }

@@ -17,6 +17,12 @@ plot_spec_curve(
   show_pvalues = FALSE,
   p_threshold = 0.05,
   prefer_bootstrap_pvalues = FALSE,
+  curve_stat = c("median", "wilcoxon_sr"),
+  weighting = c("none", "pre_rmspe_percentile"),
+  two_sided = TRUE,
+  grid_policy = "strict",
+  min_placebos = 1L,
+  min_specs = 2L,
   test_statistic = "rmse_ratio",
   null_distribution = "placebo",
   crop_outliers = "none",
@@ -70,6 +76,36 @@ Uses Abadie p-values by default, or bootstrap p-values if available. Default is 
 
 \item{prefer_bootstrap_pvalues}{Logical. Whether to prefer bootstrap p-values over Abadie p-values
 when both are available. Default is FALSE (prefer Abadie).}
+
+\item{curve_stat}{Character vector. Curve-level statistics to compute for placebo-in-space
+inference annotation. Options: \code{"median"} and \code{"wilcoxon_sr"}.
+Default is \code{c("median", "wilcoxon_sr")}.}
+
+\item{weighting}{Character vector. Weighting modes to evaluate for curve-level statistics.
+Options: \code{"none"} and \code{"pre_rmspe_percentile"}.
+Default is \code{c("none", "pre_rmspe_percentile")}.
+Weighting affects \code{"wilcoxon_sr"}; \code{"median"} is reported for each requested
+weighting mode for completeness.}
+
+\item{two_sided}{Logical. If \code{TRUE} (default), curve-level p-values use absolute-tail
+placebo comparison: \code{(1 + sum(abs(placebo) >= abs(observed))) / (J + 1)}.
+If \code{FALSE}, one-sided comparison is used with \code{expected_direction} from
+\code{long_data} (\code{"negative"} or \code{"positive"} required).}
+
+\item{grid_policy}{Character. How to handle incomplete placebo specification grids when
+computing curve-level p-values. Options:
+\itemize{
+\item \code{"strict"} (default): fail if any placebo unit is missing/has extra specs.
+\item \code{"drop_incomplete_units"}: keep full treated spec grid, drop placebo units
+that do not exactly match it.
+\item \code{"intersect_specs"}: keep all units, restrict to specs shared by all units.
+}}
+
+\item{min_placebos}{Integer. Minimum number of placebo units required after applying
+\code{grid_policy}. Default is 1.}
+
+\item{min_specs}{Integer. Minimum number of specifications required after applying
+\code{grid_policy}. Default is 2.}
 
 \item{test_statistic}{Character. Which test statistic p-values to use for coloring.
 Options: "rmse_ratio" (default), "treatment_effect", "normalized_te".
@@ -161,7 +197,10 @@ List containing:
 \item computed_shap: Complete results from internal SHAP computation (NULL if external shap_values provided or show_shap=FALSE).
 Contains: results (feature importance), shapley (SHAP values), predictions (model predictions), models (trained XGBoost models), config (SHAP configuration)
 \item spec_curve_pvals: List with specification curve-level p-values calculated on filtered data:
-median_tau_pvalues (median treatment effect ranks), stouffer_pvalues (Stouffer's Z-method ranks). NULL if no inference data available
+\code{treated_summary} (treated-unit curve estimates and p-values) and
+\code{stats_by_unit} (curve statistics for treated and placebo units), plus
+\code{attrition_report} summarizing unit/spec retention under \code{grid_policy}.
+NULL if no inference data available.
 \item filtered_specs: Integer count of specifications remaining after filtering (before filtering if filter_specs=NULL)
 \item feature_groups_displayed: Character vector of feature groups shown in Panel B (only groups with variation in filtered data)
 }

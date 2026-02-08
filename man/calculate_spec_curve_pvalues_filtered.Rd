@@ -2,49 +2,63 @@
 % Please edit documentation in R/plot_spec_curve.R
 \name{calculate_spec_curve_pvalues_filtered}
 \alias{calculate_spec_curve_pvalues_filtered}
-\title{Calculate Cross-Specification P-values for Filtered Results}
+\title{Calculate Placebo-in-Space Curve-Level Inference}
 \usage{
 calculate_spec_curve_pvalues_filtered(
   filtered_results,
-  abadie_inference = NULL,
-  expected_direction = "negative",
-  name_treated_unit = NULL
+  curve_stat = c("median", "wilcoxon_sr"),
+  weighting = c("none", "pre_rmspe_percentile"),
+  two_sided = TRUE,
+  expected_direction = "two_sided",
+  grid_policy = "strict",
+  min_placebos = 1L,
+  min_specs = 2L
 )
 }
 \arguments{
-\item{filtered_results}{Data.table. Filtered results data (post-filtering by outcomes, RMSE, etc.)}
+\item{filtered_results}{Data.table. Filtered results data (post-filtering by outcomes, RMSE, etc.).}
 
-\item{abadie_inference}{List. Abadie inference results from original spec_curve output}
+\item{curve_stat}{Character vector. Curve-level statistics to compute:
+\code{"median"}, \code{"wilcoxon_sr"}.}
 
-\item{expected_direction}{Character. Expected direction of treatment effect: "negative", "positive", or "two_sided"}
+\item{weighting}{Character vector. Weighting mode(s) for \code{"wilcoxon_sr"}:
+\code{"none"} or \code{"pre_rmspe_percentile"}.}
 
-\item{name_treated_unit}{Character. Name of the treated unit for filtering inference results}
+\item{two_sided}{Logical. Whether to compute two-sided p-values using absolute-value tails.}
+
+\item{expected_direction}{Character. Expected sign direction for one-sided tests
+(\code{"negative"} or \code{"positive"}). Ignored when \code{two_sided = TRUE}.}
+
+\item{grid_policy}{Character. Grid mismatch policy:
+\code{"strict"}, \code{"drop_incomplete_units"}, \code{"intersect_specs"}.}
+
+\item{min_placebos}{Integer. Minimum number of placebo units required after applying
+\code{grid_policy}. Must be >= 1.}
+
+\item{min_specs}{Integer. Minimum number of specifications required after applying
+\code{grid_policy}. Must be >= 2.}
 }
 \value{
-List containing specification curve p-values:
+List with:
 \itemize{
-\item median_tau_pvalues: P-values based on median treatment effect across filtered specifications
-\item stouffer_pvalues: P-values based on average Z-score across filtered specifications (Stouffer's method)
+\item \code{treated_summary}: Treated-unit curve statistics and p-values.
+\item \code{stats_by_unit}: Curve statistics for treated and placebo units.
+\item \code{attrition_report}: Unit/spec retention summary under \code{grid_policy}.
 }
 }
 \description{
-Calculates specification curve-level p-values by aggregating treatment effects
-across filtered specifications and ranking units. Implements two test statistics:
-\enumerate{
-\item Median treatment effect across specifications, 2) Average Z-score (Stouffer's method).
-This function operates on the filtered data that will actually be plotted.
-}
+Calculates curve-level statistics and p-values on filtered specification-curve
+results using placebo-in-space comparison. Supports signed median and
+Wilcoxon signed-rank curve statistics.
 }
 \details{
 Calculate Specification Curve P-values on Filtered Data
 
-This function calculates p-values on the subset of data that will actually be visualized,
-ensuring that the statistical inference matches the displayed results. Key features:
-\itemize{
-\item Works on filtered data (by RMSE threshold, outcomes, etc.)
-\item Calculates median treatment effect for each unit across filtered specifications only
-\item Converts individual specification p-values to Z-scores and averages them
-\item Ranks all units based on filtered results and assigns p-values
-\item Accounts for expected direction when ranking (negative vs positive effects)
-}
+For each unit and specification, this function uses the signed per-spec effect summary
+\code{tau_s}. Median remains signed, but two-sided p-values always compare absolute tails
+against placebo-unit curve statistics:
+\deqn{p = (1 + \#\{|T_j| \ge |T_{treated}|\})/(J+1).}
+For \code{wilcoxon_sr}, each unit statistic is
+\deqn{\sum_{s=1}^S sign(\tau_s)\,rank(|\tau_s|)}
+with ties handled by midranks (\code{ties.method="average"}).
 }
