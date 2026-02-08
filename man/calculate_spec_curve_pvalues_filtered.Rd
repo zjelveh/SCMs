@@ -6,7 +6,7 @@
 \usage{
 calculate_spec_curve_pvalues_filtered(
   filtered_results,
-  curve_stat = c("median", "wilcoxon_sr"),
+  curve_stat = c("abs_median_tau", "median_abs_tau", "consistency_ratio"),
   weighting = c("none", "pre_rmspe_percentile"),
   two_sided = TRUE,
   expected_direction = "two_sided",
@@ -19,10 +19,10 @@ calculate_spec_curve_pvalues_filtered(
 \item{filtered_results}{Data.table. Filtered results data (post-filtering by outcomes, RMSE, etc.).}
 
 \item{curve_stat}{Character vector. Curve-level statistics to compute:
-\code{"median"}, \code{"wilcoxon_sr"}.}
+\code{"abs_median_tau"}, \code{"median_abs_tau"}, \code{"consistency_ratio"}.}
 
-\item{weighting}{Character vector. Weighting mode(s) for \code{"wilcoxon_sr"}:
-\code{"none"} or \code{"pre_rmspe_percentile"}.}
+\item{weighting}{Character vector. Weighting mode(s) applied to each requested
+curve-level statistic: \code{"none"} or \code{"pre_rmspe_percentile"}.}
 
 \item{two_sided}{Logical. Whether to compute two-sided p-values using absolute-value tails.}
 
@@ -48,17 +48,22 @@ List with:
 }
 \description{
 Calculates curve-level statistics and p-values on filtered specification-curve
-results using placebo-in-space comparison. Supports signed median and
-Wilcoxon signed-rank curve statistics.
+results using placebo-in-space comparison.
 }
 \details{
 Calculate Specification Curve P-values on Filtered Data
 
 For each unit and specification, this function uses the signed per-spec effect summary
-\code{tau_s}. Median remains signed, but two-sided p-values always compare absolute tails
-against placebo-unit curve statistics:
+\code{tau_s}. Two-sided p-values always compare absolute tails against placebo-unit
+curve statistics:
 \deqn{p = (1 + \#\{|T_j| \ge |T_{treated}|\})/(J+1).}
-For \code{wilcoxon_sr}, each unit statistic is
-\deqn{\sum_{s=1}^S sign(\tau_s)\,rank(|\tau_s|)}
-with ties handled by midranks (\code{ties.method="average"}).
+The supported curve statistics are:
+\itemize{
+\item \code{abs_median_tau}: \eqn{|\mathrm{median}_s(\tau_s)|}
+\item \code{median_abs_tau}: \eqn{\mathrm{median}_s(|\tau_s|)}
+\item \code{consistency_ratio}: \eqn{|\sum_s \tau_s| / \sum_s |\tau_s|}
+}
+For weighted variants, pre-RMSPE-percentile weights are defined within unit as
+\eqn{w_s = 1 - rank(\mathrm{RMSPE}^{pre}_s)/(S+1)} and applied directly to the
+statistic computation.
 }

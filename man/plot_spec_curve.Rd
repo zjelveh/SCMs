@@ -17,7 +17,7 @@ plot_spec_curve(
   show_pvalues = FALSE,
   p_threshold = 0.05,
   prefer_bootstrap_pvalues = FALSE,
-  curve_stat = c("median", "wilcoxon_sr"),
+  curve_stat = "abs_median_tau",
   weighting = c("none", "pre_rmspe_percentile"),
   two_sided = TRUE,
   grid_policy = "strict",
@@ -78,14 +78,18 @@ Uses Abadie p-values by default, or bootstrap p-values if available. Default is 
 when both are available. Default is FALSE (prefer Abadie).}
 
 \item{curve_stat}{Character vector. Curve-level statistics to compute for placebo-in-space
-inference annotation. Options: \code{"median"} and \code{"wilcoxon_sr"}.
-Default is \code{c("median", "wilcoxon_sr")}.}
+inference. Options:
+\itemize{
+\item \code{"abs_median_tau"}: \eqn{|\mathrm{median}_s(\tau_s)|}
+\item \code{"median_abs_tau"}: \eqn{\mathrm{median}_s(|\tau_s|)}
+\item \code{"consistency_ratio"}: \eqn{|\sum_s \tau_s| / \sum_s |\tau_s|}
+}
+Default is \code{"abs_median_tau"}.}
 
 \item{weighting}{Character vector. Weighting modes to evaluate for curve-level statistics.
 Options: \code{"none"} and \code{"pre_rmspe_percentile"}.
 Default is \code{c("none", "pre_rmspe_percentile")}.
-Weighting affects \code{"wilcoxon_sr"}; \code{"median"} is reported for each requested
-weighting mode for completeness.}
+Weighting is applied generically to each requested curve statistic.}
 
 \item{two_sided}{Logical. If \code{TRUE} (default), curve-level p-values use absolute-tail
 placebo comparison: \code{(1 + sum(abs(placebo) >= abs(observed))) / (J + 1)}.

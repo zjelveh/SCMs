@@ -32,13 +32,17 @@
 #' @param prefer_bootstrap_pvalues Logical. Whether to prefer bootstrap p-values over Abadie p-values
 #'   when both are available. Default is FALSE (prefer Abadie).
 #' @param curve_stat Character vector. Curve-level statistics to compute for placebo-in-space
-#'   inference annotation. Options: \code{"median"} and \code{"wilcoxon_sr"}.
-#'   Default is \code{c("median", "wilcoxon_sr")}.
+#'   inference. Options:
+#'   \itemize{
+#'     \item \code{"abs_median_tau"}: \eqn{|\mathrm{median}_s(\tau_s)|}
+#'     \item \code{"median_abs_tau"}: \eqn{\mathrm{median}_s(|\tau_s|)}
+#'     \item \code{"consistency_ratio"}: \eqn{|\sum_s \tau_s| / \sum_s |\tau_s|}
+#'   }
+#'   Default is \code{"abs_median_tau"}.
 #' @param weighting Character vector. Weighting modes to evaluate for curve-level statistics.
 #'   Options: \code{"none"} and \code{"pre_rmspe_percentile"}.
 #'   Default is \code{c("none", "pre_rmspe_percentile")}.
-#'   Weighting affects \code{"wilcoxon_sr"}; \code{"median"} is reported for each requested
-#'   weighting mode for completeness.
+#'   Weighting is applied generically to each requested curve statistic.
 #' @param two_sided Logical. If \code{TRUE} (default), curve-level p-values use absolute-tail
 #'   placebo comparison: \code{(1 + sum(abs(placebo) >= abs(observed))) / (J + 1)}.
 #'   If \code{FALSE}, one-sided comparison is used with \code{expected_direction} from
@@ -253,7 +257,7 @@ plot_spec_curve <- function(
     show_pvalues = FALSE,
     p_threshold = 0.05,
     prefer_bootstrap_pvalues = FALSE,
-    curve_stat = c("median", "wilcoxon_sr"),
+    curve_stat = "abs_median_tau",
     weighting = c("none", "pre_rmspe_percentile"),
     two_sided = TRUE,
     grid_policy = "strict",
@@ -393,7 +397,7 @@ plot_spec_curve <- function(
     }
 
     # Validate curve-level inference settings
-    valid_curve_stats <- c("median", "wilcoxon_sr")
+    valid_curve_stats <- c("abs_median_tau", "median_abs_tau", "consistency_ratio")
     if (!is.character(curve_stat) || length(curve_stat) < 1) {
         stop("curve_stat must be a non-empty character vector.")
     }
@@ -1230,17 +1234,14 @@ plot_spec_curve <- function(
             }
 
             treated_curve <- data.table::copy(treated_curve)
-            treated_curve[, stat_rank := ifelse(curve_statistic == "median", 1L, 2L)]
+            stat_levels <- c("abs_median_tau", "median_abs_tau", "consistency_ratio")
+            treated_curve[, stat_rank := match(curve_statistic, stat_levels)]
+            if (any(is.na(treated_curve$stat_rank))) {
+                bad_stats <- unique(treated_curve[is.na(stat_rank), curve_statistic])
+                stop("Unknown curve_statistic value(s) in treated_summary: ", paste(bad_stats, collapse = ", "))
+            }
             treated_curve[, weight_rank := ifelse(weighting == "none", 1L, 2L)]
             data.table::setorder(treated_curve, stat_rank, weight_rank)
-
-            rank_label_from_symbol <- function(stat_symbol) {
-                if (isTRUE(two_sided)) {
-                    paste0("rank(|", stat_symbol, "|)")
-                } else {
-                    paste0("rank(", stat_symbol, ")")
-                }
-            }
 
             format_rank_value <- function(row_dt) {
                 rank_num <- as.integer(row_dt$n_extreme) + 1L
@@ -1255,46 +1256,31 @@ plot_spec_curve <- function(
 
             annotation_lines <- c()
 
-            median_rows <- treated_curve[curve_statistic == "median"]
+            median_rows <- treated_curve[curve_statistic == "abs_median_tau"]
             if (nrow(median_rows) > 0) {
-                median_row <- if ("none" %in% median_rows$weighting) {
-                    median_rows[weighting == "none"][1]
-                } else {
-                    median_rows[1]
-                }
-                annotation_lines <- c(
-                    annotation_lines,
-                    sprintf(
-                        "Median %s: %s",
-                        rank_label_from_symbol("median tau"),
-                        format_rank_value(median_row)
-                    )
-                )
-            }
-
-            wilcox_rows <- treated_curve[curve_statistic == "wilcoxon_sr"]
-            if (nrow(wilcox_rows) > 0) {
-                row_none <- wilcox_rows[weighting == "none"]
-                row_wt <- wilcox_rows[weighting == "pre_rmspe_percentile"]
-
+                row_none <- median_rows[weighting == "none"]
+                row_wt <- median_rows[weighting == "pre_rmspe_percentile"]
                 if (nrow(row_none) > 0 && nrow(row_wt) > 0) {
-                    line_w <- sprintf(
-                        "Wilcoxon SR %s [none/wt]: %s / %s",
-                        rank_label_from_symbol("W_SR"),
-                        format_rank_value(row_none[1]),
-                        format_rank_value(row_wt[1])
+                    annotation_lines <- c(
+                        annotation_lines,
+                        sprintf(
+                            "|median(tau)|: %s (wt: %s)",
+                            format_rank_value(row_none[1]),
+                            format_rank_value(row_wt[1])
+                        )
                     )
                 } else {
-                    row_one <- wilcox_rows[1]
-                    weight_tag <- if (row_one$weighting == "pre_rmspe_percentile") " [wt]" else " [none]"
-                    line_w <- sprintf(
-                        "Wilcoxon SR %s%s: %s",
-                        rank_label_from_symbol("W_SR"),
-                        weight_tag,
-                        format_rank_value(row_one)
+                    row_one <- median_rows[1]
+                    weight_tag <- if (row_one$weighting == "pre_rmspe_percentile") " (wt)" else ""
+                    annotation_lines <- c(
+                        annotation_lines,
+                        sprintf(
+                            "|median(tau)|%s: %s",
+                            weight_tag,
+                            format_rank_value(row_one)
+                        )
                     )
                 }
-                annotation_lines <- c(annotation_lines, line_w)
             }
 
             if (length(annotation_lines) > 0) {
@@ -1717,38 +1703,127 @@ percentile_rank <- function(x, arg_name = "x") {
     percentiles
 }
 
-curve_stat_median <- function(tau) {
-    validate_curve_numeric_vector(tau, "tau", min_length = 2L)
-    stats::median(tau)
-}
-
-curve_stat_wilcoxon_sr <- function(tau) {
-    validate_curve_numeric_vector(tau, "tau", min_length = 2L)
-    sr <- sum(sign(tau) * base::rank(abs(tau), ties.method = "average"))
-    if (!is.finite(sr)) {
-        stop("curve_stat_wilcoxon_sr produced a non-finite value.")
+validate_curve_weights <- function(weights, tau_length, arg_name = "weights") {
+    if (is.null(weights)) {
+        return(invisible(NULL))
     }
-    sr
+    if (!is.numeric(weights)) {
+        stop(arg_name, " must be numeric.")
+    }
+    if (length(weights) != tau_length) {
+        stop(arg_name, " must have length ", tau_length, ".")
+    }
+    bad_idx <- which(is.na(weights) | is.nan(weights) | is.infinite(weights))
+    if (length(bad_idx) > 0) {
+        idx_msg <- paste(utils::head(bad_idx, 10), collapse = ", ")
+        stop(arg_name, " contains NA/NaN/Inf at indices: ", idx_msg)
+    }
+    if (any(weights <= 0)) {
+        stop(arg_name, " must be strictly positive.")
+    }
 }
 
-curve_stat_wilcoxon_sr_weighted <- function(tau, pre_rmspe) {
-    validate_curve_numeric_vector(tau, "tau", min_length = 2L)
+compute_pre_rmspe_percentile_weights <- function(pre_rmspe) {
     validate_curve_numeric_vector(pre_rmspe, "pre_rmspe", min_length = 2L)
-    if (length(tau) != length(pre_rmspe)) {
-        stop("tau and pre_rmspe must have identical lengths.")
-    }
-    signed_ranks <- sign(tau) * base::rank(abs(tau), ties.method = "average")
     pw <- percentile_rank(pre_rmspe, arg_name = "pre_rmspe")
     w <- 1 - pw
+    validate_curve_weights(w, length(pre_rmspe), arg_name = "pre_rmspe_weights")
     w_sum <- sum(w)
     if (!is.finite(w_sum) || w_sum <= 0) {
-        stop("sum(w) must be positive and finite for curve_stat_wilcoxon_sr_weighted.")
+        stop("sum(pre_rmspe_weights) must be positive and finite.")
     }
-    sr_w <- sum(w * signed_ranks) / w_sum
-    if (!is.finite(sr_w)) {
-        stop("curve_stat_wilcoxon_sr_weighted produced a non-finite value.")
+    w
+}
+
+curve_stat_median <- function(tau, weights = NULL) {
+    validate_curve_numeric_vector(tau, "tau", min_length = 2L)
+    if (is.null(weights)) {
+        return(stats::median(tau))
     }
-    sr_w
+
+    validate_curve_weights(weights, length(tau), arg_name = "weights")
+    o <- order(tau)
+    tau_sorted <- tau[o]
+    w_sorted <- weights[o]
+    w_sum <- sum(w_sorted)
+    if (!is.finite(w_sum) || w_sum <= 0) {
+        stop("sum(weights) must be positive and finite for weighted median.")
+    }
+
+    cdf <- cumsum(w_sorted) / w_sum
+    idx <- which(cdf >= 0.5)[1]
+    if (is.na(idx)) {
+        stop("Failed to locate weighted median index.")
+    }
+    if (cdf[idx] > 0.5 || idx == length(tau_sorted)) {
+        return(tau_sorted[idx])
+    }
+    # If the CDF lands exactly on 0.5, average adjacent points (median-compatible tie handling).
+    mean(c(tau_sorted[idx], tau_sorted[idx + 1L]))
+}
+
+curve_stat_abs_median_tau <- function(tau, weights = NULL) {
+    med <- curve_stat_median(tau, weights = weights)
+    out <- abs(med)
+    if (!is.finite(out)) {
+        stop("curve_stat_abs_median_tau produced a non-finite value.")
+    }
+    out
+}
+
+curve_stat_median_abs_tau <- function(tau, weights = NULL) {
+    validate_curve_numeric_vector(tau, "tau", min_length = 2L)
+    tau_abs <- abs(tau)
+    out <- curve_stat_median(tau_abs, weights = weights)
+    if (!is.finite(out)) {
+        stop("curve_stat_median_abs_tau produced a non-finite value.")
+    }
+    out
+}
+
+curve_stat_consistency_ratio <- function(tau, weights = NULL) {
+    validate_curve_numeric_vector(tau, "tau", min_length = 2L)
+    validate_curve_weights(weights, length(tau), arg_name = "weights")
+
+    if (is.null(weights)) {
+        numer <- abs(sum(tau))
+        denom <- sum(abs(tau))
+    } else {
+        w_sum <- sum(weights)
+        if (!is.finite(w_sum) || w_sum <= 0) {
+            stop("sum(weights) must be positive and finite for weighted consistency_ratio.")
+        }
+        numer <- abs(sum(weights * tau))
+        denom <- sum(weights * abs(tau))
+    }
+
+    if (!is.finite(denom) || denom <= 0) {
+        stop("consistency_ratio denominator must be positive and finite.")
+    }
+    out <- numer / denom
+    if (!is.finite(out)) {
+        stop("curve_stat_consistency_ratio produced a non-finite value.")
+    }
+    if (out < -1e-12 || out > 1 + 1e-12) {
+        stop("curve_stat_consistency_ratio produced value outside [0,1]: ", out)
+    }
+    min(max(out, 0), 1)
+}
+
+apply_curve_statistic <- function(curve_statistic, tau, weights = NULL) {
+    if (!is.character(curve_statistic) || length(curve_statistic) != 1) {
+        stop("curve_statistic must be a single character value.")
+    }
+    if (curve_statistic == "abs_median_tau") {
+        return(curve_stat_abs_median_tau(tau, weights = weights))
+    }
+    if (curve_statistic == "median_abs_tau") {
+        return(curve_stat_median_abs_tau(tau, weights = weights))
+    }
+    if (curve_statistic == "consistency_ratio") {
+        return(curve_stat_consistency_ratio(tau, weights = weights))
+    }
+    stop("Unhandled curve statistic: ", curve_statistic)
 }
 
 compute_placebo_curve_pvalue <- function(observed_stat, placebo_stats, two_sided = TRUE,
@@ -1781,14 +1856,13 @@ compute_placebo_curve_pvalue <- function(observed_stat, placebo_stats, two_sided
 #'
 #' @title Calculate Placebo-in-Space Curve-Level Inference
 #' @description Calculates curve-level statistics and p-values on filtered specification-curve
-#' results using placebo-in-space comparison. Supports signed median and
-#' Wilcoxon signed-rank curve statistics.
+#' results using placebo-in-space comparison.
 #'
 #' @param filtered_results Data.table. Filtered results data (post-filtering by outcomes, RMSE, etc.).
 #' @param curve_stat Character vector. Curve-level statistics to compute:
-#'   \code{"median"}, \code{"wilcoxon_sr"}.
-#' @param weighting Character vector. Weighting mode(s) for \code{"wilcoxon_sr"}:
-#'   \code{"none"} or \code{"pre_rmspe_percentile"}.
+#'   \code{"abs_median_tau"}, \code{"median_abs_tau"}, \code{"consistency_ratio"}.
+#' @param weighting Character vector. Weighting mode(s) applied to each requested
+#'   curve-level statistic: \code{"none"} or \code{"pre_rmspe_percentile"}.
 #' @param two_sided Logical. Whether to compute two-sided p-values using absolute-value tails.
 #' @param expected_direction Character. Expected sign direction for one-sided tests
 #'   (\code{"negative"} or \code{"positive"}). Ignored when \code{two_sided = TRUE}.
@@ -1808,15 +1882,21 @@ compute_placebo_curve_pvalue <- function(observed_stat, placebo_stats, two_sided
 #'
 #' @details
 #' For each unit and specification, this function uses the signed per-spec effect summary
-#' \code{tau_s}. Median remains signed, but two-sided p-values always compare absolute tails
-#' against placebo-unit curve statistics:
+#' \code{tau_s}. Two-sided p-values always compare absolute tails against placebo-unit
+#' curve statistics:
 #' \deqn{p = (1 + \#\{|T_j| \ge |T_{treated}|\})/(J+1).}
-#' For \code{wilcoxon_sr}, each unit statistic is
-#' \deqn{\sum_{s=1}^S sign(\tau_s)\,rank(|\tau_s|)}
-#' with ties handled by midranks (\code{ties.method="average"}).
+#' The supported curve statistics are:
+#' \itemize{
+#'   \item \code{abs_median_tau}: \eqn{|\mathrm{median}_s(\tau_s)|}
+#'   \item \code{median_abs_tau}: \eqn{\mathrm{median}_s(|\tau_s|)}
+#'   \item \code{consistency_ratio}: \eqn{|\sum_s \tau_s| / \sum_s |\tau_s|}
+#' }
+#' For weighted variants, pre-RMSPE-percentile weights are defined within unit as
+#' \eqn{w_s = 1 - rank(\mathrm{RMSPE}^{pre}_s)/(S+1)} and applied directly to the
+#' statistic computation.
 calculate_spec_curve_pvalues_filtered <- function(
     filtered_results,
-    curve_stat = c("median", "wilcoxon_sr"),
+    curve_stat = c("abs_median_tau", "median_abs_tau", "consistency_ratio"),
     weighting = c("none", "pre_rmspe_percentile"),
     two_sided = TRUE,
     expected_direction = "two_sided",
@@ -1831,7 +1911,7 @@ calculate_spec_curve_pvalues_filtered <- function(
         stop("filtered_results is empty. Cannot compute curve-level inference.")
     }
 
-    valid_curve_stats <- c("median", "wilcoxon_sr")
+    valid_curve_stats <- c("abs_median_tau", "median_abs_tau", "consistency_ratio")
     curve_stat <- unique(curve_stat)
     invalid_curve_stats <- setdiff(curve_stat, valid_curve_stats)
     if (length(invalid_curve_stats) > 0) {
@@ -1971,7 +2051,7 @@ calculate_spec_curve_pvalues_filtered <- function(
     tau_by_spec <- tau_by_spec[unit_name %in% kept_units & full_spec_id %in% final_spec_ids]
 
     pre_rmspe_by_spec <- NULL
-    if ("wilcoxon_sr" %in% curve_stat && "pre_rmspe_percentile" %in% weighting) {
+    if ("pre_rmspe_percentile" %in% weighting) {
         if (!"rmse" %in% names(analysis_dt)) {
             stop("weighting='pre_rmspe_percentile' requires a finite 'rmse' column in filtered_results.")
         }
@@ -2027,7 +2107,7 @@ calculate_spec_curve_pvalues_filtered <- function(
 
         unit_type_i <- tau_by_spec[unit_name == unit_i, unit_type][1]
         pre_i <- NULL
-        if ("wilcoxon_sr" %in% curve_stat && "pre_rmspe_percentile" %in% weighting) {
+        if ("pre_rmspe_percentile" %in% weighting) {
             pre_i <- pre_rmspe_by_spec[unit_name == unit_i][
                 match(final_spec_ids, full_spec_id), pre_rmspe
             ]
@@ -2039,15 +2119,14 @@ calculate_spec_curve_pvalues_filtered <- function(
         rows <- list()
         for (stat_i in curve_stat) {
             for (w_i in weighting) {
-                if (stat_i == "median") {
-                    estimate_i <- curve_stat_median(tau_i)
-                } else if (stat_i == "wilcoxon_sr" && w_i == "none") {
-                    estimate_i <- curve_stat_wilcoxon_sr(tau_i)
-                } else if (stat_i == "wilcoxon_sr" && w_i == "pre_rmspe_percentile") {
-                    estimate_i <- curve_stat_wilcoxon_sr_weighted(tau_i, pre_i)
-                } else {
-                    stop("Unhandled curve statistic / weighting combination: ", stat_i, " + ", w_i)
+                weights_i <- NULL
+                if (w_i == "pre_rmspe_percentile") {
+                    if (is.null(pre_i)) {
+                        stop("Missing pre_rmspe values for weighting='pre_rmspe_percentile' in unit ", unit_i, ".")
+                    }
+                    weights_i <- compute_pre_rmspe_percentile_weights(pre_i)
                 }
+                estimate_i <- apply_curve_statistic(stat_i, tau_i, weights = weights_i)
 
                 rows[[length(rows) + 1L]] <- data.table(
                     unit_name = unit_i,
@@ -2063,8 +2142,13 @@ calculate_spec_curve_pvalues_filtered <- function(
     }
     stats_by_unit <- data.table::rbindlist(stats_list)
 
+    stat_levels <- c("abs_median_tau", "median_abs_tau", "consistency_ratio")
     stat_combos <- unique(stats_by_unit[, .(curve_statistic, weighting)])
-    stat_combos[, stat_rank := ifelse(curve_statistic == "median", 1L, 2L)]
+    stat_combos[, stat_rank := match(curve_statistic, stat_levels)]
+    if (any(is.na(stat_combos$stat_rank))) {
+        bad_stats <- unique(stat_combos[is.na(stat_rank), curve_statistic])
+        stop("Unknown curve_statistic value(s): ", paste(bad_stats, collapse = ", "))
+    }
     stat_combos[, weight_rank := ifelse(weighting == "none", 1L, 2L)]
     data.table::setorder(stat_combos, stat_rank, weight_rank)
 
@@ -2100,7 +2184,11 @@ calculate_spec_curve_pvalues_filtered <- function(
         )
     }
     treated_summary <- data.table::rbindlist(treated_summary_list)
-    treated_summary[, stat_rank := ifelse(curve_statistic == "median", 1L, 2L)]
+    treated_summary[, stat_rank := match(curve_statistic, stat_levels)]
+    if (any(is.na(treated_summary$stat_rank))) {
+        bad_stats <- unique(treated_summary[is.na(stat_rank), curve_statistic])
+        stop("Unknown curve_statistic value(s) in treated summary: ", paste(bad_stats, collapse = ", "))
+    }
     treated_summary[, weight_rank := ifelse(weighting == "none", 1L, 2L)]
     data.table::setorder(treated_summary, stat_rank, weight_rank)
     treated_summary[, c("stat_rank", "weight_rank") := NULL]

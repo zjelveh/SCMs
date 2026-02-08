@@ -220,47 +220,55 @@ test_that("percentile_rank returns strict (0,1) values with midranks on ties", {
   expect_equal(p[x == 1], c(0.3, 0.3))
 })
 
-test_that("Wilcoxon signed-rank statistic flips sign with tau sign flip and two-sided p-value is sign-invariant", {
-  tau <- c(2, -3, 1, -2)
-  sr <- SCMs:::curve_stat_wilcoxon_sr(tau)
-  sr_flip <- SCMs:::curve_stat_wilcoxon_sr(-tau)
-  expect_equal(sr_flip, -sr)
-
+test_that("new magnitude-aware curve statistics and their two-sided p-values are sign-invariant", {
   data_pos <- make_curve_test_data(sign_flip = 1)
   data_neg <- make_curve_test_data(sign_flip = -1)
 
   out_pos <- SCMs:::calculate_spec_curve_pvalues_filtered(
     filtered_results = data_pos,
-    curve_stat = c("median", "wilcoxon_sr"),
+    curve_stat = c("abs_median_tau", "median_abs_tau", "consistency_ratio"),
     weighting = "none",
     two_sided = TRUE
   )
   out_neg <- SCMs:::calculate_spec_curve_pvalues_filtered(
     filtered_results = data_neg,
-    curve_stat = c("median", "wilcoxon_sr"),
+    curve_stat = c("abs_median_tau", "median_abs_tau", "consistency_ratio"),
     weighting = "none",
     two_sided = TRUE
   )
 
-  p_pos <- out_pos$treated_summary[curve_statistic == "wilcoxon_sr" & weighting == "none", p_value]
-  p_neg <- out_neg$treated_summary[curve_statistic == "wilcoxon_sr" & weighting == "none", p_value]
-  expect_equal(p_pos, p_neg)
+  stats <- c("abs_median_tau", "median_abs_tau", "consistency_ratio")
+  for (stat_i in stats) {
+    est_pos <- out_pos$treated_summary[curve_statistic == stat_i & weighting == "none", estimate]
+    est_neg <- out_neg$treated_summary[curve_statistic == stat_i & weighting == "none", estimate]
+    p_pos <- out_pos$treated_summary[curve_statistic == stat_i & weighting == "none", p_value]
+    p_neg <- out_neg$treated_summary[curve_statistic == stat_i & weighting == "none", p_value]
+    expect_equal(est_pos, est_neg)
+    expect_equal(p_pos, p_neg)
+  }
 })
 
-test_that("weighted Wilcoxon signed-rank is a normalized version of unweighted when all pre_rmspe values are equal", {
+test_that("consistency_ratio is bounded in [0,1]", {
+  tau <- c(2, -3, 1, -2, 0.5)
+  stat <- SCMs:::curve_stat_consistency_ratio(tau)
+  expect_true(stat >= 0 && stat <= 1)
+})
+
+test_that("weighted and unweighted versions coincide when pre_rmspe weights are constant", {
   data_equal_rmse <- make_curve_test_data(equal_rmse = TRUE)
   out <- SCMs:::calculate_spec_curve_pvalues_filtered(
     filtered_results = data_equal_rmse,
-    curve_stat = "wilcoxon_sr",
+    curve_stat = c("abs_median_tau", "median_abs_tau", "consistency_ratio"),
     weighting = c("none", "pre_rmspe_percentile"),
     two_sided = TRUE
   )
 
-  sr_none <- out$treated_summary[curve_statistic == "wilcoxon_sr" & weighting == "none", estimate]
-  sr_w <- out$treated_summary[curve_statistic == "wilcoxon_sr" & weighting == "pre_rmspe_percentile", estimate]
-  s <- unique(out$stats_by_unit[unit_name == "treated_unit", n_specs])
-  expect_length(s, 1L)
-  expect_equal(sr_w * s, sr_none)
+  stats <- c("abs_median_tau", "median_abs_tau", "consistency_ratio")
+  for (stat_i in stats) {
+    est_none <- out$treated_summary[curve_statistic == stat_i & weighting == "none", estimate]
+    est_w <- out$treated_summary[curve_statistic == stat_i & weighting == "pre_rmspe_percentile", estimate]
+    expect_equal(est_w, est_none)
+  }
 })
 
 test_that("curve-level inference fails hard on NA/Inf, missing pre_rmspe, mismatched lengths, and S<2", {
@@ -269,14 +277,14 @@ test_that("curve-level inference fails hard on NA/Inf, missing pre_rmspe, mismat
   data_na <- copy(data_ok)
   data_na[1, tau := NA_real_]
   expect_error(
-    SCMs:::calculate_spec_curve_pvalues_filtered(data_na, curve_stat = "median"),
+    SCMs:::calculate_spec_curve_pvalues_filtered(data_na, curve_stat = "abs_median_tau"),
     "Non-finite tau_s"
   )
 
   data_inf <- copy(data_ok)
   data_inf[1, tau := Inf]
   expect_error(
-    SCMs:::calculate_spec_curve_pvalues_filtered(data_inf, curve_stat = "median"),
+    SCMs:::calculate_spec_curve_pvalues_filtered(data_inf, curve_stat = "abs_median_tau"),
     "Non-finite tau_s"
   )
 
@@ -284,40 +292,42 @@ test_that("curve-level inference fails hard on NA/Inf, missing pre_rmspe, mismat
   expect_error(
     SCMs:::calculate_spec_curve_pvalues_filtered(
       data_no_rmse,
-      curve_stat = "wilcoxon_sr",
+      curve_stat = "consistency_ratio",
       weighting = "pre_rmspe_percentile"
     ),
     "requires a finite 'rmse' column"
   )
 
   expect_error(
-    SCMs:::curve_stat_wilcoxon_sr_weighted(c(1, -1, 2), c(0.1, 0.2)),
-    "identical lengths"
+    SCMs:::curve_stat_median(c(1, -1, 2), weights = c(0.1, 0.2)),
+    "must have length 3"
   )
 
   data_small_s <- data_ok[full_spec_id %in% "s1"]
   expect_error(
-    SCMs:::calculate_spec_curve_pvalues_filtered(data_small_s, curve_stat = "median"),
+    SCMs:::calculate_spec_curve_pvalues_filtered(data_small_s, curve_stat = "abs_median_tau"),
     "require at least min_specs = 2"
   )
 })
 
-test_that("all four curve-stat/weighting combinations are returned", {
+test_that("all six curve-stat/weighting combinations are returned", {
   data_ok <- make_curve_test_data()
   out <- SCMs:::calculate_spec_curve_pvalues_filtered(
     filtered_results = data_ok,
-    curve_stat = c("median", "wilcoxon_sr"),
+    curve_stat = c("abs_median_tau", "median_abs_tau", "consistency_ratio"),
     weighting = c("none", "pre_rmspe_percentile"),
     two_sided = TRUE
   )
 
   combos <- unique(out$treated_summary[, .(curve_statistic, weighting)])
-  expect_equal(nrow(combos), 4L)
+  expect_equal(nrow(combos), 6L)
   expect_true(all(c(
-    "median:none",
-    "median:pre_rmspe_percentile",
-    "wilcoxon_sr:none",
-    "wilcoxon_sr:pre_rmspe_percentile"
+    "abs_median_tau:none",
+    "abs_median_tau:pre_rmspe_percentile",
+    "median_abs_tau:none",
+    "median_abs_tau:pre_rmspe_percentile",
+    "consistency_ratio:none",
+    "consistency_ratio:pre_rmspe_percentile"
   ) %in% paste(combos$curve_statistic, combos$weighting, sep = ":")))
 })
 
@@ -328,7 +338,7 @@ test_that("strict grid policy fails when a placebo unit is missing specs", {
   expect_error(
     SCMs:::calculate_spec_curve_pvalues_filtered(
       filtered_results = data_missing,
-      curve_stat = "median",
+      curve_stat = "abs_median_tau",
       weighting = "none",
       grid_policy = "strict"
     ),
@@ -342,7 +352,7 @@ test_that("drop_incomplete_units keeps full treated grid and drops mismatched pl
 
   out <- SCMs:::calculate_spec_curve_pvalues_filtered(
     filtered_results = data_missing,
-    curve_stat = "median",
+    curve_stat = "abs_median_tau",
     weighting = "none",
     grid_policy = "drop_incomplete_units"
   )
@@ -359,7 +369,7 @@ test_that("intersect_specs keeps all units and uses shared specs only", {
 
   out <- SCMs:::calculate_spec_curve_pvalues_filtered(
     filtered_results = data_missing,
-    curve_stat = "median",
+    curve_stat = "abs_median_tau",
     weighting = "none",
     grid_policy = "intersect_specs"
   )
@@ -377,7 +387,7 @@ test_that("min_placebos and min_specs are enforced after grid policy", {
   expect_error(
     SCMs:::calculate_spec_curve_pvalues_filtered(
       filtered_results = data_missing,
-      curve_stat = "median",
+      curve_stat = "abs_median_tau",
       weighting = "none",
       grid_policy = "drop_incomplete_units",
       min_placebos = 2
@@ -388,7 +398,7 @@ test_that("min_placebos and min_specs are enforced after grid policy", {
   expect_error(
     SCMs:::calculate_spec_curve_pvalues_filtered(
       filtered_results = data_missing,
-      curve_stat = "median",
+      curve_stat = "abs_median_tau",
       weighting = "none",
       grid_policy = "intersect_specs",
       min_specs = 4
