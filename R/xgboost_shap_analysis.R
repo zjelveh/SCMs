@@ -563,10 +563,10 @@ analyze_unit_xgboost <- function(unit_data, unit, config,
   train_correlation_final <- cor(train_preds_final, y_full)
   train_rmse_final <- sqrt(mean((train_preds_final - y_full)^2))
 
-  cat("Train R²:", 1 - sum((y_full - train_preds_final)^2) / sum((y_full - mean(y_full))^2), "\n")
+  cat("Train R2:", 1 - sum((y_full - train_preds_final)^2) / sum((y_full - mean(y_full))^2), "\n")
   if (compute_loo) {
     valid_preds_indices <- !is.na(all_test_preds)
-    cat("LOO R²:", 1 - sum((y_full[valid_preds_indices] - all_test_preds[valid_preds_indices])^2) /
+    cat("LOO R2:", 1 - sum((y_full[valid_preds_indices] - all_test_preds[valid_preds_indices])^2) /
           sum((y_full[valid_preds_indices] - mean(y_full[valid_preds_indices]))^2), "\n")
   }
 
@@ -574,7 +574,7 @@ analyze_unit_xgboost <- function(unit_data, unit, config,
   cat("Calculating SHAP values for", nrow(X_mat), "observations with", ncol(X_mat), "one-hot features...\n")
   shap_matrix <- predict_xgb(xgb_model_final, dfull, predcontrib = TRUE)
 
-  # Last column is BIAS term — remove it
+  # Last column is BIAS term - remove it
   shap_matrix <- shap_matrix[, -ncol(shap_matrix), drop = FALSE]
   colnames(shap_matrix) <- colnames(X_mat)
 

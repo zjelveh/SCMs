@@ -1381,11 +1381,11 @@ plot_spec_curve <- function(
     y_pos <- 1.0
     if (isTRUE(richtext_feature_labels)) {
         within_group_step <- 0.70  # richer labels can sit closer with HTML wrapping
-        between_group_gap <- 2.10
+        between_group_gap <- 1.65  # moderate inter-group spacing
     } else {
         # Plain-text SVG labels render as multi-line text; use larger row spacing.
         within_group_step <- 1.15
-        between_group_gap <- 2.55
+        between_group_gap <- 2.05  # moderate inter-group spacing
     }
     group_boundaries <- list()
     y_mapping <- data.table::data.table(
@@ -1395,9 +1395,11 @@ plot_spec_curve <- function(
     )
 
     for (fg in rev(fg_order)) {
+        # Reverse within-group order relative to prior behavior so top-to-bottom
+        # is the opposite alphabetical direction (e.g., optimize above uniform).
         features_in_group <- sort(unique(as.character(
             plot_data_p2[feature_group == fg, feature_display]
-        )))
+        )), decreasing = TRUE)
         y_start <- y_pos
         for (i in seq_along(features_in_group)) {
             y_mapping <- rbind(y_mapping, data.table::data.table(

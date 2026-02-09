@@ -455,6 +455,7 @@ b.est <- function(A, Z, C = NULL, J, KM, w.constr, V, CVXR.solver = "ECOS") {
 #' @description Solve W optimization using CVXR (original implementation)
 #' @param A Treated unit features matrix
 #' @param Z Donor features matrix
+#' @param C Optional constant-term matrix.
 #' @param J Number of donor units
 #' @param KM Number of additional variables
 #' @param w.constr Constraint specification
@@ -619,7 +620,7 @@ b.est.clarabel <- function(A, Z, C = NULL, J, KM, w.constr, V) {
   # Only handle pensynth constraint for now
   if (w.constr[["name"]] != "pensynth") {
     warning("Clarabel implementation currently only supports pensynth constraint")
-    return(b.est.cvxr(A, Z, J, KM, w.constr, V, "ECOS"))
+    return(b.est.cvxr.fallback(A, Z, C, J, KM, w.constr, V, "ECOS"))
   }
   
   lambda <- w.constr[["lambda"]]
@@ -690,6 +691,7 @@ b.est.clarabel <- function(A, Z, C = NULL, J, KM, w.constr, V) {
 #' @description Solve unconstrained quadratic programming problem using clarabel
 #' @param A Treated unit features matrix
 #' @param Z Donor features matrix  
+#' @param C Optional constant-term matrix.
 #' @param J Number of donor units
 #' @param KM Number of additional variables
 #' @param w.constr Constraint specification
@@ -763,6 +765,7 @@ b.est.clarabel.ols <- function(A, Z, C = NULL, J, KM, w.constr, V) {
 #' @description Solve simplex-constrained QP using clarabel (sum to 1, non-negative)
 #' @param A Treated unit features matrix
 #' @param Z Donor features matrix
+#' @param C Optional constant-term matrix.
 #' @param J Number of donor units
 #' @param KM Number of additional variables
 #' @param w.constr Constraint specification
@@ -851,6 +854,7 @@ b.est.clarabel.simplex <- function(A, Z, C = NULL, J, KM, w.constr, V) {
 #' @description Dispatch to appropriate clarabel constraint-specific function
 #' @param A Treated unit features matrix
 #' @param Z Donor features matrix
+#' @param C Optional constant-term matrix.
 #' @param J Number of donor units
 #' @param KM Number of additional variables
 #' @param w.constr Constraint specification

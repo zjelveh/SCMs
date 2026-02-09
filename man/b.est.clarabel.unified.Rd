@@ -11,6 +11,8 @@ b.est.clarabel.unified(A, Z, C = NULL, J, KM, w.constr, V)
 
 \item{Z}{Donor features matrix}
 
+\item{C}{Optional constant-term matrix.}
+
 \item{J}{Number of donor units}
 
 \item{KM}{Number of additional variables}

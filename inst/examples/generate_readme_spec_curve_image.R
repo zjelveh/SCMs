@@ -18,7 +18,7 @@ library(data.table)
 treated_unit <- "Basque_Country_Pais_Vasco"
 outcome <- "gdpcap"
 spec_width <- 10
-spec_height <- 12
+spec_height <- 9
 png_out <- "inst/examples/readme_spec_curve.png"
 svg_out <- "inst/examples/readme_spec_curve.svg"
 pdf_out <- "inst/examples/readme_spec_curve.pdf"

@@ -54,67 +54,69 @@ Default is empty list.}
 \item{col_name_period}{Character. Name of column containing time period identifiers.}
 
 \item{feature_weights}{Character vector of feature weighting methods:
-  \itemize{
-    \item \code{"uniform"} - Equal weights for all pre-treatment periods
-    \item \code{"optimize"} - Data-driven optimization of feature weights  
-  }
-  Default is \code{c('uniform', 'optimize')}.}
+\itemize{
+\item \code{"uniform"} - Equal weights for all pre-treatment periods.
+\item \code{"optimize"} - Data-driven optimization of feature weights.
+}
+Default is \code{c("uniform", "optimize")}.}
 
 \item{outcome_models}{Character vector of outcome modeling approaches:
-  \itemize{
-    \item \code{"none"} - Standard synthetic control (no outcome model)
-    \item \code{"augsynth"} - Augmented synthetic control method
-    \item \code{"ridge"} - Ridge regression outcome model
-    \item \code{"lasso"} - Lasso regression outcome model  
-    \item \code{"ols"} - OLS regression outcome model
-  }
-  Default is \code{c('none', 'augsynth', 'ridge', 'lasso', 'ols')}.}
+\itemize{
+\item \code{"none"} - Standard synthetic control (no outcome model).
+\item \code{"augsynth"} - Augmented synthetic control method.
+\item \code{"ridge"} - Ridge regression outcome model.
+\item \code{"lasso"} - Lasso regression outcome model.
+\item \code{"ols"} - OLS regression outcome model.
+}
+Default is \code{c("none", "augsynth", "ridge", "lasso", "ols")}.}
 
 \item{donor_sample}{Character vector specifying donor pool selection:
-  \itemize{
-    \item \code{"all"} - Use all available control units
-    \item \code{"most_similar"} - Use only most similar control units
-  }
-  Default is \code{c('all', 'most_similar')}.}
+\itemize{
+\item \code{"all"} - Use all available control units.
+\item \code{"most_similar"} - Use only most similar control units.
+}
+Default is \code{c("all", "most_similar")}.}
 
-\item{sim_function}{Function to determine similarity for donor selection when \code{donor_sample} includes "most_similar".
-  Default uses built-in similarity function.}
+\item{sim_function}{Function used when \code{donor_sample} includes
+\code{"most_similar"}.}
 
-\item{constraints}{List of constraint specifications for weight optimization. Each element should be a list
-  with constraint parameters (e.g., \code{list(name = "simplex")}, \code{list(name = "lasso", Q = 0.1)}).}
+\item{constraints}{List of constraint specifications for weight optimization.
+Each element should be a list with constraint parameters (e.g.,
+\code{list(name = "simplex")} or \code{list(name = "lasso", Q = 0.1)}).}
 
-\item{cores}{Integer. Number of CPU cores for parallel processing. Default is 1 (sequential).
-  Higher values significantly speed up computation but require more memory.}
+\item{constants}{Logical vector indicating whether to include a constant term
+in synthetic control estimation for each specification.}
+
+\item{cores}{Integer. Number of CPU cores for parallel processing. Default is
+1 (sequential). Higher values increase speed at higher memory cost.}
 
 \item{verbose}{Logical. Whether to display progress messages and warnings. Default is TRUE.}
 
 \item{inference_type}{Character. Type of inference to perform:
-  \itemize{
-    \item \code{"placebo"} - Abadie-style placebo inference only (default)
-    \item \code{"bootstrap"} - Bootstrap null hypothesis inference only
-    \item \code{"all"} - Both placebo and bootstrap inference
-  }}
+\itemize{
+\item \code{"placebo"} - Abadie-style placebo inference only (default).
+\item \code{"bootstrap"} - Bootstrap null-hypothesis inference only.
+\item \code{"all"} - Both placebo and bootstrap inference.
+}}
 
 \item{inference_config}{List. Configuration settings for inference methods:
-  \itemize{
-    \item \code{bootstrap_n_replications} - Number of bootstrap replications (default: 1000)
-    \item \code{bootstrap_cores} - Number of cores for bootstrap processing (default: 1)
-  }}
+\itemize{
+\item \code{bootstrap_n_replications} - Number of bootstrap replications
+(default: 1000).
+\item \code{bootstrap_cores} - Number of cores for bootstrap processing
+(default: 1).
+}}
+
+\item{expected_direction}{Character scalar used by direction-aware inference
+helpers. Supported values are \code{"negative"} and \code{"positive"}.}
 }
 \value{
 A list structure containing:
 \itemize{
-  \item \code{results} - Data.table in long format with all specification results (treatment effects, unit data, RMSE)
-  \item \code{abadie_inference} - List containing Abadie placebo inference results:
-    \itemize{
-      \item \code{p_values} - Specification-level p-values and significance tests
-      \item \code{post_pre_ratios} - Unit-level post/pre RMSPE ratios for ranking
-      \item \code{filtered_results} - Filtered significance results (if available)
-    }
-  \item \code{bootstrap_inference} - List containing bootstrap inference results:
-    \itemize{
-      \item \code{p_values} - Specification-level bootstrap p-values and statistics
-    }
+\item \code{results}: data.table in long format with all specification results.
+\item \code{abadie_inference}: list containing placebo-in-space inference
+outputs, including p-values and post/pre RMSPE ratios.
+\item \code{bootstrap_inference}: list containing bootstrap inference outputs.
 }
 
 The \code{results} data.table contains treatment effects (tau), unit information, and specification
@@ -133,18 +135,18 @@ Generate Specification Curve (Core Computational Engine)
 The function creates a Cartesian product of all specification choices and estimates synthetic controls
 for each combination. This implementation includes:
 \itemize{
-  \item \strong{Parallel Processing}: Distributes computations across multiple cores for efficiency
-  \item \strong{Error Handling}: Gracefully handles failed estimations and continues processing
-  \item \strong{Progress Tracking}: Provides real-time updates on estimation progress
-  \item \strong{Memory Management}: Efficiently handles large specification spaces
+\item \strong{Parallel Processing}: Distributes computations across multiple cores.
+\item \strong{Error Handling}: Captures failed estimations and returns diagnostics.
+\item \strong{Progress Tracking}: Provides estimation progress updates.
+\item \strong{Memory Management}: Handles large specification spaces.
 }
 
 The resulting specification curve can reveal:
 \itemize{
-  \item Sensitivity of treatment effect estimates to modeling choices
-  \item Distribution of effect sizes across specifications  
-  \item Identification of modeling choices that drive results
-  \item Assessment of overall robustness of findings
+\item Sensitivity of treatment-effect estimates to modeling choices.
+\item Distribution of effect sizes across specifications.
+\item Which modeling choices are associated with estimate shifts.
+\item Overall robustness of findings.
 }
 }
 \examples{
@@ -196,9 +198,10 @@ plot_spec_curve(results)
 }
 \references{
 \itemize{
-  \item Simonsohn, U., Simmons, J. P., & Nelson, L. D. (2020). Specification curve analysis.
-        \emph{Nature Human Behaviour}, 4(11), 1208-1214.
-  \item Huntington-Klein, N. et al. (2021). The influence of hidden researcher decisions in applied microeconomics.
-        \emph{Economic Inquiry}, 59(3), 944-960.
+\item Simonsohn, U., Simmons, J. P., and Nelson, L. D. (2020).
+\emph{Specification curve analysis}. Nature Human Behaviour, 4(11), 1208-1214.
+\item Huntington-Klein, N. et al. (2021). The influence of hidden
+researcher decisions in applied microeconomics. \emph{Economic Inquiry},
+59(3), 944-960.
 }
 }

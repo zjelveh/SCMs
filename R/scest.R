@@ -185,7 +185,6 @@ scest <- function(data,
       stop(paste("Invalid ncol(B) value:", ncol(B), "- matrix B has invalid dimensions"))
     }
 
-    require(optimx)
     SV1 = rep(1/nrow(B), nrow(B))
     
     # Validate matrices A and B before optimization

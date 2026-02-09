@@ -11,6 +11,8 @@ b.est.cvxr.fallback(A, Z, C = NULL, J, KM, w.constr, V, CVXR.solver)
 
 \item{Z}{Donor features matrix}
 
+\item{C}{Optional constant-term matrix.}
+
 \item{J}{Number of donor units}
 
 \item{KM}{Number of additional variables}

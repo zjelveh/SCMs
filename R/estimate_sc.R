@@ -20,7 +20,6 @@
 #' @param V.mat Optional. Pre-computed covariance matrix.
 #' @param solver Character. Solver to use for the optimization problem. Default is "ECOS".
 #' @param constant Logical. Whether to include a constant term in synthetic control weights. Default is FALSE.
-#' @param P Optional. Number of factors to use (for AugSynth).
 #'
 #' @return A list of class \code{"scm_estimate"} containing estimated SCM results
 #' and input parameters.

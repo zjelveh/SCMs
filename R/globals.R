@@ -1,50 +1,34 @@
-# Global variable declarations to avoid CRAN check notes
-# These are mostly data.table column names and intermediate variables used in data operations
+#' Internal Imports and NSE Globals
+#'
+#' Centralizes imports used via non-qualified calls and declares
+#' non-standard-evaluation symbols to satisfy R CMD check.
+#'
+#' @name scm-globals
+#' @keywords internal
+#' @noRd
+#' @importFrom grDevices dev.off pdf
+#' @importFrom stats model.matrix
+#' @importFrom utils getS3method
+#' @importFrom R6 R6Class
+NULL
 
-utils::globalVariables(c(
-  # Data.table column bindings and data operations
-  ".", ".data", "..available_cols", "..available_features", "..features_to_use",
-  
-  # Common data columns 
-  "ID", "Time", "Unit Name", "Estimate", "Predicted", "Specification",
-  "unit_name", "unit_type", "unit_numbers", "full_spec_id", "spec_number",
-  "outcome", "outcome_model", "period", "post_period", "tau", "value",
-  
-  # Specification features
-  "const", "constant", "feat", "feature", "fw", "data_sample",
-  "feature_group", "feature_display", "feature_with_shap",
-  "spec_combination",
-  
-  # SHAP and ML variables
-  "shapley_value", "shap_summary", "shap_color", 
-  "shap_color_value", "mean_shap", "mean_abs_shap",
-  "abs_mean_interaction_contribution", "mean_abs_shap_interaction",
-  "total_abs_shap_value", "categorical_levels", "category", "component",
-  "interaction_label", "interaction_partner", "interaction_percent", 
-  "interaction_ratio", "is_categorical", "main_effect_percent",
-  "main_plus_interactions", "rnk_abs_mean",
-  
-  # Statistical inference variables
-  "p_value", "p_value_one_sided", "p_value_two_tailed", "significance_category",
-  "is_significant", "is_treated", "test_statistic_value",
-  "tau_s", "spec_count", "spec_ids", "n_unique_rmse", "pre_rmspe",
-  "curve_statistic", "n_specs", "n_extreme", "n_placebos", "estimate",
-  "stat_rank", "weight_rank", "weighting",
-  
-  # Treatment effect variables
-  "avg_tau", "ave_tau", "avg_treatment_effect", "median_tau", 
-  "post_pre_ratio", "pre_rmse", "rmse", "predicted_loo",
-  "diff_with_treated", "treated_unit", "unit",
-  
-  # Outcome and covariate processing
-  "magnitude", "label", "new_specification", "original_feature",
-  "original_unit_name", "ybar_control", "n_unique",
-  
-  # Dataset-specific variables (these may vary by application)
-  "hr_rate", "num_homicide", "officers", "pop", "population", "year",
-  "mdate", "modate", "month", "mh", "ofp", "ois", "oiso", "oisp", "ori9",
-  "trt", "unarmed", "result", "read_xlsx",
-  
-  # Legacy function references
-  "b.est.cvxr"
-))
+utils::globalVariables(
+  c(
+    ".", ".data", ".fitted", ".resid", "..available_cols", "..features_to_use",
+    "ID", "Legend", "Specification", "Time", "Unit Name", "actual", "avg_tau",
+    "avg_treatment_effect", "categorical_levels", "const", "constant",
+    "curve_statistic", "data_sample", "diff_with_treated", "estimate", "Estimate",
+    "feat", "feature", "feature_display", "feature_display_chr",
+    "feature_display_ordered", "feature_group", "feature_level",
+    "feature_with_shap", "full_spec_id", "fw", "grid_matches_treated",
+    "is_categorical", "is_significant", "mean_abs_shap", "n_unique",
+    "n_unique_rmse", "new_specification", "onehot_col", "original_unit_name",
+    "outcome", "outcome_model", "p.value", "p_value", "p_value_two_tailed",
+    "post_period", "post_pre_ratio", "pre_rmse", "pre_rmspe", "Predicted",
+    "predicted_loo", "rmse", "rnk_abs_mean", "shap_color", "shap_color_value",
+    "shap_summary", "shapley_value", "significance_category", "significant",
+    "spec_count", "spec_ids", "spec_number", "stat_rank", "tau", "tau_s",
+    "test_statistic_value", "trt", "unit", "unit_name", "unit_numbers",
+    "unit_type", "weight_rank", "x", "y", "y_numeric", "ybar_control"
+  )
+)

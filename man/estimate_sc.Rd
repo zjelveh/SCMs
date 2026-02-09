@@ -58,8 +58,6 @@ optionally define \code{select_periods}, \code{partition_periods}, and
 \item{solver}{Character. Solver to use for the optimization problem. Default is "ECOS".}
 
 \item{constant}{Logical. Whether to include a constant term in synthetic control weights. Default is FALSE.}
-
-\item{P}{Optional. Number of factors to use (for AugSynth).}
 }
 \value{
 A list of class \code{"scm_estimate"} containing estimated SCM results
