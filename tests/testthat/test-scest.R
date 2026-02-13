@@ -2,24 +2,39 @@ library(testthat)
 
 # Helper function to create mock scdata object
 create_mock_scdata <- function(include_constant = FALSE) {
-  set.seed(123)
-  
-  # Create basic data structure
   n_treated <- 1
   n_donors <- 4
   n_features <- 6
   n_pre <- 8
   n_post <- 5
   
-  # Create feature matrices A (treated) and B (donors)
-  A <- matrix(rnorm(n_features), ncol = n_treated)
-  B <- matrix(rnorm(n_features * n_donors), ncol = n_donors)
-  
-  # Create outcome matrices
-  Y.pre <- matrix(rnorm(n_pre), ncol = n_treated)
-  Y.post <- matrix(rnorm(n_post), ncol = n_treated)
-  Y.donors <- matrix(rnorm(n_pre * n_donors), ncol = n_donors)
-  P <- matrix(rnorm(n_post * n_donors), ncol = n_donors)
+  # Construct a convex-combination ground truth to avoid fragile optimizer tests.
+  donor_weights <- matrix(c(0.4, 0.3, 0.2, 0.1), ncol = 1)
+  B <- matrix(
+    seq(0.2, 2.5, length.out = n_features * n_donors),
+    nrow = n_features,
+    ncol = n_donors
+  )
+  A <- B %*% donor_weights
+
+  t_pre <- seq_len(n_pre)
+  t_post <- n_pre + seq_len(n_post)
+
+  Y.donors <- cbind(
+    1.0 + 0.50 * t_pre,
+    1.2 + 0.45 * t_pre,
+    0.8 + 0.55 * t_pre,
+    1.1 + 0.50 * t_pre
+  )
+  P <- cbind(
+    1.0 + 0.50 * t_post,
+    1.2 + 0.45 * t_post,
+    0.8 + 0.55 * t_post,
+    1.1 + 0.50 * t_post
+  )
+
+  Y.pre <- matrix(Y.donors %*% donor_weights, ncol = n_treated)
+  Y.post <- matrix(P %*% donor_weights + 0.3, ncol = n_treated)
   
   # Create constant matrix if requested
   C <- if (include_constant) matrix(1, nrow = n_features, ncol = 1) else NULL
@@ -30,6 +45,10 @@ create_mock_scdata <- function(include_constant = FALSE) {
   colnames(B) <- paste0("donor_", 1:n_donors)
   colnames(Y.donors) <- paste0("donor_", 1:n_donors)
   colnames(P) <- paste0("donor_", 1:n_donors)
+  rownames(Y.pre) <- paste0("t.", seq_len(n_pre))
+  rownames(Y.post) <- paste0("t.", t_post)
+  rownames(Y.donors) <- paste0("t.", seq_len(n_pre))
+  rownames(P) <- paste0("t.", t_post)
   
   if (!is.null(C)) {
     rownames(C) <- paste0("feature_", 1:n_features)
@@ -135,21 +154,9 @@ test_that("scest returns proper scest object structure", {
   
   mock_data <- create_mock_scdata()
   
-  result <- tryCatch({
-    scest(data = mock_data, 
-          w.constr = list(name = "simplex"),
-          solver = "ECOS")
-  }, error = function(e) {
-    # Skip test if computational issues
-    if (!grepl("should be|must be|Invalid|Missing", e$message)) {
-      skip("Computational error in scest - skipping structure test")
-    }
-    stop(e)
-  })
-  
-  if (is.null(result)) {
-    skip("scest returned NULL due to computational issues")
-  }
+  result <- scest(data = mock_data, 
+                  w.constr = list(name = "simplex"),
+                  solver = "ECOS")
   
   # Test class
   expect_s3_class(result, "scest")
@@ -179,20 +186,9 @@ test_that("scest handles constant terms correctly", {
   # Test with constant terms
   mock_data_const <- create_mock_scdata(include_constant = TRUE)
   
-  result_const <- tryCatch({
-    scest(data = mock_data_const,
-          w.constr = list(name = "simplex"),
-          solver = "ECOS")
-  }, error = function(e) {
-    if (!grepl("should be|must be|Invalid|Missing", e$message)) {
-      skip("Computational error with constants - skipping test")
-    }
-    stop(e)
-  })
-  
-  if (is.null(result_const)) {
-    skip("scest with constants returned NULL")
-  }
+  result_const <- scest(data = mock_data_const,
+                        w.constr = list(name = "simplex"),
+                        solver = "ECOS")
   
   # Test that constant_term exists when C matrix was provided
   expect_true("constant_term" %in% names(result_const$est.results))
@@ -200,21 +196,12 @@ test_that("scest handles constant terms correctly", {
   # Without constant terms
   mock_data_no_const <- create_mock_scdata(include_constant = FALSE)
   
-  result_no_const <- tryCatch({
-    scest(data = mock_data_no_const,
-          w.constr = list(name = "simplex"), 
-          solver = "ECOS")
-  }, error = function(e) {
-    if (!grepl("should be|must be|Invalid|Missing", e$message)) {
-      skip("Computational error without constants - skipping test")
-    }
-    stop(e)
-  })
+  result_no_const <- scest(data = mock_data_no_const,
+                           w.constr = list(name = "simplex"), 
+                           solver = "ECOS")
   
-  if (!is.null(result_no_const)) {
-    # constant_term should be NULL when no C matrix provided
-    expect_true(is.null(result_no_const$est.results$constant_term))
-  }
+  # constant_term should be NULL when no C matrix provided
+  expect_true(is.null(result_no_const$est.results$constant_term))
 })
 
 test_that("scest different constraint types work", {

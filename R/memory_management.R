@@ -85,7 +85,8 @@ SpecResultsManager <- R6::R6Class("SpecResultsManager",
     retrieve_results = function(spec_id, lazy = TRUE) {
       
       metadata <- self$get_metadata()
-      file_info <- metadata[spec_id == spec_id]
+      target_spec_id <- spec_id
+      file_info <- metadata[get("spec_id") == target_spec_id]
       
       if (nrow(file_info) == 0) {
         stop(paste("Specification set", spec_id, "not found"))
@@ -177,7 +178,8 @@ SpecResultsManager <- R6::R6Class("SpecResultsManager",
       )
       
       # Remove existing entry for this spec_id if exists
-      metadata <- metadata[spec_id != spec_id]
+      target_spec_id <- spec_id
+      metadata <- metadata[get("spec_id") != target_spec_id]
       
       # Add new row
       metadata <- rbind(metadata, new_row, fill = TRUE)
@@ -205,24 +207,11 @@ SpecResultsManager <- R6::R6Class("SpecResultsManager",
     
     #' @description Clean up memory by removing old cached objects
     cleanup_memory = function() {
-      
       # Force garbage collection
       gc()
-      
-      # Clean up temporary objects in global environment if they look like spec curve objects
-      global_objects <- ls(.GlobalEnv)
-      spec_objects <- grep("spec_|result_|cache_", global_objects, value = TRUE)
-      
-      for (obj in spec_objects) {
-        if (exists(obj, .GlobalEnv)) {
-          obj_size <- object.size(get(obj, .GlobalEnv)) / 1024^2
-          if (obj_size > 100) {  # Remove objects larger than 100MB
-            rm(list = obj, envir = .GlobalEnv)
-          }
-        }
-      }
-      
-      gc()
+
+      # Do not modify objects in user/global environments.
+      invisible(TRUE)
     },
     
     #' @description Get summary statistics about stored specifications
@@ -285,8 +274,8 @@ SpecResultsManager <- R6::R6Class("SpecResultsManager",
         updated_metadata <- metadata[creation_dates >= cutoff_date]
         metadata_file <- file.path(self$storage_dir, "spec_metadata.rds")
         saveRDS(updated_metadata, metadata_file, compress = TRUE)
-        
-        cat(paste("Removed", nrow(old_files), "old specification sets\n"))
+
+        message("Removed ", nrow(old_files), " old specification sets")
       }
     },
     

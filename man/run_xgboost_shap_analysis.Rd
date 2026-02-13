@@ -30,16 +30,42 @@ data produced by \code{spec_curve()} or \code{run_spec_curve_analysis()}.
 Run XGBoost SHAP Analysis on Long Format Data
 }
 \examples{
-\dontrun{
-spec_results <- run_spec_curve_analysis(dataset, params)
-xgb_cfg <- create_xgboost_config(
-  dataset_name = "toy",
-  treated_unit_name = "treated",
-  outcome_filter = "outcome"
-)
-shap_results <- run_xgboost_shap_analysis(
-  long_data = spec_results$results,
-  config = xgb_cfg
-)
+\donttest{
+if (requireNamespace("xgboost", quietly = TRUE)) {
+  long_data <- data.table::data.table(
+    unit_name = rep("treated", 6),
+    full_spec_id = paste0("s", 1:6),
+    spec_number = 1:6,
+    post_period = TRUE,
+    tau = c(0.4, 0.6, 0.2, 0.8, 0.3, 0.7),
+    outcome_model = c("none", "ridge", "none", "ridge", "none", "ridge"),
+    const = c("simplex", "lasso", "simplex", "lasso", "simplex", "lasso"),
+    fw = c("uniform", "uniform", "optimize", "optimize", "uniform", "optimize"),
+    feat = c("f1", "f1", "f2", "f2", "f3", "f3")
+  )
+  xgb_cfg <- create_xgboost_config(
+    dataset_name = "toy",
+    treated_unit_name = "treated",
+    spec_features = c("outcome_model", "const", "fw", "feat"),
+    tune_xgboost = FALSE,
+    xgboost_params = list(
+      objective = "reg:squarederror",
+      max_depth = 2,
+      eta = 0.1,
+      nrounds = 20,
+      subsample = 1,
+      colsample_bytree = 1,
+      nthread = 1,
+      seed = 42,
+      verbose = 0
+    )
+  )
+  shap_results <- run_xgboost_shap_analysis(
+    long_data = long_data,
+    config = xgb_cfg,
+    compute_loo = FALSE
+  )
+  names(shap_results)
+}
 }
 }

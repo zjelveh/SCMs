@@ -119,7 +119,7 @@ select_xgboost_features <- function(unit_data, spec_features) {
     if (is.factor(unit_data[[feature]]) || is.character(unit_data[[feature]])) {
       unique_vals <- unique(unit_data[[feature]])
       if (length(unique_vals) < 2) {
-        cat("Removing feature", feature, "- only has one level:", unique_vals[1], "\n")
+        message("Removing feature", feature, "- only has one level:", unique_vals[1], "\n")
         features_to_use <- setdiff(features_to_use, feature)
       }
     }
@@ -141,7 +141,7 @@ prepare_xgboost_matrix <- function(unit_data, features_to_use, all_factor_levels
       }
       design_data[[col]] <- factor(design_data[[col]], levels = all_levels)
       feature_groups[[col]] <- all_levels
-      cat("Factor", col, "levels:", paste(all_levels, collapse = ", "), "\n")
+      message("Factor", col, "levels:", paste(all_levels, collapse = ", "), "\n")
     }
   }
   
@@ -161,8 +161,8 @@ prepare_xgboost_matrix <- function(unit_data, features_to_use, all_factor_levels
     onehot_mapping[mask, feature_level := gsub(paste0("^", feat), "", colnames(X_mat)[mask])]
   }
   
-  cat("One-hot matrix dimensions:", nrow(X_mat), "x", ncol(X_mat), "\n")
-  cat("Feature groups:", paste(unique(onehot_mapping$feature_group), collapse = ", "), "\n")
+  message("One-hot matrix dimensions:", nrow(X_mat), "x", ncol(X_mat), "\n")
+  message("Feature groups:", paste(unique(onehot_mapping$feature_group), collapse = ", "), "\n")
   
   return(list(
     X_mat = X_mat,
@@ -210,7 +210,7 @@ tune_xgboost_params <- function(unit_data, config, all_factor_levels = NULL) {
   
   dtrain <- xgboost::xgb.DMatrix(data = X_mat, label = y_full)
   
-  cat("Tuning XGBoost with", nfold, "-fold CV over", nrow(grid), "settings...\n")
+  message("Tuning XGBoost with", nfold, "-fold CV over", nrow(grid), "settings...\n")
   tuning_results <- data.table::data.table()
   
   for (i in seq_len(nrow(grid))) {
@@ -254,7 +254,7 @@ tune_xgboost_params <- function(unit_data, config, all_factor_levels = NULL) {
   best_idx <- which.min(tuning_results$test_rmse_mean)
   best_row <- tuning_results[best_idx]
   
-  cat("Best CV RMSE:", round(best_row$test_rmse_mean, 4), "\n")
+  message("Best CV RMSE:", round(best_row$test_rmse_mean, 4), "\n")
   
   tuned_params <- list(
     objective = objective,
@@ -297,24 +297,50 @@ tune_xgboost_params <- function(unit_data, config, all_factor_levels = NULL) {
 #' @export
 #'
 #' @examples
-#' \dontrun{
-#' spec_results <- run_spec_curve_analysis(dataset, params)
-#' xgb_cfg <- create_xgboost_config(
-#'   dataset_name = "toy",
-#'   treated_unit_name = "treated",
-#'   outcome_filter = "outcome"
-#' )
-#' shap_results <- run_xgboost_shap_analysis(
-#'   long_data = spec_results$results,
-#'   config = xgb_cfg
-#' )
+#' \donttest{
+#' if (requireNamespace("xgboost", quietly = TRUE)) {
+#'   long_data <- data.table::data.table(
+#'     unit_name = rep("treated", 6),
+#'     full_spec_id = paste0("s", 1:6),
+#'     spec_number = 1:6,
+#'     post_period = TRUE,
+#'     tau = c(0.4, 0.6, 0.2, 0.8, 0.3, 0.7),
+#'     outcome_model = c("none", "ridge", "none", "ridge", "none", "ridge"),
+#'     const = c("simplex", "lasso", "simplex", "lasso", "simplex", "lasso"),
+#'     fw = c("uniform", "uniform", "optimize", "optimize", "uniform", "optimize"),
+#'     feat = c("f1", "f1", "f2", "f2", "f3", "f3")
+#'   )
+#'   xgb_cfg <- create_xgboost_config(
+#'     dataset_name = "toy",
+#'     treated_unit_name = "treated",
+#'     spec_features = c("outcome_model", "const", "fw", "feat"),
+#'     tune_xgboost = FALSE,
+#'     xgboost_params = list(
+#'       objective = "reg:squarederror",
+#'       max_depth = 2,
+#'       eta = 0.1,
+#'       nrounds = 20,
+#'       subsample = 1,
+#'       colsample_bytree = 1,
+#'       nthread = 1,
+#'       seed = 42,
+#'       verbose = 0
+#'     )
+#'   )
+#'   shap_results <- run_xgboost_shap_analysis(
+#'     long_data = long_data,
+#'     config = xgb_cfg,
+#'     compute_loo = FALSE
+#'   )
+#'   names(shap_results)
+#' }
 #' }
 run_xgboost_shap_analysis <- function(long_data, config, compute_loo = TRUE) {
   if (!requireNamespace("xgboost", quietly = TRUE)) {
     stop("Package 'xgboost' is required for SHAP analysis. Install with: install.packages('xgboost')", call. = FALSE)
   }
-  cat(paste("\nProcessing dataset:", config$dataset_name), "\n")
-  cat("Using direct long format data - no CSV processing needed\n")
+  message(paste("\nProcessing dataset:", config$dataset_name), "\n")
+  message("Using direct long format data - no CSV processing needed\n")
   
   # Validate input data
   if (!data.table::is.data.table(long_data)) {
@@ -360,15 +386,15 @@ run_xgboost_shap_analysis <- function(long_data, config, compute_loo = TRUE) {
     stop("No data remaining after filtering and averaging tau.")
   }
   
-  cat("Prepared", nrow(avg_tau_data), "specification-unit observations\n")
+  message("Prepared", nrow(avg_tau_data), "specification-unit observations\n")
   
   # Process units
   if(config$treated_unit_only) {
     unique_units <- config$treated_unit_name
-    cat("Analyzing treated unit only:", unique_units, "\n")
+    message("Analyzing treated unit only:", unique_units, "\n")
   } else {
     unique_units <- sort(unique(avg_tau_data$unit_name))
-    cat("Analyzing all", length(unique_units), "units\n")
+    message("Analyzing all", length(unique_units), "units\n")
   }
   
   # Run analysis on each unit
@@ -424,7 +450,7 @@ run_xgboost_shap_analysis <- function(long_data, config, compute_loo = TRUE) {
     results_dt[, rnk_abs_mean := rank(-mean_abs_shap), by = unit]
   }
   
-  cat("Analysis complete. SHAP values include spec_number for clean alignment.\n")
+  message("Analysis complete. SHAP values include spec_number for clean alignment.\n")
   
   return(list(
     results = results_dt,
@@ -453,14 +479,14 @@ run_xgboost_shap_analysis <- function(long_data, config, compute_loo = TRUE) {
 analyze_unit_xgboost <- function(unit_data, unit, config,
       all_factor_levels = NULL, categorical_features = NULL,
       compute_loo = TRUE) {
-  cat(paste("Processing unit:", unit), "\n")
+  message(paste("Processing unit:", unit), "\n")
 
   outcome_col_name <- "avg_tau"
   spec_features <- config$spec_features
 
   min_specs_required <- 3
   if (nrow(unit_data) < min_specs_required) {
-    cat("Skipping", unit, "- insufficient specifications:", nrow(unit_data), "\n")
+    message("Skipping", unit, "- insufficient specifications:", nrow(unit_data), "\n")
     return(list(results = NULL, shapley = NULL, predictions = NULL))
   }
 
@@ -470,13 +496,13 @@ analyze_unit_xgboost <- function(unit_data, unit, config,
   n_specs <- nrow(unit_data_complete)
 
   if (n_specs < min_specs_required) {
-    cat("Skipping", unit, "- insufficient specs after NA removal:", n_specs, "\n")
+    message("Skipping", unit, "- insufficient specs after NA removal:", n_specs, "\n")
     return(list(results = NULL, shapley = NULL, predictions = NULL))
   }
 
   # Check for variation in outcome
   if(sd(unit_data_complete[[outcome_col_name]], na.rm = TRUE) == 0) {
-    cat("Skipping", unit, "- no variation in avg_tau\n")
+    message("Skipping", unit, "- no variation in avg_tau\n")
     return(list(results = NULL, shapley = NULL, predictions = NULL))
   }
 
@@ -484,7 +510,7 @@ analyze_unit_xgboost <- function(unit_data, unit, config,
   features_to_use <- select_xgboost_features(unit_data_complete, spec_features)
 
   if (length(features_to_use) == 0) {
-    cat("Skipping", unit, "- no varying features available\n")
+    message("Skipping", unit, "- no varying features available\n")
     return(list(results = NULL, shapley = NULL, predictions = NULL))
   }
 
@@ -511,7 +537,7 @@ analyze_unit_xgboost <- function(unit_data, unit, config,
     # LOO test predictions
     all_test_preds <- numeric(n_specs)
 
-    cat("Starting LOO test predictions for", unit, "with", n_specs, "specifications...\n")
+    message("Starting LOO test predictions for", unit, "with", n_specs, "specifications...\n")
     for (i in 1:n_specs) {
       y_train_fold <- y_full[-i]
 
@@ -546,11 +572,11 @@ analyze_unit_xgboost <- function(unit_data, unit, config,
     all_test_preds <- rep(NA_real_, n_specs)
     test_correlation <- NA
     test_rmse <- NA
-    cat("Skipping LOO test predictions for", unit, "(compute_loo=FALSE)\n")
+    message("Skipping LOO test predictions for", unit, "(compute_loo=FALSE)\n")
   }
 
   # Train final model on all data for SHAP
-  cat("Training final model for SHAP values for unit", unit, "...\n")
+  message("Training final model for SHAP values for unit", unit, "...\n")
   dfull <- xgboost::xgb.DMatrix(data = X_mat, label = y_full)
   xgb_model_final <- xgboost::xgb.train(
     params = params_train,
@@ -563,22 +589,22 @@ analyze_unit_xgboost <- function(unit_data, unit, config,
   train_correlation_final <- cor(train_preds_final, y_full)
   train_rmse_final <- sqrt(mean((train_preds_final - y_full)^2))
 
-  cat("Train R2:", 1 - sum((y_full - train_preds_final)^2) / sum((y_full - mean(y_full))^2), "\n")
+  message("Train R2:", 1 - sum((y_full - train_preds_final)^2) / sum((y_full - mean(y_full))^2), "\n")
   if (compute_loo) {
     valid_preds_indices <- !is.na(all_test_preds)
-    cat("LOO R2:", 1 - sum((y_full[valid_preds_indices] - all_test_preds[valid_preds_indices])^2) /
+    message("LOO R2:", 1 - sum((y_full[valid_preds_indices] - all_test_preds[valid_preds_indices])^2) /
           sum((y_full[valid_preds_indices] - mean(y_full[valid_preds_indices]))^2), "\n")
   }
 
   # Calculate SHAP values using XGBoost's built-in TreeSHAP (predcontrib=TRUE)
-  cat("Calculating SHAP values for", nrow(X_mat), "observations with", ncol(X_mat), "one-hot features...\n")
+  message("Calculating SHAP values for", nrow(X_mat), "observations with", ncol(X_mat), "one-hot features...\n")
   shap_matrix <- predict_xgb(xgb_model_final, dfull, predcontrib = TRUE)
 
   # Last column is BIAS term - remove it
   shap_matrix <- shap_matrix[, -ncol(shap_matrix), drop = FALSE]
   colnames(shap_matrix) <- colnames(X_mat)
 
-  cat("SHAP matrix dimensions:", dim(shap_matrix), "\n")
+  message("SHAP matrix dimensions:", dim(shap_matrix), "\n")
 
   # Store prediction data
   predictions_dt <- data.table::data.table(
@@ -627,9 +653,9 @@ analyze_unit_xgboost <- function(unit_data, unit, config,
     shap_long <- rbind(shap_long, feat_dt)
   }
 
-  cat("SHAP long format:", nrow(shap_long), "rows\n")
-  cat("  Unique feature_groups:", paste(unique(shap_long$feature_group), collapse = ", "), "\n")
-  cat("  Unique features:", paste(unique(shap_long$feature), collapse = ", "), "\n")
+  message("SHAP long format:", nrow(shap_long), "rows\n")
+  message("  Unique feature_groups:", paste(unique(shap_long$feature_group), collapse = ", "), "\n")
+  message("  Unique features:", paste(unique(shap_long$feature), collapse = ", "), "\n")
 
   # Add metadata columns for downstream compatibility
   shap_long[, is_categorical := feature_group %in% names(feature_groups)]
@@ -665,7 +691,7 @@ analyze_unit_xgboost <- function(unit_data, unit, config,
                categorical_levels := paste(feature_groups[[cat_feat]], collapse = ",")]
   }
 
-  cat("Completed analysis for", unit, "\n")
+  message("Completed analysis for", unit, "\n")
 
   return(list(
     results = results_dt,

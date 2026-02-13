@@ -35,10 +35,10 @@ bootstrap_null_inference <- function(sc.pred,
   treated_period <- sc.pred$treated_period
   
   if (verbose) {
-    cat("Starting bootstrap null hypothesis inference...\n")
-    cat("Bootstrap replications:", n_bootstrap, "\n")
-    cat("Treated unit:", treated_unit, "\n")
-    cat("Treatment period:", treated_period, "\n")
+    message("Starting bootstrap null hypothesis inference...\n")
+    message("Bootstrap replications:", n_bootstrap, "\n")
+    message("Treated unit:", treated_unit, "\n")
+    message("Treatment period:", treated_period, "\n")
   }
   
   # Step 1: Calculate actual treatment effects for all outcome models
@@ -50,7 +50,7 @@ bootstrap_null_inference <- function(sc.pred,
     actual_effects[[oc]] <- mean(actual_tau, na.rm = TRUE)  # Average treatment effect
     
     if (verbose) {
-      cat("Actual treatment effect for", oc, ":", round(actual_effects[[oc]], 4), "\n")
+      message("Actual treatment effect for", oc, ":", round(actual_effects[[oc]], 4), "\n")
     }
   }
   
@@ -124,7 +124,7 @@ enforce_null_hypothesis <- function(dataset, sc.pred, actual_effects, verbose = 
     dataset_null[treated_post_mask, (col_name_outcome) := as.numeric(get(col_name_outcome)) - effect_to_subtract]
     
     if (verbose) {
-      cat("Subtracted effect", round(effect_to_subtract, 4), "from", sum(treated_post_mask), 
+      message("Subtracted effect", round(effect_to_subtract, 4), "from", sum(treated_post_mask), 
           "post-treatment observations\n")
     }
   } else {
@@ -134,7 +134,7 @@ enforce_null_hypothesis <- function(dataset, sc.pred, actual_effects, verbose = 
     dataset_null[treated_post_mask, (col_name_outcome) := as.numeric(get(col_name_outcome)) - effect_to_subtract]
     
     if (verbose) {
-      cat("Using primary outcome model effect", round(effect_to_subtract, 4), 
+      message("Using primary outcome model effect", round(effect_to_subtract, 4), 
           "for null enforcement\n")
     }
   }
@@ -161,8 +161,8 @@ perform_bootstrap_inference <- function(dataset_null, sc.pred, actual_effects,
   control_units <- setdiff(all_units, sc.pred$name_treated_unit)
   
   if (verbose) {
-    cat("Total units for bootstrapping:", length(all_units), "\n")
-    cat("Control units:", length(control_units), "\n")
+    message("Total units for bootstrapping:", length(all_units), "\n")
+    message("Control units:", length(control_units), "\n")
   }
   
   # Setup parallel processing if requested
@@ -268,7 +268,9 @@ perform_bootstrap_inference <- function(dataset_null, sc.pred, actual_effects,
     stop(paste("Bootstrap failed:", failed_count, "out of", n_bootstrap, "replications failed"))
   }
   
-  cat("Bootstrap success: All", n_bootstrap, "replications completed successfully\n")
+  if (verbose) {
+    message("Bootstrap success: All ", n_bootstrap, " replications completed successfully")
+  }
   
   # Extract effects and iteration data
   bootstrap_effects <- list()
@@ -330,7 +332,10 @@ create_bootstrap_dataset <- function(dataset_null, bootstrap_units, col_name_uni
   
   if (n_unique_units != expected_units) {
     # This should maximize chances - create exactly the right number of unique units
-    cat("Adjusting bootstrap dataset: had", n_unique_units, "unique units, need", expected_units, "\n")
+    warning(
+      "Bootstrap dataset has ", n_unique_units, " unique units but expected ",
+      expected_units, "."
+    )
   }
   
   return(bootstrap_data)
@@ -398,13 +403,13 @@ calculate_bootstrap_pvalues <- function(bootstrap_effects, actual_effects, verbo
       )
       
       if (verbose) {
-        cat("Outcome model:", oc, "\n")
-        cat("  Actual effect:", round(actual_effect, 4), "\n")
-        cat("  Bootstrap mean:", round(mean(bootstrap_dist, na.rm = TRUE), 4), "\n")
-        cat("  Actual rank in bootstrap:", rank_in_bootstrap + 1, "out of", n_bootstrap, "\n")
-        cat("  One-tailed p-values: positive =", round(p_value_positive, 4), 
+        message("Outcome model:", oc, "\n")
+        message("  Actual effect:", round(actual_effect, 4), "\n")
+        message("  Bootstrap mean:", round(mean(bootstrap_dist, na.rm = TRUE), 4), "\n")
+        message("  Actual rank in bootstrap:", rank_in_bootstrap + 1, "out of", n_bootstrap, "\n")
+        message("  One-tailed p-values: positive =", round(p_value_positive, 4), 
             ", negative =", round(p_value_negative, 4), "\n")
-        cat("  Two-tailed p-value:", round(p_value_two_tailed, 4), "\n")
+        message("  Two-tailed p-value:", round(p_value_two_tailed, 4), "\n")
       }
     }
   }

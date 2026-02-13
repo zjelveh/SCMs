@@ -36,7 +36,7 @@ This vignette covers advanced features of the SCMs package for users who need to
 - Parallel processing and computational considerations
 - Extension points for methodological innovations
 
-```{r load-packages}
+```{r load-packages, eval=TRUE}
 library(SCMs)
 library(data.table)
 library(ggplot2)

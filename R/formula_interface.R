@@ -64,34 +64,31 @@ NULL
 #' @export
 #'
 #' @examples
-#' \dontrun{
-#' # Basic formula interface
-#' result <- synth(gdp ~ population + investment | California,
-#'                 data = panel_data,
-#'                 time.var = "year",
-#'                 id.var = "state", 
-#'                 treated.period = 1989,
-#'                 pre.period = 1980:1988,
-#'                 post.period = 1989:2000)
-#'
-#' # With transformed variables
-#' result <- synth(log(gdp) ~ log(population) + I(investment/1000) | California,
-#'                 data = panel_data,
-#'                 time.var = "year",
-#'                 id.var = "state",
-#'                 treated.period = 1989,
-#'                 pre.period = 1980:1988,
-#'                 post.period = 1989:2000,
-#'                 constraint = "lasso")
-#'
-#' # Use all available covariates except one
-#' result <- synth(gdp ~ . - population | California,
-#'                 data = panel_data,
-#'                 time.var = "year", 
-#'                 id.var = "state",
-#'                 treated.period = 1989,
-#'                 pre.period = 1980:1988,
-#'                 post.period = 1989:2000)
+#' \donttest{
+#' panel_data <- data.frame(
+#'   state = rep(c("California", "Texas", "Florida"), each = 6),
+#'   year = rep(1:6, 3),
+#'   gdp = c(10, 11, 12, 14, 15, 16,
+#'           9, 10, 11, 12, 13, 14,
+#'           11, 12, 13, 13, 14, 15),
+#'   population = c(1, 1.1, 1.2, 1.3, 1.35, 1.4,
+#'                  0.9, 0.95, 1.0, 1.05, 1.1, 1.15,
+#'                  1.2, 1.25, 1.3, 1.33, 1.36, 1.4),
+#'   investment = c(2, 2.1, 2.2, 2.4, 2.5, 2.6,
+#'                  1.8, 1.9, 2.0, 2.1, 2.2, 2.3,
+#'                  2.0, 2.1, 2.2, 2.25, 2.3, 2.35)
+#' )
+#' result <- synth(
+#'   gdp ~ population + investment | California,
+#'   data = panel_data,
+#'   time.var = "year",
+#'   id.var = "state",
+#'   treated.period = 5,
+#'   pre.period = 1:4,
+#'   post.period = 5:6,
+#'   constraint = "simplex"
+#' )
+#' class(result)
 #' }
 synth <- function(formula, data, time.var, id.var, treated.period, 
                   pre.period, post.period,

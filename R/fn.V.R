@@ -13,9 +13,17 @@
 #' @return Numeric. The computed loss value.
 #'
 #' @examples
-#' # Example usage (replace with actual example when available)
-#' # loss <- fn.V(variables.v = c(0.5, 0.5), X0.scaled = matrix(...), X1.scaled = matrix(...),
-#' #              Z0 = matrix(...), Z1 = matrix(...))
+#' X0 <- matrix(c(1, 2, 2, 3), nrow = 2)
+#' X1 <- matrix(c(1.5, 2.5), nrow = 2)
+#' Z0 <- matrix(c(1, 2, 2, 3, 3, 4), nrow = 3)
+#' Z1 <- matrix(c(1.5, 2.5, 3.5), nrow = 3)
+#' SCMs:::fn.V(
+#'   variables.v = c(0.5, 0.5),
+#'   X0.scaled = X0,
+#'   X1.scaled = X1,
+#'   Z0 = Z0,
+#'   Z1 = Z1
+#' )
 fn.V <- function(
     variables.v = stop("variables.v missing"),
     X0.scaled = stop("X0.scaled missing"),

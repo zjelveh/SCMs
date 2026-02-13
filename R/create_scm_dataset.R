@@ -19,22 +19,29 @@
 #' @export
 #'
 #' @examples
-#' # Example usage (replace with actual example when available)
-#' # scm_data <- create_scm_dataset(
-#' #   dataset = my_data,
-#' #   outcome = "gdp",
-#' #   covagg = list(
-#' #     list(var = "outcome_var", partition_periods = list(type = "by_period")),
-#' #     list(var = "population", compute = "mean"),
-#' #     list(var = "education", compute = "mean")
-#' #   ),
-#' #   col_name_unit_name = "state",
-#' #   name_treated_unit = "California",
-#' #   col_name_period = "year",
-#' #   treated_period = 2000,
-#' #   min_period = 1990,
-#' #   end_period = 2010
-#' # )
+#' \donttest{
+#' toy <- data.frame(
+#'   unit = rep(c("treated", "donor1", "donor2"), each = 6),
+#'   year = rep(1:6, 3),
+#'   y = c(10, 11, 12, 14, 15, 16,
+#'         9, 10, 11, 12, 13, 14,
+#'         11, 12, 13, 13, 14, 15)
+#' )
+#' scm_data <- create_scm_dataset(
+#'   dataset = toy,
+#'   outcome = "y",
+#'   covagg = list(
+#'     list(var = "outcome_var", partition_periods = list(type = "by_period"))
+#'   ),
+#'   col_name_unit_name = "unit",
+#'   name_treated_unit = "treated",
+#'   col_name_period = "year",
+#'   treated_period = 5,
+#'   min_period = 1,
+#'   end_period = 6
+#' )
+#' inherits(scm_data, "scdata")
+#' }
 create_scm_dataset <- function(dataset,
                                outcome,
                                covagg,

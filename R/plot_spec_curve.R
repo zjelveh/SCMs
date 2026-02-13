@@ -136,113 +136,38 @@
 #' @export
 #'
 #' @examples
-#' \dontrun{
-#' # ===== RECOMMENDED WORKFLOW: Internal SHAP Computation =====
-#' 
-#' # 1. Generate specification curve data
-#' spec_results <- run_spec_curve_analysis(
-#'   dataset = your_data,
-#'   params = your_params,
-#'   inference_type = "placebo"
+#' \donttest{
+#' specs <- data.table::data.table(
+#'   full_spec_id = paste0("s", 1:4),
+#'   outcome_model = c("none", "ridge", "none", "ridge"),
+#'   const = c("simplex", "lasso", "simplex", "lasso"),
+#'   fw = c("uniform", "uniform", "optimize", "optimize"),
+#'   feat = c("f1", "f1", "f2", "f2")
 #' )
-#'
-#' # 2. Basic plot with internal SHAP computation (most common use case)
-#' plot_basic <- plot_spec_curve(
-#'   long_data = spec_results,
-#'   name_treated_unit = "TREATED_ID",
-#'   show_shap = TRUE  # Automatically computes SHAP internally
+#' long_data <- data.table::CJ(
+#'   unit_name = c("treated", "donor1"),
+#'   full_spec_id = as.character(specs[["full_spec_id"]]),
+#'   post_period = c(FALSE, TRUE),
+#'   sorted = FALSE
 #' )
-#'
-#' # ===== SPECIFICATION FILTERING EXAMPLES =====
-#'
-#' # Filter by constant terms only
-#' plot_constant_only <- plot_spec_curve(
-#'   long_data = spec_results,
-#'   name_treated_unit = "TREATED_ID",
-#'   filter_specs = list(constant = "TRUE"),
-#'   show_shap = TRUE
+#' long_data[, unit_type := ifelse(unit_name == "treated", "treated", "control")]
+#' long_data <- merge(long_data, specs, by = "full_spec_id", all.x = TRUE)
+#' long_data[, outcome := "y"]
+#' long_data[, rmse := 0.2 + as.numeric(factor(full_spec_id)) * 0.01]
+#' long_data[, tau := ifelse(
+#'   unit_name == "treated",
+#'   as.numeric(factor(full_spec_id)) * 0.5 + ifelse(post_period, 0.2, 0),
+#'   as.numeric(factor(full_spec_id)) * 0.1 + ifelse(post_period, 0.05, 0)
+#' )]
+#' out <- plot_spec_curve(
+#'   long_data = long_data,
+#'   name_treated_unit = "treated",
+#'   show_shap = FALSE,
+#'   show_pvalues = FALSE,
+#'   curve_stat = "abs_median_tau",
+#'   weighting = "none"
 #' )
-#'
-#' # Filter by multiple criteria (AND logic)
-#' plot_filtered <- plot_spec_curve(
-#'   long_data = spec_results,
-#'   name_treated_unit = "TREATED_ID",
-#'   filter_specs = list(
-#'     constant = "TRUE",
-#'     const = c("simplex", "lasso"),
-#'     outcome_model = c("none", "augsynth")
-#'   ),
-#'   show_shap = TRUE
-#' )
-#'
-#' # Compare specific constraint methods
-#' plot_constraints <- plot_spec_curve(
-#'   long_data = spec_results,
-#'   name_treated_unit = "TREATED_ID",
-#'   filter_specs = list(const = c("simplex", "lasso", "ridge")),
-#'   show_shap = TRUE
-#' )
-#'
-#' # ===== DIFFERENT TEST STATISTICS =====
-#'
-#' # Using treatment effect p-values
-#' plot_treatment_effect <- plot_spec_curve(
-#'   long_data = spec_results,
-#'   name_treated_unit = "TREATED_ID",
-#'   test_statistic = "treatment_effect",
-#'   show_shap = TRUE
-#' )
-#'
-#' # Using RMSE ratio p-values (default)
-#' plot_rmse_ratio <- plot_spec_curve(
-#'   long_data = spec_results,
-#'   name_treated_unit = "TREATED_ID",
-#'   test_statistic = "rmse_ratio",
-#'   show_shap = TRUE
-#' )
-#'
-#' # ===== EXTERNAL SHAP WORKFLOW (Advanced) =====
-#'
-#' # For advanced users who want external control over SHAP computation
-#' shap_config_external <- create_xgboost_config(
-#'   dataset_name = "example",
-#'   treated_unit_name = "TREATED_ID",
-#'   treated_unit_only = FALSE  # Multi-unit SHAP computation
-#' )
-#' external_shap <- run_xgboost_shap_analysis(spec_results, shap_config_external)
-#'
-#' plot_external_shap <- plot_spec_curve(
-#'   long_data = spec_results,
-#'   name_treated_unit = "TREATED_ID",
-#'   shap_values = external_shap$shapley,  # Provide external SHAP
-#'   show_shap = TRUE
-#' )
-#'
-#' # ===== OTHER OPTIONS =====
-#'
-#' # Disable SHAP entirely
-#' plot_no_shap <- plot_spec_curve(
-#'   long_data = spec_results,
-#'   name_treated_unit = "TREATED_ID",
-#'   show_shap = FALSE
-#' )
-#'
-#' # Crop outliers and sort by p-values
-#' plot_customized <- plot_spec_curve(
-#'   long_data = spec_results,
-#'   name_treated_unit = "TREATED_ID",
-#'   show_shap = TRUE,
-#'   crop_outliers = "percentile",
-#'   sort_by = "pvalue",
-#'   normalize_outcomes = "standardized"
-#' )
-#'
-#' # ===== EXTRACTING INDIVIDUAL PANELS =====
-#'
-#' # Extract and display only Panel A (treatment effects)
-#' 
-#' # Extract and save Panel B (specification features/SHAP)
-#'
+#' out$panel_a
 #' }
 plot_spec_curve <- function(
     long_data,

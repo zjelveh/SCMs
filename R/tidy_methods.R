@@ -37,16 +37,27 @@ NULL
 #' @export
 #'
 #' @examples
-#' \dontrun{
-#' # Basic synthetic control estimation
-#' scdata_obj <- scdata(df, ...)
-#' scest_result <- scest(scdata_obj, w.constr = list(name = "simplex"))
-#' 
-#' # Extract tidy weights
-#' tidy(scest_result)
-#' 
-#' # With confidence intervals (if bootstrap inference was run)
-#' tidy(scest_result, conf.int = TRUE)
+#' \donttest{
+#' toy <- data.frame(
+#'   unit = rep(c("treated", "donor1", "donor2"), each = 6),
+#'   year = rep(1:6, 3),
+#'   y = c(10, 11, 12, 14, 15, 16,
+#'         9, 10, 11, 12, 13, 14,
+#'         11, 12, 13, 13, 14, 15)
+#' )
+#' sc_obj <- scdata(
+#'   df = toy,
+#'   id.var = "unit",
+#'   time.var = "year",
+#'   outcome.var = "y",
+#'   period.pre = 1:4,
+#'   period.post = 5:6,
+#'   unit.tr = "treated",
+#'   unit.co = c("donor1", "donor2"),
+#'   covagg = list(list(var = "outcome_var", partition_periods = list(type = "by_period")))
+#' )
+#' fit <- scest(sc_obj, w.constr = list(name = "simplex"))
+#' generics::tidy(fit)
 #' }
 tidy.scest <- function(x, conf.int = FALSE, conf.level = 0.95, ...) {
   
@@ -152,9 +163,27 @@ tidy.scest <- function(x, conf.int = FALSE, conf.level = 0.95, ...) {
 #' @export
 #'
 #' @examples
-#' \dontrun{
-#' # Extract model-level statistics
-#' glance(scest_result)
+#' \donttest{
+#' toy <- data.frame(
+#'   unit = rep(c("treated", "donor1", "donor2"), each = 6),
+#'   year = rep(1:6, 3),
+#'   y = c(10, 11, 12, 14, 15, 16,
+#'         9, 10, 11, 12, 13, 14,
+#'         11, 12, 13, 13, 14, 15)
+#' )
+#' sc_obj <- scdata(
+#'   df = toy,
+#'   id.var = "unit",
+#'   time.var = "year",
+#'   outcome.var = "y",
+#'   period.pre = 1:4,
+#'   period.post = 5:6,
+#'   unit.tr = "treated",
+#'   unit.co = c("donor1", "donor2"),
+#'   covagg = list(list(var = "outcome_var", partition_periods = list(type = "by_period")))
+#' )
+#' fit <- scest(sc_obj, w.constr = list(name = "simplex"))
+#' generics::glance(fit)
 #' }
 glance.scest <- function(x, ...) {
   
@@ -260,13 +289,20 @@ glance.scest <- function(x, ...) {
 #' @export
 #'
 #' @examples
-#' \dontrun{
-#' # Extract specification curve results
-#' spec_results <- run_spec_curve_analysis(...)
-#' tidy(spec_results)
-#' 
-#' # With inference results
-#' tidy(spec_results, conf.int = TRUE)
+#' \donttest{
+#' spec_results <- list(
+#'   results = data.table::data.table(
+#'     full_spec_id = c("s1", "s2"),
+#'     tau = c(1.2, 0.8),
+#'     outcome = "y",
+#'     unit_name = "treated",
+#'     unit_type = "treated",
+#'     post_period = TRUE,
+#'     rmse = c(0.2, 0.3)
+#'   )
+#' )
+#' class(spec_results) <- "spec_curve"
+#' generics::tidy(spec_results)
 #' }
 tidy.spec_curve <- function(x, conf.int = FALSE, conf.level = 0.95, ...) {
   
@@ -385,12 +421,27 @@ tidy.spec_curve <- function(x, conf.int = FALSE, conf.level = 0.95, ...) {
 #' @export
 #'
 #' @examples
-#' \dontrun{
-#' # Augment with fitted values and residuals
-#' augmented_data <- augment(scest_result)
-#' 
-#' # Use specific data
-#' augmented_data <- augment(scest_result, data = original_panel_data)
+#' \donttest{
+#' toy <- data.frame(
+#'   unit = rep(c("treated", "donor1", "donor2"), each = 6),
+#'   year = rep(1:6, 3),
+#'   y = c(10, 11, 12, 14, 15, 16,
+#'         9, 10, 11, 12, 13, 14,
+#'         11, 12, 13, 13, 14, 15)
+#' )
+#' sc_obj <- scdata(
+#'   df = toy,
+#'   id.var = "unit",
+#'   time.var = "year",
+#'   outcome.var = "y",
+#'   period.pre = 1:4,
+#'   period.post = 5:6,
+#'   unit.tr = "treated",
+#'   unit.co = c("donor1", "donor2"),
+#'   covagg = list(list(var = "outcome_var", partition_periods = list(type = "by_period")))
+#' )
+#' fit <- scest(sc_obj, w.constr = list(name = "simplex"))
+#' generics::augment(fit)
 #' }
 augment.scest <- function(x, data = NULL, ...) {
   

@@ -36,52 +36,37 @@
 #' @export
 #'
 #' @examples
-#' \dontrun{
-# Create analysis configuration (now includes ALL parameters)
+#' \donttest{
+#' toy <- data.frame(
+#'   unit = rep(c("treated", "donor1", "donor2"), each = 6),
+#'   year = rep(1:6, 3),
+#'   y = c(10, 11, 12, 14, 15, 16,
+#'         9, 10, 11, 12, 13, 14,
+#'         11, 12, 13, 13, 14, 15)
+#' )
 #' params <- list(
-#'   outcomes = "gdp",
-#'   col_name_unit_name = "country",
-#'   name_treated_unit = "West Germany",
+#'   outcomes = "y",
+#'   col_name_unit_name = "unit",
+#'   name_treated_unit = "treated",
 #'   covagg = list(
-#'     "Outcome Path" = list(
-#'       label = "Outcome Path",
-#'       operations = list(
-#'         list(var = "outcome_var", partition_periods = list(type = "by_period"))
-#'       )
+#'     baseline = list(
+#'       label = "baseline",
+#'       operations = list(list(var = "outcome_var", partition_periods = list(type = "by_period")))
 #'     )
 #'   ),
-#'   treated_period = 1990,
-#'   min_period = 1975,
-#'   end_period = 2003,
+#'   treated_period = 5,
+#'   min_period = 1,
+#'   end_period = 6,
 #'   col_name_period = "year",
-#'   feature_weights = c("uniform"),
-#'   donor_sample = c("all", "most_similar"),
-#'   outcome_models = c("none", "lasso"),
-#'   constraints = list(list(name = "simplex"))
+#'   feature_weights = "uniform",
+#'   donor_sample = "all",
+#'   outcome_models = "none",
+#'   constraints = list(list(name = "simplex")),
+#'   inference_type = "placebo",
+#'   inference_config = list(verbose = FALSE, placebo_cores = 1)
 #' )
-#'
-#' # Run analysis with placebo inference (default)
-#' results_placebo <- run_spec_curve_analysis(dataset, params)
-#' 
-#' # Run analysis expecting positive treatment effects
-#' params_positive <- params
-#' params_positive$expected_direction <- "positive"
-#' results_positive <- run_spec_curve_analysis(dataset, params_positive)
-#' 
-#' # Run bootstrap inference with 4 cores
-#' params_bootstrap <- params
-#' params_bootstrap$inference_type <- "bootstrap"
-#' params_bootstrap$inference_config <- list(bootstrap_n_replications = 1000)
-#' results_bootstrap <- run_spec_curve_analysis(dataset, params_bootstrap, cores = 4)
-#' 
-#' # Run both inference methods for comparison  
-#' params_both <- params
-#' params_both$inference_type <- "all"
-#' params_both$inference_config <- list(
-#'   bootstrap_n_replications = 500,  # Fewer for speed when running both
-#'   verbose = TRUE
-#' )
-#' results_both <- run_spec_curve_analysis(dataset, params_both, cores = 2)
+#' results <- run_spec_curve_analysis(dataset = toy, params = params, cores = 1)
+#' names(results)
 #' }
 run_spec_curve_analysis <- function(dataset, params, cores = 1, output_dir = NULL) {
   # Validate required parameters

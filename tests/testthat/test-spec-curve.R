@@ -3,9 +3,6 @@ library(data.table)
 
 # Helper function to create mock panel data for spec_curve testing
 create_mock_panel_data_spec_curve <- function() {
-  set.seed(456)
-  
-  # Create panel data structure
   states <- c("treated_state", "control_1", "control_2", "control_3")
   years <- 2000:2010
   
@@ -19,15 +16,42 @@ create_mock_panel_data_spec_curve <- function() {
   # Convert to data.table for efficiency
   setDT(data)
   
-  # Add outcome with treatment effect after 2005
-  data[, gdp := rnorm(.N, mean = 100, sd = 10) + 
-         (year - 2000) * 2 +  # Time trend
-         ifelse(state == "treated_state" & year >= 2006, 15, 0)]  # Treatment effect
+  # Deterministic donor paths
+  data[state == "control_1", gdp := 100 + 1.5 * (year - 2000)]
+  data[state == "control_2", gdp := 95 + 2.0 * (year - 2000)]
+  data[state == "control_3", gdp := 105 + 1.2 * (year - 2000)]
+
+  # Treated pre-period is a convex combination of donors.
+  data[state == "treated_state",
+       gdp := 0.5 * (100 + 1.5 * (year - 2000)) +
+         0.3 * (95 + 2.0 * (year - 2000)) +
+         0.2 * (105 + 1.2 * (year - 2000))]
+  data[state == "treated_state" & year >= 2006, gdp := gdp + 8]
   
-  # Add some covariates
-  data[, population := rnorm(.N, mean = 1000, sd = 100)]
-  data[, investment := rnorm(.N, mean = 50, sd = 8)]
-  data[, education := rnorm(.N, mean = 12, sd = 2)]
+  # Deterministic covariates
+  data[state == "control_1", population := 900 + 8 * (year - 2000)]
+  data[state == "control_2", population := 1100 + 5 * (year - 2000)]
+  data[state == "control_3", population := 1000 + 6 * (year - 2000)]
+  data[state == "treated_state",
+       population := 0.5 * (900 + 8 * (year - 2000)) +
+         0.3 * (1100 + 5 * (year - 2000)) +
+         0.2 * (1000 + 6 * (year - 2000))]
+
+  data[state == "control_1", investment := 45 + 0.7 * (year - 2000)]
+  data[state == "control_2", investment := 52 + 0.5 * (year - 2000)]
+  data[state == "control_3", investment := 48 + 0.6 * (year - 2000)]
+  data[state == "treated_state",
+       investment := 0.5 * (45 + 0.7 * (year - 2000)) +
+         0.3 * (52 + 0.5 * (year - 2000)) +
+         0.2 * (48 + 0.6 * (year - 2000))]
+
+  data[state == "control_1", education := 11 + 0.04 * (year - 2000)]
+  data[state == "control_2", education := 12 + 0.03 * (year - 2000)]
+  data[state == "control_3", education := 10.5 + 0.05 * (year - 2000)]
+  data[state == "treated_state",
+       education := 0.5 * (11 + 0.04 * (year - 2000)) +
+         0.3 * (12 + 0.03 * (year - 2000)) +
+         0.2 * (10.5 + 0.05 * (year - 2000))]
   
   return(data)
 }
@@ -337,35 +361,23 @@ test_that("spec_curve returns proper structure when successful", {
     )
   )
   
-  result <- tryCatch({
-    spec_curve(
-      dataset = mock_data,
-      outcomes = "gdp",
-      covagg = covagg_min,
-      col_name_unit_name = "state",
-      name_treated_unit = "treated_state",
-      treated_period = 2006,
-      min_period = 2000, 
-      end_period = 2010,
-      col_name_period = "year",
-      feature_weights = c("uniform"),
-      outcome_models = c("none"),
-      constraints = list(list(name = "simplex")),
-      donor_sample = "all",
-      cores = 1,
-      verbose = FALSE
-    )
-  }, error = function(e) {
-    if (grepl("Input validation failed|must be|Missing required|Invalid", e$message)) {
-      stop(e)  # Re-throw validation errors
-    }
-    # For computational errors, skip the test
-    skip(paste("Computational error in spec_curve:", e$message))
-  })
-  
-  if (is.null(result)) {
-    skip("spec_curve returned NULL due to computational issues")
-  }
+  result <- spec_curve(
+    dataset = mock_data,
+    outcomes = "gdp",
+    covagg = covagg_min,
+    col_name_unit_name = "state",
+    name_treated_unit = "treated_state",
+    treated_period = 2006,
+    min_period = 2000, 
+    end_period = 2010,
+    col_name_period = "year",
+    feature_weights = c("uniform"),
+    outcome_models = c("none"),
+    constraints = list(list(name = "simplex")),
+    donor_sample = "all",
+    cores = 1,
+    verbose = FALSE
+  )
   
   # Test that result has spec_curve class (assigned in function)
   expect_s3_class(result, "spec_curve")

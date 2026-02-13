@@ -54,64 +54,28 @@
 #' @export
 #'
 #' @examples
-#' \dontrun{
-#' # Basic usage with state-level data
-#' scm_data <- scdata(df = state_panel, 
-#'                    id.var = "state", 
-#'                    time.var = "year", 
-#'                    outcome.var = "gdp_per_capita",
-#'                    period.pre = 1980:1999, 
-#'                    period.post = 2000:2010,
-#'                    unit.tr = "California", 
-#'                    unit.co = c("New York", "Texas", "Florida"))
-#'                    
-#' # With anticipation effects
-#' scm_data <- scdata(df = policy_data,
-#'                    id.var = "country",
-#'                    time.var = "year", 
-#'                    outcome.var = "unemployment_rate",
-#'                    period.pre = 1990:2004,
-#'                    period.post = 2007:2015,
-#'                    unit.tr = "Germany",
-#'                    unit.co = c("France", "Italy", "Spain"),
-#'                    anticipation = 2)  # Exclude 2 pre-treatment years
-#'                    
-#' # Outcome per-period + covariate means
-#' scm_data_ops <- scdata(df = germany_data,
-#'                        id.var = "country",
-#'                        time.var = "year",
-#'                        outcome.var = "gdp",
-#'                        period.pre = 1960:1990,
-#'                        period.post = 1991:2003,
-#'                        unit.tr = "West Germany",
-#'                        unit.co = c("USA", "UK", "France"),
-#'                        covagg = list(
-#'                          list(
-#'                            var = "outcome_var",
-#'                            partition_periods = list(type = "by_period")
-#'                          ),
-#'                          list(var = "investment", compute = "mean"),
-#'                          list(var = "trade", compute = "mean")
-#'                        ))
-#'                          
-#' # With constant term (requires multiple features)
-#' scm_data_const <- scdata(df = germany_data,
-#'                          id.var = "country",
-#'                          time.var = "year", 
-#'                          outcome.var = "gdp",
-#'                          period.pre = 1960:1990,
-#'                          period.post = 1991:2003,
-#'                          unit.tr = "West Germany",
-#'                          unit.co = c("USA", "UK", "France"),
-#'                          constant = TRUE,  # Enable constant term
-#'                          covagg = list(
-#'                            list(var = "outcome_var", partition_periods = list(type = "by_period")),
-#'                            list(var = "investment", compute = "mean"),
-#'                            list(
-#'                              var = "trade",
-#'                              select_periods = list(type = "explicit", periods = c(1985, 1990))
-#'                            )
-#'                          ))
+#' \donttest{
+#' toy <- data.frame(
+#'   unit = rep(c("treated", "donor1", "donor2"), each = 6),
+#'   year = rep(1:6, 3),
+#'   y = c(10, 11, 12, 14, 15, 16,
+#'         9, 10, 11, 12, 13, 14,
+#'         11, 12, 13, 13, 14, 15)
+#' )
+#' scm_data <- scdata(
+#'   df = toy,
+#'   id.var = "unit",
+#'   time.var = "year",
+#'   outcome.var = "y",
+#'   period.pre = 1:4,
+#'   period.post = 5:6,
+#'   unit.tr = "treated",
+#'   unit.co = c("donor1", "donor2"),
+#'   covagg = list(
+#'     list(var = "outcome_var", partition_periods = list(type = "by_period"))
+#'   )
+#' )
+#' class(scm_data)
 #' }
 
 

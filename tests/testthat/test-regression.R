@@ -115,19 +115,12 @@ test_that("scest weight estimation remains stable", {
     constant = FALSE
   )
   
-  result <- tryCatch({
-    scest(
-      data = scdata_obj,
-      w.constr = list(name = "simplex"),
-      feature_weights = "uniform",
-      solver = "ECOS"
-    )
-  }, error = function(e) {
-    if (grepl("should be|must be|Invalid|Missing", e$message)) {
-      stop(e)  # Re-throw validation errors
-    }
-    skip(paste("Computational error in regression test:", e$message))
-  })
+  result <- scest(
+    data = scdata_obj,
+    w.constr = list(name = "simplex"),
+    feature_weights = "uniform",
+    solver = "ECOS"
+  )
   
   # Test weight structure consistency
   expect_s3_class(result, "scest")

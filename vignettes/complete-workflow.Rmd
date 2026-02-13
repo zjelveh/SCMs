@@ -38,7 +38,7 @@ In 1988, California passed Proposition 99, which:
 
 We want to estimate the causal effect of this comprehensive tobacco control program on per-capita cigarette consumption using synthetic control methods with specification curve analysis.
 
-```{r load-packages}
+```{r load-packages, eval=TRUE}
 library(SCMs)
 library(data.table)
 library(ggplot2)

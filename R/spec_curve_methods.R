@@ -31,10 +31,32 @@ NULL
 #' }
 #'
 #' @examples
-#' \dontrun{
-#' # After running specification curve analysis
-#' spec_results <- spec_curve(...)
-#' print(spec_results)  # or just: spec_results
+#' \donttest{
+#' specs <- data.table::data.table(
+#'   full_spec_id = paste0("s", 1:4),
+#'   outcome_model = c("none", "ridge", "none", "ridge"),
+#'   const = c("simplex", "lasso", "simplex", "lasso"),
+#'   fw = c("uniform", "uniform", "optimize", "optimize"),
+#'   feat = c("f1", "f1", "f2", "f2")
+#' )
+#' dt <- data.table::CJ(
+#'   unit_name = c("treated", "donor1"),
+#'   full_spec_id = as.character(specs[["full_spec_id"]]),
+#'   post_period = c(FALSE, TRUE),
+#'   sorted = FALSE
+#' )
+#' dt[, unit_type := ifelse(unit_name == "treated", "treated", "control")]
+#' dt <- merge(dt, specs, by = "full_spec_id", all.x = TRUE)
+#' dt[, outcome := "y"]
+#' dt[, rmse := 0.2 + as.numeric(factor(full_spec_id)) * 0.01]
+#' dt[, tau := ifelse(
+#'   unit_name == "treated",
+#'   as.numeric(factor(full_spec_id)) * 0.5 + ifelse(post_period, 0.2, 0),
+#'   as.numeric(factor(full_spec_id)) * 0.1 + ifelse(post_period, 0.05, 0)
+#' )]
+#' spec_results <- list(results = dt)
+#' class(spec_results) <- "spec_curve"
+#' print(spec_results)
 #' }
 #'
 #' @export
@@ -143,8 +165,31 @@ print.spec_curve <- function(x, ...) {
 #' }
 #'
 #' @examples
-#' \dontrun{
-#' spec_results <- spec_curve(...)
+#' \donttest{
+#' specs <- data.table::data.table(
+#'   full_spec_id = paste0("s", 1:4),
+#'   outcome_model = c("none", "ridge", "none", "ridge"),
+#'   const = c("simplex", "lasso", "simplex", "lasso"),
+#'   fw = c("uniform", "uniform", "optimize", "optimize"),
+#'   feat = c("f1", "f1", "f2", "f2")
+#' )
+#' dt <- data.table::CJ(
+#'   unit_name = c("treated", "donor1"),
+#'   full_spec_id = as.character(specs[["full_spec_id"]]),
+#'   post_period = c(FALSE, TRUE),
+#'   sorted = FALSE
+#' )
+#' dt[, unit_type := ifelse(unit_name == "treated", "treated", "control")]
+#' dt <- merge(dt, specs, by = "full_spec_id", all.x = TRUE)
+#' dt[, outcome := "y"]
+#' dt[, rmse := 0.2 + as.numeric(factor(full_spec_id)) * 0.01]
+#' dt[, tau := ifelse(
+#'   unit_name == "treated",
+#'   as.numeric(factor(full_spec_id)) * 0.5 + ifelse(post_period, 0.2, 0),
+#'   as.numeric(factor(full_spec_id)) * 0.1 + ifelse(post_period, 0.05, 0)
+#' )]
+#' spec_results <- list(results = dt)
+#' class(spec_results) <- "spec_curve"
 #' summary(spec_results)
 #' }
 #'
@@ -237,12 +282,32 @@ summary.spec_curve <- function(object, ...) {
 #' can be passed through the \code{...} parameter.
 #'
 #' @examples
-#' \dontrun{
-#' spec_results <- spec_curve(...)
-#' plot(spec_results)
-#' 
-#' # With additional options
-#' plot(spec_results, show_shap = TRUE, show_pvalues = TRUE)
+#' \donttest{
+#' specs <- data.table::data.table(
+#'   full_spec_id = paste0("s", 1:4),
+#'   outcome_model = c("none", "ridge", "none", "ridge"),
+#'   const = c("simplex", "lasso", "simplex", "lasso"),
+#'   fw = c("uniform", "uniform", "optimize", "optimize"),
+#'   feat = c("f1", "f1", "f2", "f2")
+#' )
+#' dt <- data.table::CJ(
+#'   unit_name = c("treated", "donor1"),
+#'   full_spec_id = as.character(specs[["full_spec_id"]]),
+#'   post_period = c(FALSE, TRUE),
+#'   sorted = FALSE
+#' )
+#' dt[, unit_type := ifelse(unit_name == "treated", "treated", "control")]
+#' dt <- merge(dt, specs, by = "full_spec_id", all.x = TRUE)
+#' dt[, outcome := "y"]
+#' dt[, rmse := 0.2 + as.numeric(factor(full_spec_id)) * 0.01]
+#' dt[, tau := ifelse(
+#'   unit_name == "treated",
+#'   as.numeric(factor(full_spec_id)) * 0.5 + ifelse(post_period, 0.2, 0),
+#'   as.numeric(factor(full_spec_id)) * 0.1 + ifelse(post_period, 0.05, 0)
+#' )]
+#' spec_results <- list(results = dt)
+#' class(spec_results) <- "spec_curve"
+#' plot(spec_results, show_shap = FALSE, show_pvalues = FALSE)
 #' }
 #'
 #' @seealso \code{\link{plot_spec_curve}} for detailed plotting options

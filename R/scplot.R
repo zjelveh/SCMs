@@ -49,7 +49,7 @@
 #' @seealso \code{\link{scdata}}, \code{\link{scest}}, \code{\link{inference_sc}}
 #'
 #' @examples
-#' \dontrun{
+#' \donttest{
 #' # Create example data
 #' df <- data.frame(
 #'   unit = rep(c("treated", "control1", "control2"), each = 20),
@@ -240,8 +240,8 @@ scplot  <- function(result, fig.path = NULL, fig.name = NULL, fig.format = "png"
 
   if (save.plot == TRUE) {
     suppressWarnings(ggsave(filename = plot.fitted, plot = plot, width = img.width, height = img.height, dpi = dpi))
-    cat("Plot saved at '", fig.path,"'\n", sep = "")
-    cat("File name: ", plot.fitted,"\n", sep = "")
+    message("Plot saved at '", fig.path, "'")
+    message("File name: ", plot.fitted)
   }
 
 

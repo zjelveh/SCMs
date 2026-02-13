@@ -108,49 +108,39 @@
 #' }
 #'
 #' @examples
-#' \dontrun{
-#' # Basic specification curve analysis
+#' \donttest{
+#' toy <- data.frame(
+#'   unit = rep(c("treated", "donor1", "donor2"), each = 6),
+#'   year = rep(1:6, 3),
+#'   y = c(10, 11, 12, 14, 15, 16,
+#'         9, 10, 11, 12, 13, 14,
+#'         11, 12, 13, 13, 14, 15)
+#' )
 #' results <- spec_curve(
-#'   dataset = state_panel,
-#'   outcomes = "gdp_per_capita",
-#'   col_name_unit_name = "state",
-#'   name_treated_unit = "California",
+#'   dataset = toy,
+#'   outcomes = "y",
+#'   col_name_unit_name = "unit",
+#'   name_treated_unit = "treated",
 #'   covagg = list(
-#'     "Outcome Only" = list(
-#'       label = "Outcome Only",
-#'       operations = list(
-#'         list(
-#'           var = "outcome_var",
-#'           partition_periods = list(type = "by_period")
-#'         )
-#'       )
-#'     ),
-#'     "Outcome + Means" = list(
-#'       label = "Outcome + Means",
-#'       operations = list(
-#'         list(
-#'           var = "outcome_var",
-#'           partition_periods = list(type = "by_period")
-#'         ),
-#'         list(var = "population", compute = "mean"),
-#'         list(var = "income", compute = "mean")
-#'       )
+#'     baseline = list(
+#'       label = "baseline",
+#'       operations = list(list(var = "outcome_var", partition_periods = list(type = "by_period")))
 #'     )
 #'   ),
-#'   treated_period = 2000,
-#'   min_period = 1990,
-#'   end_period = 2010,
+#'   treated_period = 5,
+#'   min_period = 1,
+#'   end_period = 6,
 #'   col_name_period = "year",
-#'   constraints = list(
-#'     list(name = "simplex"),
-#'     list(name = "lasso", Q = 0.1),
-#'     list(name = "ridge", Q = 0.1)
-#'   ),
-#'   cores = 4
+#'   feature_weights = "uniform",
+#'   outcome_models = "none",
+#'   donor_sample = "all",
+#'   constraints = list(list(name = "simplex")),
+#'   constants = FALSE,
+#'   cores = 1,
+#'   inference_type = "placebo",
+#'   inference_config = list(verbose = FALSE, placebo_cores = 1)
 #' )
-#'
-#' # Plot results
-#' plot_spec_curve(results)
+#' names(results)
 #' }
 #' 
 
@@ -563,16 +553,17 @@ spec_curve <- function(
   }
 
   # Run specifications (parallel or sequential)
-  if (cores > 1 && total_specs > 1) {
+  use_parallel <- cores > 1 && total_specs > 1
+  if (use_parallel) {
     # Limit cores to reasonable maximum and available cores
     max_cores <- min(cores, parallel::detectCores(), total_specs)
 
     if (verbose) {
-      cat("Setting up parallel processing with", max_cores, "cores\n")
+      message("Setting up parallel processing with ", max_cores, " cores")
     }
 
     # Setup parallel backend with error handling
-    tryCatch({
+    parallel_setup_ok <- tryCatch({
       # Ensure required packages are loaded
       if (!requireNamespace("doParallel", quietly = TRUE)) {
         stop("doParallel package not available")
@@ -586,17 +577,19 @@ spec_curve <- function(
       on.exit(parallel::stopCluster(cl))
 
       if (verbose) {
-        cat("Parallel backend registered successfully\n")
+        message("Parallel backend registered successfully")
       }
+      TRUE
     }, error = function(e) {
       warning("Failed to setup parallel processing: ", e$message, ". Falling back to sequential processing.")
-      cores <<- 1  # Force sequential processing
+      FALSE
     })
+    use_parallel <- isTRUE(parallel_setup_ok)
 
   }
 
   # Execute specifications
-  if (cores > 1 && total_specs > 1) {
+  if (use_parallel) {
     # Packages for parallel execution imported via NAMESPACE
 
     # Use foreach for parallel execution

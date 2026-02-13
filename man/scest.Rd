@@ -82,39 +82,28 @@ Different constraint types impose different penalty functions:
 }
 }
 \examples{
-\dontrun{
-# Basic simplex-constrained synthetic control
-result <- scest(data = scm_data, 
-                w.constr = list(name = "simplex"))
-
-# Lasso-regularized synthetic control  
-result_lasso <- scest(data = scm_data,
-                      w.constr = list(name = "lasso", Q = 0.1))
-
-# With optimized feature weights
-result_opt <- scest(data = scm_data,
-                    w.constr = list(name = "simplex"),
-                    feature_weights = "optimize")
-                    
-# Using custom V matrix
-custom_V <- diag(nrow(scm_data$Y.pre))
-result_custom <- scest(data = scm_data,
-                       w.constr = list(name = "simplex"),
-                       V.mat = custom_V)
-                       
-# With constant term (requires scdata with constant=TRUE)
-scm_data_const <- scdata(df = data, ..., constant = TRUE, 
-                        covagg = list(...))  # Multiple features required
-                        
-# Simplex with constant - donor weights sum to 1, constant unconstrained
-result_const_simplex <- scest(data = scm_data_const,
-                              w.constr = list(name = "simplex"))
-print(result_const_simplex$est.results$w)            # Donor weights 
-print(result_const_simplex$est.results$constant_term) # Constant coefficient
-
-# OLS with constant - no constraints on any coefficients
-result_const_ols <- scest(data = scm_data_const,
-                          w.constr = list(name = "ols"))
-print(result_const_ols$est.results$constant_term)     # Can be positive/negative
+\donttest{
+toy <- data.frame(
+  unit = rep(c("treated", "donor1", "donor2"), each = 6),
+  year = rep(1:6, 3),
+  y = c(10, 11, 12, 14, 15, 16,
+        9, 10, 11, 12, 13, 14,
+        11, 12, 13, 13, 14, 15)
+)
+scm_data <- scdata(
+  df = toy,
+  id.var = "unit",
+  time.var = "year",
+  outcome.var = "y",
+  period.pre = 1:4,
+  period.post = 5:6,
+  unit.tr = "treated",
+  unit.co = c("donor1", "donor2"),
+  covagg = list(
+    list(var = "outcome_var", partition_periods = list(type = "by_period"))
+  )
+)
+result <- scest(data = scm_data, w.constr = list(name = "simplex"))
+names(result$est.results)
 }
 }

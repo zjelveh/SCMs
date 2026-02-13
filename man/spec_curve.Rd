@@ -150,49 +150,39 @@ The resulting specification curve can reveal:
 }
 }
 \examples{
-\dontrun{
-# Basic specification curve analysis
+\donttest{
+toy <- data.frame(
+  unit = rep(c("treated", "donor1", "donor2"), each = 6),
+  year = rep(1:6, 3),
+  y = c(10, 11, 12, 14, 15, 16,
+        9, 10, 11, 12, 13, 14,
+        11, 12, 13, 13, 14, 15)
+)
 results <- spec_curve(
-  dataset = state_panel,
-  outcomes = "gdp_per_capita",
-  col_name_unit_name = "state",
-  name_treated_unit = "California",
+  dataset = toy,
+  outcomes = "y",
+  col_name_unit_name = "unit",
+  name_treated_unit = "treated",
   covagg = list(
-    "Outcome Only" = list(
-      label = "Outcome Only",
-      operations = list(
-        list(
-          var = "outcome_var",
-          partition_periods = list(type = "by_period")
-        )
-      )
-    ),
-    "Outcome + Means" = list(
-      label = "Outcome + Means",
-      operations = list(
-        list(
-          var = "outcome_var",
-          partition_periods = list(type = "by_period")
-        ),
-        list(var = "population", compute = "mean"),
-        list(var = "income", compute = "mean")
-      )
+    baseline = list(
+      label = "baseline",
+      operations = list(list(var = "outcome_var", partition_periods = list(type = "by_period")))
     )
   ),
-  treated_period = 2000,
-  min_period = 1990,
-  end_period = 2010,
+  treated_period = 5,
+  min_period = 1,
+  end_period = 6,
   col_name_period = "year",
-  constraints = list(
-    list(name = "simplex"),
-    list(name = "lasso", Q = 0.1),
-    list(name = "ridge", Q = 0.1)
-  ),
-  cores = 4
+  feature_weights = "uniform",
+  outcome_models = "none",
+  donor_sample = "all",
+  constraints = list(list(name = "simplex")),
+  constants = FALSE,
+  cores = 1,
+  inference_type = "placebo",
+  inference_config = list(verbose = FALSE, placebo_cores = 1)
 )
-
-# Plot results
-plot_spec_curve(results)
+names(results)
 }
 
 }

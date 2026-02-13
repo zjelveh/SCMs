@@ -227,17 +227,16 @@ estimate_optimal_lambda_cv <- function(A, Z, V, Y.donors, Y.pre, nlambda = 20) {
   
   # For each lambda, fit pensynth model and evaluate on hold-out period
   for (i in 1:nlambda) {
-    tryCatch({
+    cv_errors[i] <- tryCatch({
       weights <- fit_pensynth_single_lambda(A, Z, V, lambda_seq[i], A_weighted, sqrt_v)
-      
+
       # Predict held-out treated outcome using fitted weights
       pred_val <- Z0_val %*% weights
-      
+
       # Calculate MSE on held-out period
-      cv_errors[i] <- as.numeric((Z1_val - pred_val)^2)
-      
+      as.numeric((Z1_val - pred_val)^2)
     }, error = function(e) {
-      cv_errors[i] <<- Inf
+      Inf
     })
   }
   

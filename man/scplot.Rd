@@ -63,7 +63,7 @@ point estimation, and \link{inference_sc} for inference procedures.
 For an introduction to synthetic control methods, see \href{https://www.aeaweb.org/articles?id=10.1257/jel.20191450}{Abadie (2021)} and references therein.
 }
 \examples{
-\dontrun{
+\donttest{
 # Create example data
 df <- data.frame(
   unit = rep(c("treated", "control1", "control2"), each = 20),

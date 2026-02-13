@@ -9,7 +9,7 @@
 This package provides tools for implementing Synthetic Control Methods (SCM),
 performing inference, conducting specification curve analysis, and visualizing results.
 
-Comprehensive toolkit for Synthetic Control Methods (SCM) with advanced features including specification curve analysis, XGBoost+SHAP machine learning analysis, and multiple inference procedures. The package highlight is specification curves colored by SHAP values showing feature relevance to predicted treatment effects. Provides functions for data preparation, model estimation, statistical inference (including placebo and bootstrap-based methods), and publication-ready visualizations. Supports multiple outcome models (OLS, Ridge, Lasso, Augmented Synthetic Control) and includes parallel processing capabilities for large-scale specification curve analysis.
+Comprehensive toolkit for synthetic control methods with advanced features including specification-curve analysis, 'xgboost' + 'SHAP' machine-learning analysis, and multiple inference procedures. The package provides functions for data preparation, model estimation, statistical inference (including placebo and bootstrap-based methods), and publication-ready visualizations. Supports multiple outcome models (OLS, Ridge, Lasso, Augmented Synthetic Control) and includes parallel processing capabilities for large-scale specification-curve analysis. Methods references include Abadie et al. (2010) \doi{10.1198/jasa.2009.ap08746}, Abadie (2021) \doi{10.1257/jel.20191450}, and Chen and Guestrin (2016) \doi{10.1145/2939672.2939785}.
 
 Researchers using synthetic control methods face a "garden of forking paths" with numerous
 specification choices that can dramatically affect results. Existing packages often produce

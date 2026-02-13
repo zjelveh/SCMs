@@ -25,7 +25,7 @@ specification curve analysis across multiple datasets.
 Create Analysis Configuration
 }
 \examples{
-\dontrun{
+\donttest{
 # Create homicide analysis configuration
 homicide_config <- create_analysis_config("homicide")
 

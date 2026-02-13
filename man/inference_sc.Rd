@@ -36,6 +36,29 @@ Wrapper around \code{\link{inference_placebo}} for rank-based
 placebo inference.
 }
 \examples{
-# Example usage (replace with actual example when available)
-# inference_results <- inference_sc(sc_results, my_data)
+\donttest{
+toy <- data.frame(
+  unit = rep(c("treated", "donor1", "donor2"), each = 6),
+  year = rep(1:6, 3),
+  y = c(10, 11, 12, 14, 15, 16,
+        9, 10, 11, 12, 13, 14,
+        11, 12, 13, 13, 14, 15)
+)
+sc_fit <- estimate_sc(
+  dataset = toy,
+  outcome = "y",
+  covagg = list(
+    list(var = "outcome_var", partition_periods = list(type = "by_period"))
+  ),
+  col_name_unit_name = "unit",
+  name_treated_unit = "treated",
+  col_name_period = "year",
+  treated_period = 5,
+  min_period = 1,
+  end_period = 6,
+  outcome_models = "none"
+)
+inf <- inference_sc(sc_fit, toy, cores = 1, verbose = FALSE)
+names(inf)
+}
 }

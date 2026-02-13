@@ -12,7 +12,7 @@
 #' @export
 #'
 #' @examples
-#' \dontrun{
+#' \donttest{
 #' # Create homicide analysis configuration
 #' homicide_config <- create_analysis_config("homicide")
 #'

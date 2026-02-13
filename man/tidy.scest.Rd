@@ -34,15 +34,26 @@ Extract donor unit weights and related information from synthetic control
 estimation results in a tidy data.table format compatible with broom workflows.
 }
 \examples{
-\dontrun{
-# Basic synthetic control estimation
-scdata_obj <- scdata(df, ...)
-scest_result <- scest(scdata_obj, w.constr = list(name = "simplex"))
-
-# Extract tidy weights
-tidy(scest_result)
-
-# With confidence intervals (if bootstrap inference was run)
-tidy(scest_result, conf.int = TRUE)
+\donttest{
+toy <- data.frame(
+  unit = rep(c("treated", "donor1", "donor2"), each = 6),
+  year = rep(1:6, 3),
+  y = c(10, 11, 12, 14, 15, 16,
+        9, 10, 11, 12, 13, 14,
+        11, 12, 13, 13, 14, 15)
+)
+sc_obj <- scdata(
+  df = toy,
+  id.var = "unit",
+  time.var = "year",
+  outcome.var = "y",
+  period.pre = 1:4,
+  period.post = 5:6,
+  unit.tr = "treated",
+  unit.co = c("donor1", "donor2"),
+  covagg = list(list(var = "outcome_var", partition_periods = list(type = "by_period")))
+)
+fit <- scest(sc_obj, w.constr = list(name = "simplex"))
+generics::tidy(fit)
 }
 }

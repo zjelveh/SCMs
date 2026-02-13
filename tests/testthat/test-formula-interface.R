@@ -3,8 +3,6 @@ library(data.table)
 
 # Helper function to create mock panel data for formula testing
 create_formula_test_data <- function() {
-  set.seed(789)
-  
   states <- c("California", "Texas", "New York", "Florida")
   years <- 1990:2005
   
@@ -15,14 +13,42 @@ create_formula_test_data <- function() {
   )
   setDT(panel)
   
-  # Add outcome with treatment effect
-  panel[, gdp := 100 + (year - 1990) * 2 + rnorm(.N, 0, 5)]
-  panel[state == "California" & year >= 2000, gdp := gdp + 15]
+  # Deterministic donor paths
+  panel[state == "Texas", gdp := 100 + 1.6 * (year - 1990)]
+  panel[state == "New York", gdp := 95 + 2.1 * (year - 1990)]
+  panel[state == "Florida", gdp := 102 + 1.4 * (year - 1990)]
+
+  # Treated unit is a convex combination in pre-period, shifted post-treatment.
+  panel[state == "California",
+        gdp := 0.5 * (100 + 1.6 * (year - 1990)) +
+          0.3 * (95 + 2.1 * (year - 1990)) +
+          0.2 * (102 + 1.4 * (year - 1990))]
+  panel[state == "California" & year >= 2000, gdp := gdp + 10]
   
-  # Add covariates
-  panel[, population := 1000 + rnorm(.N, 0, 100)]
-  panel[, investment := 50 + rnorm(.N, 0, 10)]
-  panel[, education := 12 + rnorm(.N, 0, 2)]
+  # Deterministic covariates
+  panel[state == "Texas", population := 1000 + 10 * (year - 1990)]
+  panel[state == "New York", population := 1200 + 6 * (year - 1990)]
+  panel[state == "Florida", population := 900 + 8 * (year - 1990)]
+  panel[state == "California",
+        population := 0.5 * (1000 + 10 * (year - 1990)) +
+          0.3 * (1200 + 6 * (year - 1990)) +
+          0.2 * (900 + 8 * (year - 1990))]
+
+  panel[state == "Texas", investment := 45 + 0.9 * (year - 1990)]
+  panel[state == "New York", investment := 55 + 0.6 * (year - 1990)]
+  panel[state == "Florida", investment := 48 + 0.8 * (year - 1990)]
+  panel[state == "California",
+        investment := 0.5 * (45 + 0.9 * (year - 1990)) +
+          0.3 * (55 + 0.6 * (year - 1990)) +
+          0.2 * (48 + 0.8 * (year - 1990))]
+
+  panel[state == "Texas", education := 11 + 0.03 * (year - 1990)]
+  panel[state == "New York", education := 12 + 0.02 * (year - 1990)]
+  panel[state == "Florida", education := 10.5 + 0.04 * (year - 1990)]
+  panel[state == "California",
+        education := 0.5 * (11 + 0.03 * (year - 1990)) +
+          0.3 * (12 + 0.02 * (year - 1990)) +
+          0.2 * (10.5 + 0.04 * (year - 1990))]
   
   return(panel)
 }
@@ -130,33 +156,24 @@ test_that("formula interface creates proper scest_formula object", {
   
   panel_data <- create_formula_test_data()
   
-  result <- tryCatch({
-    synth(
-      gdp ~ population | California,
-      data = panel_data,
-      time.var = "year", 
-      id.var = "state",
-      treated.period = 2000,
-      pre.period = 1990:1999,
-      post.period = 2000:2005
-    )
-  }, error = function(e) {
-    if (grepl("must be|Missing|not found", e$message)) {
-      stop(e)
-    }
-    skip(paste("Computational error in formula interface:", e$message))
-  })
+  result <- synth(
+    gdp ~ population | California,
+    data = panel_data,
+    time.var = "year", 
+    id.var = "state",
+    treated.period = 2000,
+    pre.period = 1990:1999,
+    post.period = 2000:2005
+  )
   
-  if (!is.null(result)) {
-    # Test class structure
-    expect_s3_class(result, "scest_formula")
-    expect_s3_class(result, "scest")
-    
-    # Test formula metadata
-    expect_true("formula" %in% names(result))
-    expect_true("formula_parts" %in% names(result))
-    expect_true("call" %in% names(result))
-  }
+  # Test class structure
+  expect_s3_class(result, "scest_formula")
+  expect_s3_class(result, "scest")
+  
+  # Test formula metadata
+  expect_true("formula" %in% names(result))
+  expect_true("formula_parts" %in% names(result))
+  expect_true("call" %in% names(result))
 })
 
 test_that("scest_formula print method works", {

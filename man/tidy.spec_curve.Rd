@@ -37,12 +37,19 @@ Extract treatment effect estimates and metadata from specification
 curve analysis results in tidy data.table format.
 }
 \examples{
-\dontrun{
-# Extract specification curve results
-spec_results <- run_spec_curve_analysis(...)
-tidy(spec_results)
-
-# With inference results
-tidy(spec_results, conf.int = TRUE)
+\donttest{
+spec_results <- list(
+  results = data.table::data.table(
+    full_spec_id = c("s1", "s2"),
+    tau = c(1.2, 0.8),
+    outcome = "y",
+    unit_name = "treated",
+    unit_type = "treated",
+    post_period = TRUE,
+    rmse = c(0.2, 0.3)
+  )
+)
+class(spec_results) <- "spec_curve"
+generics::tidy(spec_results)
 }
 }
