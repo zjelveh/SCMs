@@ -925,12 +925,24 @@ plot_spec_curve <- function(
     panel_b_data[feature_group== 'const', feature_group:= 'Weight\nMethod']
     panel_b_data[feature_group== 'constant', feature_group:= 'Constant\nTerm']
     
-    # Transform constraint names for display (preserve descriptive names in Features group)
-    panel_b_data[feature == 'simplex' & feature_group=='Weight\nMethod', feature := "Original"]
+    # Transform constraint (weight-method) names for display (preserve descriptive names in Features group)
+    panel_b_data[feature == 'simplex' & feature_group=='Weight\nMethod', feature := "Simplex"]
+    panel_b_data[feature == 'pensynth' & feature_group=='Weight\nMethod', feature := "Pensynth"]
     panel_b_data[feature == 'lasso' & feature_group=='Weight\nMethod', feature := "Penalty Lasso"]
     panel_b_data[feature == 'ridge' & feature_group=='Weight\nMethod', feature := "Penalty Ridge"]
     panel_b_data[feature == 'ols' & feature_group=='Weight\nMethod', feature := "OLS Weights"]
-    
+
+    # Transform outcome-model (bias-correction) names for display
+    panel_b_data[feature == 'none' & feature_group=='Outcome\nModel', feature := "None"]
+    panel_b_data[feature == 'augsynth' & feature_group=='Outcome\nModel', feature := "Ridge ASCM"]
+    panel_b_data[feature == 'ridge' & feature_group=='Outcome\nModel', feature := "Ridge"]
+    panel_b_data[feature == 'ols' & feature_group=='Outcome\nModel', feature := "OLS"]
+    panel_b_data[feature == 'lasso' & feature_group=='Outcome\nModel', feature := "Lasso"]
+
+    # Transform V-weights names for display
+    panel_b_data[feature == 'uniform' & feature_group=='V Weights', feature := "Uniform"]
+    panel_b_data[feature == 'optimize' & feature_group=='V Weights', feature := "Optimized"]
+
     # Transform constant term display values
     panel_b_data[feature == 'FALSE' & feature_group=='Constant\nTerm', feature := "No Constant"]
     panel_b_data[feature == 'TRUE' & feature_group=='Constant\nTerm', feature := "With Constant"]
