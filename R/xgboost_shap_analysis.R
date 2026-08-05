@@ -145,21 +145,42 @@ prepare_xgboost_matrix <- function(unit_data, features_to_use, all_factor_levels
     }
   }
   
-  # One-hot encode via model.matrix (no intercept)
+  # Full one-hot encode: every level of every categorical feature gets its own
+  # indicator column (no reference level dropped), so TreeSHAP treats all levels
+  # symmetrically. Reference-dropped coding (model.matrix(~ . - 1), which fully
+  # expands only the first factor) distorts the per-dimension SHAP aggregates and
+  # generalizes worse; full one-hot is provably closer to the exact factorial
+  # Shapley decomposition and yields higher LOO R^2. Numeric features pass
+  # through unchanged. The (feature_group, feature_level) mapping is built
+  # directly, avoiding the prefix-collision risk of name matching (const vs.
+  # constant).
   X_df <- as.data.frame(design_data[, ..features_to_use])
-  X_mat <- model.matrix(~ . - 1, data = X_df)
-  
-  # Build mapping: one-hot column -> (feature_group, feature_level)
+  onehot_cols <- list()
+  map_group <- character(0)
+  map_level <- character(0)
+  for (feat in features_to_use) {
+    v <- X_df[[feat]]
+    if (is.factor(v) || is.character(v)) {
+      lv <- if (is.factor(v)) levels(v) else sort(unique(v))
+      for (L in lv) {
+        col_name <- paste0(feat, L)
+        onehot_cols[[col_name]] <- as.integer(as.character(v) == L)
+        map_group <- c(map_group, feat)
+        map_level <- c(map_level, L)
+      }
+    } else {
+      onehot_cols[[feat]] <- as.numeric(v)
+      map_group <- c(map_group, feat)
+      map_level <- c(map_level, feat)
+    }
+  }
+  X_mat <- as.matrix(as.data.frame(onehot_cols, check.names = FALSE))
+
   onehot_mapping <- data.table::data.table(
     onehot_col = colnames(X_mat),
-    feature_group = character(ncol(X_mat)),
-    feature_level = character(ncol(X_mat))
+    feature_group = map_group,
+    feature_level = map_level
   )
-  for (feat in features_to_use) {
-    mask <- grepl(paste0("^", feat), colnames(X_mat))
-    onehot_mapping[mask, feature_group := feat]
-    onehot_mapping[mask, feature_level := gsub(paste0("^", feat), "", colnames(X_mat)[mask])]
-  }
   
   message("One-hot matrix dimensions:", nrow(X_mat), "x", ncol(X_mat), "\n")
   message("Feature groups:", paste(unique(onehot_mapping$feature_group), collapse = ", "), "\n")
