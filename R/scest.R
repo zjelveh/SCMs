@@ -13,6 +13,13 @@
 #'     \item \code{list(name = "L1-L2", Q1 = 0.1, Q2 = 0.1)} - Combined L1 and L2 penalties
 #'   }
 #'   Default is NULL (no constraints).
+#' @param margin.ipop Numeric. Convergence margin passed to the inner interior-point
+#'   quadratic program when \code{feature_weights = "optimize"}. Defaults to 0.05.
+#'   Note that Synth's documented default is 0.0005, i.e. 100x tighter; a loose
+#'   margin can leave the inner solution short of the optimum, which matters when
+#'   estimates are compared across different V.
+#' @param sigf.ipop Numeric. Significant digits required of the inner solver. Default 5.
+#' @param bound.ipop Numeric. Bound passed to the inner solver. Default 10.
 #' @param feature_weights Character. Method for weighting pre-treatment periods/features:
 #'   \itemize{
 #'     \item \code{"uniform"} - Equal weights for all periods (default)
@@ -90,7 +97,10 @@ scest <- function(data,
                   V         = "separate",
                   V.mat     = NULL,
                   solver    = "ECOS",
-                  save.data = NULL) {
+                  save.data = NULL,
+                  margin.ipop = 0.05,
+                  sigf.ipop = 5,
+                  bound.ipop = 10) {
   
   # Check if input data is of correct class
   if (!methods::is(data, "scdata")) {
@@ -198,9 +208,9 @@ scest <- function(data,
       stop("Starting values SV1 contain NA or non-finite values")
     }
 
-    Margin.ipop = 0.05
-    Sigf.ipop = 5
-    Bound.ipop = 10
+    Margin.ipop = margin.ipop
+    Sigf.ipop = sigf.ipop
+    Bound.ipop = bound.ipop
     all.methods = FALSE
     optimxmethod = c("Nelder-Mead","BFGS")
 
