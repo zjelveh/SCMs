@@ -261,7 +261,10 @@ inference_placebo <- function(
   for(oc in names(sc.pred$est.results$outcome_model)){
     # Treated unit calculations
     sc_post = sc.pred$est.results$outcome_model[[oc]]$Y.post.fit 
-    sc_pre  = sc.pred$est.results$Y.pre.fit
+    sc_pre  = sc.pred$est.results$outcome_model[[oc]]$Y.pre.fit
+    if (is.null(sc_pre) || length(sc_pre) == 0) {
+      stop("No per-model Y.pre.fit for outcome model: ", oc)
+    }
     
     # Validate dimensions
     if (is.null(sc_post) || length(sc_post) == 0) {
@@ -340,7 +343,10 @@ inference_placebo <- function(
     # Calculate treatment effects for each outcome model
     for(oc in names(est_sc$est.results$outcome_model)){
       sc_post = est_sc$est.results$outcome_model[[oc]]$Y.post.fit        
-      sc_pre  = est_sc$est.results$Y.pre.fit
+      sc_pre  = est_sc$est.results$outcome_model[[oc]]$Y.pre.fit
+      if (is.null(sc_pre) || length(sc_pre) == 0) {
+        stop("No per-model Y.pre.fit for outcome model: ", oc)
+      }
       
       # Calculate treatment effects
       tau = est_sc$data$Y.post - sc_post 

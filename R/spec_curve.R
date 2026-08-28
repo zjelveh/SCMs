@@ -439,7 +439,11 @@ spec_curve <- function(
 
             for(oc in names(sc.pred$est.results$outcome_model)){
               sc_post = sc.pred$est.results$outcome_model[[oc]]$Y.post.fit
-              sc_pre  = sc.pred$est.results$Y.pre.fit
+              sc_pre  = sc.pred$est.results$outcome_model[[oc]]$Y.pre.fit
+              if (is.null(sc_pre) || length(sc_pre) == 0) {
+                stop("No per-model Y.pre.fit for outcome model: ", oc,
+                     ". run_outcome_models must set it for every model.")
+              }
 
               treated_tau = sc.pred$data$Y.post - sc_post
               treated_pre_tau = sc.pred$data$Y.pre - sc_pre

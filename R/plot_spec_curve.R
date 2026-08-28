@@ -920,12 +920,12 @@ plot_spec_curve <- function(
     panel_b_data[feature_group=='outcome', feature_group:=  'Outcome']
     panel_b_data[feature_group=='outcome_model', feature_group:= 'Outcome\nModel']
     panel_b_data[feature_group== 'fw', feature_group:= 'V Weights']
-    panel_b_data[feature_group== 'feat', feature_group:= 'Features']
+    panel_b_data[feature_group== 'feat', feature_group:= 'Matching\nVariables']
     panel_b_data[feature_group== 'data_sample', feature_group:='Donor Pool']
     panel_b_data[feature_group== 'const', feature_group:= 'Weight\nMethod']
     panel_b_data[feature_group== 'constant', feature_group:= 'Constant\nTerm']
     
-    # Transform constraint (weight-method) names for display (preserve descriptive names in Features group)
+    # Transform constraint (weight-method) names for display (preserve descriptive names in the Matching Variables group)
     panel_b_data[feature == 'simplex' & feature_group=='Weight\nMethod', feature := "Simplex"]
     panel_b_data[feature == 'pensynth' & feature_group=='Weight\nMethod', feature := "Pensynth"]
     panel_b_data[feature == 'lasso' & feature_group=='Weight\nMethod', feature := "Penalty Lasso"]
@@ -947,7 +947,7 @@ plot_spec_curve <- function(
     panel_b_data[feature == 'FALSE' & feature_group=='Constant\nTerm', feature := "No Constant"]
     panel_b_data[feature == 'TRUE' & feature_group=='Constant\nTerm', feature := "With Constant"]
     
-    # DO NOT transform feature names in the 'Features' group - preserve descriptive names as-is
+    # DO NOT transform feature names in the Matching Variables group - preserve descriptive names as-is
 
     # Dynamic feature group detection - only show groups with variation in filtered data
     feature_counts <- panel_b_data[, .(n_unique = data.table::uniqueN(feature)), by = feature_group]
