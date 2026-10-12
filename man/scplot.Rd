@@ -29,9 +29,9 @@ generates a numeric suffix to avoid overwriting them.}
 
 \item{fig.format}{a string indicating the format in which the plot(s) should be saved.}
 
-\item{col.treated}{a string specifying the color for the treated unit series. Find the full list at \url{http://sape.inf.usi.ch/quick-reference/ggplot2/colour}.}
+\item{col.treated}{a string specifying the color for the treated unit series. Find the full list at \url{https://sape.inf.usi.ch/quick-reference/ggplot2/colour}.}
 
-\item{col.synth}{a string specifying the color for the synthetic unit series. Find the full list at \url{http://sape.inf.usi.ch/quick-reference/ggplot2/colour}.}
+\item{col.synth}{a string specifying the color for the synthetic unit series. Find the full list at \url{https://sape.inf.usi.ch/quick-reference/ggplot2/colour}.}
 
 \item{label.xy}{a character list with two elements indicating the name of the axes
 (eg. label.xy = list(x.lab = "Year", y.lab = "GDP growth (\%)")).}
