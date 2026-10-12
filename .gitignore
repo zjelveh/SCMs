@@ -3,7 +3,6 @@
 sftp.json
 .vscode
 .Rhistory
-.Rbuildignore
 
 # R CMD check artifacts
 *.Rcheck/
@@ -24,6 +23,7 @@ Thumbs.db
 
 # LLM-related / perf artifacts (keep on disk, do not track)
 AGENTS.md
+CRAN_RESUBMISSION_PUNCHLIST.md
 Rplots.pdf
 inst/CLAUDE.md
 inst/performance_profile.R
