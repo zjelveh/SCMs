@@ -1,4 +1,3 @@
-^tests$
 ^\.gitignore$
 ^\.github$
 ^.*\.Rproj$
