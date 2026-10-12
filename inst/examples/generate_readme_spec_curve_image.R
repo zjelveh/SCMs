@@ -161,6 +161,9 @@ plot_obj <- plot_spec_curve(
   show_predictions = TRUE,
   predictions = shap_result$predictions,
   show_pvalues = TRUE,
+  # One-sided in the results' expected_direction ("negative": terrorism lowers GDP per capita).
+  curve_stat = "median_tau",
+  two_sided = FALSE,
   null_distribution = "placebo",
   test_statistic = "treatment_effect"
 )

@@ -190,6 +190,8 @@ plot_obj$final_plot
 [![Example specification curve plot (PDF)](inst/examples/readme_spec_curve.svg)](inst/examples/readme_spec_curve.pdf)
 Open vector PDF: [`inst/examples/readme_spec_curve.pdf`](inst/examples/readme_spec_curve.pdf)
 
+The curve-level p-value (top right) is one-sided in the negative direction, since terrorism is expected to lower GDP per capita. It is the share of the 16 regions (the Basque Country and 15 placebo regions) whose median effect across specifications is at least as negative as the Basque Country's.
+
 ## How to Think About `covagg` (Most Important Input)
 
 `covagg` defines which pre-treatment moments become matching features.
