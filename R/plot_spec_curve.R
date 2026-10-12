@@ -761,36 +761,14 @@ plot_spec_curve <- function(
                  "SHAP data must contain columns: ", paste(required_shap_cols, collapse = ", "))
         }
         
-        # Debug: Show data structures before merging
-        message("DEBUG: SHAP merging diagnostics...")
-        message("Panel B data structure (first 5 rows for treated unit):")
-        panel_b_treated <- panel_b_data[unit_name == name_treated_unit][1:min(5, .N)]
-        if (nrow(panel_b_treated) > 0) {
-            message("  Feature groups: ", paste(unique(panel_b_treated$feature_group), collapse = ", "))
-            message("  Sample features: ", paste(head(panel_b_treated$feature, 5), collapse = ", "))
-        }
-        
-        message("SHAP values structure (first 5 rows for treated unit):")
-        shap_treated <- shap_values[unit == name_treated_unit][1:min(5, .N)]
-        if (nrow(shap_treated) > 0) {
-            message("  Feature groups: ", paste(unique(shap_treated$feature_group), collapse = ", "))
-            message("  Sample features: ", paste(head(shap_treated$feature, 5), collapse = ", "))
-        }
-
-        # FIXED: Aggregate SHAP values to specification level before merging
-        # SHAP values are at individual feature level, but panel_b needs them at specification level
-        message("Aggregating SHAP values to specification level...")
-        
-        # Aggregate SHAP values by specification (full_spec_id) and feature_group 
-        # This sums up all SHAP contributions within each specification dimension
+        # Aggregate SHAP values to specification level before merging.
+        # SHAP values are at individual feature level, but panel_b needs them at specification level;
+        # this sums all SHAP contributions within each specification dimension.
         shap_aggregated <- shap_values[, .(
             shapley_value = sum(shapley_value, na.rm = TRUE),
             n_features = .N
         ), by = .(unit, full_spec_id, feature_group)]
-        
-        message("SHAP aggregation: ", nrow(shap_values), " individual feature SHAP values -> ", 
-                nrow(shap_aggregated), " specification-level SHAP values")
-        
+
         # For each aggregated SHAP value, we need to determine the corresponding 'feature' value
         # This is the actual categorical value for that specification dimension
         panel_b_treated <- panel_b_data[unit_name == name_treated_unit]
@@ -806,46 +784,28 @@ plot_spec_curve <- function(
         }
         
         # Perform the merge with aggregated SHAP values
-        panel_b_data_before_merge <- copy(panel_b_data)
         panel_b_data <- merge(panel_b_data, shap_aggregated,
                               by.x = c('unit_name', 'full_spec_id', 'feature_group', 'feature'),
                               by.y = c('unit', 'full_spec_id', 'feature_group', 'feature'),
                               all.x = TRUE)
-        
-        # Debug: Check merge success rate on mergeable rows only.
-        # Panel B may contain feature groups that are intentionally absent from SHAP
-        # (e.g., non-varying groups removed before model fitting), so the denominator
-        # should be restricted to groups that exist in SHAP for the treated unit.
-        treated_before <- panel_b_data_before_merge[unit_name == name_treated_unit]
-        treated_after <- panel_b_data[unit_name == name_treated_unit]
+
+        # Every treated-unit row in a feature group that SHAP covers must receive a SHAP value.
+        # Groups absent from SHAP (e.g., non-varying groups removed before model fitting) are exempt.
         shap_groups_treated <- unique(shap_aggregated[unit == name_treated_unit]$feature_group)
-        
         if (length(shap_groups_treated) == 0) {
-            warning("No treated-unit SHAP feature groups available after aggregation. ",
-                    "Cannot assess SHAP merge coverage.")
-        } else {
-            treated_mergeable_before <- treated_before[feature_group %in% shap_groups_treated]
-            treated_mergeable_after <- treated_after[feature_group %in% shap_groups_treated]
-            mergeable_rows_before <- nrow(treated_mergeable_before)
-            mergeable_rows_with_shap <- nrow(treated_mergeable_after[!is.na(shapley_value)])
-            
-            if (mergeable_rows_before == 0) {
-                warning("No mergeable Panel B rows found for treated unit across SHAP feature groups. ",
-                        "Feature group naming mismatch may exist.")
-            } else {
-                merge_success_rate <- mergeable_rows_with_shap / mergeable_rows_before * 100
-                message("SHAP merge success (mergeable rows): ",
-                        mergeable_rows_with_shap, "/", mergeable_rows_before,
-                        " (", round(merge_success_rate, 1), "%)")
-                
-                if (merge_success_rate < 50) {
-                    warning("Low SHAP merge success rate on mergeable rows (",
-                            round(merge_success_rate, 1), "%). ",
-                            "Feature group/value mismatch may still exist between panel_b_data and aggregated SHAP values.")
-                } else {
-                    message("SHAP merging successful on mergeable rows.")
-                }
-            }
+            stop("No SHAP values found for treated unit '", name_treated_unit, "'.")
+        }
+        treated_mergeable <- panel_b_data[unit_name == name_treated_unit &
+                                          feature_group %in% shap_groups_treated]
+        if (nrow(treated_mergeable) == 0) {
+            stop("No Panel B rows for treated unit '", name_treated_unit, "' in SHAP feature groups (",
+                 paste(shap_groups_treated, collapse = ", "), "). Feature group names do not match.")
+        }
+        n_missing_shap <- sum(is.na(treated_mergeable$shapley_value))
+        if (n_missing_shap > 0) {
+            stop("SHAP values did not merge onto Panel B: ", n_missing_shap, " of ",
+                 nrow(treated_mergeable), " treated-unit rows lack a SHAP value. ",
+                 "SHAP feature groups/values do not match the specification grid.")
         }
     }
 
