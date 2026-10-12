@@ -12,28 +12,20 @@ This package is designed for applied users who want policy-facing results withou
 
 ## Who This Is For
 
-This README is written for users with the technical background of an applied criminologist:
-- comfortable with R data frames
-- comfortable running model code
-- not looking to debug low-level optimization internals
+Applied researchers, in criminology and elsewhere, who are comfortable with R data frames and model code. It is for those who want to see how much a synthetic control estimate depends on implementation choices, without working through optimization internals.
 
-If that is your use case, start with the two workflows below:
+Start with the two workflows below:
 1. Single-run SCM (`scdata()` -> `scest()` -> `inference_sc()`)
 2. Robustness over many runs (`spec_curve()` -> `plot_spec_curve()`)
 
 ## Install
 
-```bash
-# From the package root (repo/SCMs)
-R CMD INSTALL --no-multiarch --no-demo --no-docs .
-```
-
-For development inside the repo:
-
 ```r
-library(devtools)
-load_all(".")
+# install.packages("remotes")
+remotes::install_github("zjelveh/SCMs")
 ```
+
+To work on the package from a local clone: `devtools::load_all(".")`
 
 ## Data Requirements
 
@@ -113,7 +105,8 @@ est <- estimate_sc(
   w.constr = list(name = "simplex")
 )
 
-placebo <- inference_sc(est, dataset = df, verbose = FALSE)
+# expected_direction defaults to "negative"; this example's effect is positive.
+placebo <- inference_sc(est, dataset = df, expected_direction = "positive", verbose = FALSE)
 placebo$abadie_significance
 ```
 
@@ -244,6 +237,12 @@ Then run a specification curve before writing conclusions.
 - `inst/examples/quick_start_example.R`
 - `inst/examples/basque_terrorism_example.R`
 - `inst/examples/german_reunification_example.R`
+
+## Citation
+
+If you use `SCMs`, please cite:
+
+Jelveh, Z., & Chalfin, A. J. (2026). *Perils and pitfalls in the use of synthetic control methods to study public safety interventions.* Working paper.
 
 ## License
 

@@ -10,6 +10,8 @@ Authors@R:
 Author: Zubin Jelveh [aut, cre]
 Maintainer: Zubin Jelveh <zjelveh@umd.edu>
 License: GPL-3
+URL: https://github.com/zjelveh/SCMs
+BugReports: https://github.com/zjelveh/SCMs/issues
 Encoding: UTF-8
 Depends: R (>= 4.1.0)
 Imports: CVXR        (>= 1.0-10),
