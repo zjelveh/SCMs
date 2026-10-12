@@ -11,7 +11,10 @@ scest(
   V = "separate",
   V.mat = NULL,
   solver = "ECOS",
-  save.data = NULL
+  save.data = NULL,
+  margin.ipop = 0.05,
+  sigf.ipop = 5,
+  bound.ipop = 10
 )
 }
 \arguments{
@@ -46,6 +49,16 @@ Default is NULL (no constraints).}
 Must be installed on system. Default is "ECOS".}
 
 \item{save.data}{Logical. Whether to save input data in output object (for debugging). Default is NULL.}
+
+\item{margin.ipop}{Numeric. Convergence margin passed to the inner interior-point
+quadratic program when \code{feature_weights = "optimize"}. Defaults to 0.05.
+Note that Synth's documented default is 0.0005, i.e. 100x tighter; a loose
+margin can leave the inner solution short of the optimum, which matters when
+estimates are compared across different V.}
+
+\item{sigf.ipop}{Numeric. Significant digits required of the inner solver. Default 5.}
+
+\item{bound.ipop}{Numeric. Bound passed to the inner solver. Default 10.}
 }
 \value{
 A list of class "scest" containing:
