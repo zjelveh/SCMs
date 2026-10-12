@@ -2,7 +2,9 @@
 #'
 #' @title Calculate Multiple Test Statistics and Rank-based P-values
 #' @description Calculates significance measures following Abadie et al. (2010) German reunification paper.
-#' Computes post/pre RMSPE ratios, treatment effects, normalized treatment effects, and their rank-based two-sided p-values.
+#' Computes post/pre RMSPE ratios, treatment effects, normalized treatment effects, and their rank-based p-values:
+#' one-sided in `expected_direction`, or two-sided (ranked by |statistic|) when `expected_direction = "two_sided"`.
+#' The RMSPE ratio is always one-sided.
 #'
 #' @param taus_result Data.table containing treatment effects for all units
 #' @param rmse_result Data.table containing RMSE values for all units
@@ -11,7 +13,13 @@
 #'
 #' @return List containing Abadie significance measures for all test statistics
 calculate_abadie_significance <- function(taus_result, rmse_result, rmspe_threshold = 0, expected_direction = "negative") {
-  
+
+  valid_directions <- c("negative", "positive", "two_sided")
+  if (!is.character(expected_direction) || length(expected_direction) != 1 ||
+      !expected_direction %in% valid_directions) {
+    stop("expected_direction must be one of: ", paste(valid_directions, collapse = ", "))
+  }
+
   if (nrow(taus_result) == 0 || nrow(rmse_result) == 0) {
     return(list(
       rmse_ratio = list(test_statistics = data.table(), p_values = data.table(), filtered_results = data.table()),
@@ -88,10 +96,10 @@ calculate_abadie_significance <- function(taus_result, rmse_result, rmspe_thresh
             p_value_two_sided <- p_value_one_sided  # One-sided test for directional
             
           } else {
-            # Two-sided test: rank by raw tau value for symmetric test
-            unit_ranks <- rank(test_statistic_value, ties.method = "min")
-            p_value_one_sided <- unit_ranks / .N
-            p_value_two_sided <- pmin(2 * pmin(p_value_one_sided, 1 - p_value_one_sided), 1.0)
+            # Two-sided test: rank by |tau| (largest magnitude = rank 1, gets lowest p-value)
+            unit_ranks <- rank(-abs(test_statistic_value), ties.method = "min")
+            p_value_one_sided <- NA_real_
+            p_value_two_sided <- unit_ranks / .N
           }
         }
         
@@ -191,7 +199,8 @@ calculate_abadie_significance <- function(taus_result, rmse_result, rmspe_thresh
 #' @title Perform placebo inference with multiple test statistics
 #' @description Performs placebo inference by estimating synthetic control for each control unit
 #' and computing three test statistics: post/pre RMSE ratio, treatment effect, and normalized treatment effect.
-#' Returns two-sided p-values for all test statistics.
+#' P-values are one-sided in `expected_direction`, or two-sided (ranked by |statistic|) when
+#' `expected_direction = "two_sided"`. The RMSPE ratio is always one-sided.
 #'
 #' @param sc.pred List. Results from synthetic control estimation
 #' @param dataset Data.frame. Original dataset used for estimation

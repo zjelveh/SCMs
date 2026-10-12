@@ -167,3 +167,46 @@ test_that("inference_sc fails hard on scest objects missing metadata", {
     "missing required metadata"
   )
 })
+
+make_abadie_inputs <- function(treated_effect) {
+  units <- c("treated", "c1", "c2", "c3")
+  post_effects <- c(treated_effect, -0.5, 0.4, -1)
+  taus <- data.table::data.table(
+    unit_name = rep(units, each = 3),
+    unit_type = rep(c("treated", "control", "control", "control"), each = 3),
+    outcome_model = "none",
+    post_period = rep(c(FALSE, FALSE, TRUE), times = 4),
+    tau = as.vector(rbind(0.1, -0.1, post_effects))
+  )
+  rmse <- data.table::data.table(
+    unit_name = units,
+    unit_type = c("treated", "control", "control", "control"),
+    outcome_model = "none",
+    pre_rmse = 0.1
+  )
+  list(taus = taus, rmse = rmse)
+}
+
+test_that("two-sided placebo p-values rank units by absolute effect", {
+  for (effect in c(3, -3)) {
+    inputs <- make_abadie_inputs(effect)
+    sig <- calculate_abadie_significance(
+      inputs$taus, inputs$rmse, expected_direction = "two_sided"
+    )
+    p <- sig$treatment_effect$p_values
+    expect_equal(p[unit_name == "treated", p_value], 0.25)
+    expect_equal(p[unit_name == "c3", p_value], 0.50)
+    expect_equal(p[unit_name == "c1", p_value], 0.75)
+    expect_equal(p[unit_name == "c2", p_value], 1.00)
+  }
+})
+
+test_that("calculate_abadie_significance rejects an unknown expected_direction", {
+  inputs <- make_abadie_inputs(3)
+  expect_error(
+    calculate_abadie_significance(
+      inputs$taus, inputs$rmse, expected_direction = "two-sided"
+    ),
+    "expected_direction must be one of"
+  )
+})

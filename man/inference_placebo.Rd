@@ -39,7 +39,8 @@ List containing:
 \description{
 Performs placebo inference by estimating synthetic control for each control unit
 and computing three test statistics: post/pre RMSE ratio, treatment effect, and normalized treatment effect.
-Returns two-sided p-values for all test statistics.
+P-values are one-sided in \code{expected_direction}, or two-sided (ranked by |statistic|) when
+\code{expected_direction = "two_sided"}. The RMSPE ratio is always one-sided.
 }
 \details{
 Placebo Inference for Synthetic Control Method

@@ -25,7 +25,9 @@ List containing Abadie significance measures for all test statistics
 }
 \description{
 Calculates significance measures following Abadie et al. (2010) German reunification paper.
-Computes post/pre RMSPE ratios, treatment effects, normalized treatment effects, and their rank-based two-sided p-values.
+Computes post/pre RMSPE ratios, treatment effects, normalized treatment effects, and their rank-based p-values:
+one-sided in \code{expected_direction}, or two-sided (ranked by |statistic|) when \code{expected_direction = "two_sided"}.
+The RMSPE ratio is always one-sided.
 }
 \details{
 Calculate Abadie-style Significance Measures

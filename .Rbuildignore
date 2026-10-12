@@ -1,0 +1,17 @@
+^tests$
+^\.gitignore$
+^\.github$
+^.*\.Rproj$
+^\.Rproj\.user$
+.Rhistory
+..Rcheck
+.git
+.github
+.vscode
+^AGENTS\.md$
+^Rplots\.pdf$
+^inst/performance_profile\.R$
+^inst/performance_results$
+^inst/examples/\.ipynb_checkpoints$
+^COVAGG\.md$
+^CRAN_RESUBMISSION_PUNCHLIST\.md$
