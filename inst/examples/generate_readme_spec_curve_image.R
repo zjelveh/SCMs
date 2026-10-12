@@ -157,7 +157,6 @@ plot_obj <- plot_spec_curve(
   outcomes = outcome,
   show_shap = TRUE,
   shap_label_type = "signed",
-  richtext_feature_labels = FALSE,
   shap_values = shap_result$shapley,
   show_predictions = TRUE,
   predictions = shap_result$predictions,
@@ -184,7 +183,9 @@ ggsave(
   width = spec_width,
   height = spec_height,
   units = "in",
-  device = "svg",
+  # Cairo SVG embeds glyph outlines, so the rich-text labels render exactly;
+  # svglite leaves text to the browser's fonts and misplaces them.
+  device = grDevices::svg,
   bg = "white"
 )
 

@@ -94,9 +94,6 @@
 #'   - "absolute": Shows mean |SHAP| values, e.g., "ridge (0.123)"
 #'   - "signed": Shows mean SHAP values with sign, e.g., "ridge (+0.089)" or "lasso (-0.045)"
 #'   Default is "absolute".
-#' @param richtext_feature_labels Logical. Whether to render Panel B feature labels
-#'   using rich HTML text (colored SHAP values). Set to FALSE for plain text labels,
-#'   which can be more robust in some SVG renderers (e.g., GitHub). Default is TRUE.
 #' @param show_predictions Logical. Whether to display predicted treatment effects from XGBoost models
 #'   alongside actual treatment effects in Panel A. Uses leave-one-out cross-validation predictions
 #'   for robust evaluation. Default is FALSE.
@@ -114,6 +111,9 @@
 #' @param xgboost_grid Data.frame, data.table, or list. Optional grid for tuning.
 #'   Must include max_depth, eta, nrounds, subsample, colsample_bytree. Default is NULL.
 #' @param xgboost_cv_folds Integer. Number of CV folds for tuning. Default is 5.
+#'
+#' @details Panel B labels are rich text. To save `final_plot` as SVG, use the Cairo
+#'   device (`grDevices::svg`); svglite misaligns the labels.
 #'
 #' @return List containing:
 #' \itemize{
@@ -195,7 +195,6 @@ plot_spec_curve <- function(
     filter_specs = NULL,
     show_shap = TRUE,
     shap_label_type = "absolute",
-    richtext_feature_labels = TRUE,
     show_predictions = FALSE,
     predictions = NULL,
     xgboost_params = NULL,
@@ -1264,23 +1263,12 @@ plot_spec_curve <- function(
         # Map SHAP summary values to colors using the same scale as the legend
         feature_shap_summary[, shap_color := map_shap_to_color(shap_summary, shap_label_type, all_treated_shap)]
         
-        # Create feature labels with SHAP summaries.
-        if (isTRUE(richtext_feature_labels)) {
-            # HTML labels preserve SHAP sign color in rendered text.
-            feature_shap_summary[, feature_with_shap := paste0(
-                feature, " (<span style='color:", shap_color, "'>",
-                ifelse(shap_summary >= 0, "+", ""),
-                round(shap_summary, 1), "</span>)"
-            )]
-        } else {
-            # Plain-text labels are more robust for SVG display on GitHub.
-            feature_shap_summary[, feature_with_shap := paste0(
-                feature, " (",
-                ifelse(shap_summary >= 0, "+", ""),
-                round(shap_summary, 1),
-                ")"
-            )]
-        }
+        # Create feature labels with SHAP summaries; HTML spans color the value by sign.
+        feature_shap_summary[, feature_with_shap := paste0(
+            feature, " (<span style='color:", shap_color, "'>",
+            ifelse(shap_summary >= 0, "+", ""),
+            round(shap_summary, 1), "</span>)"
+        )]
         
         # Merge back with plot data to add enhanced labels
         plot_data_p2 <- merge(plot_data_p2, 
@@ -1316,14 +1304,8 @@ plot_spec_curve <- function(
     fg_order <- sort(unique(as.character(plot_data_p2$feature_group)))
 
     y_pos <- 1.0
-    if (isTRUE(richtext_feature_labels)) {
-        within_group_step <- 0.70  # richer labels can sit closer with HTML wrapping
-        between_group_gap <- 1.65  # moderate inter-group spacing
-    } else {
-        # Plain-text SVG labels render as multi-line text; use larger row spacing.
-        within_group_step <- 1.15
-        between_group_gap <- 2.05  # moderate inter-group spacing
-    }
+    within_group_step <- 0.70
+    between_group_gap <- 1.65  # moderate inter-group spacing
     group_boundaries <- list()
     y_mapping <- data.table::data.table(
         feature_group = character(0),
@@ -1478,31 +1460,19 @@ plot_spec_curve <- function(
 
     # Subcategory labels (feature names + SHAP summary).
     subcat_y_npc <- to_npc(sorted_mapping$y_numeric)
-    if (isTRUE(richtext_feature_labels)) {
-        # Wrap labels onto two lines for richtext rendering.
-        subcat_labels <- gsub(" \\+ ", "<br>+ ", sorted_mapping$feature_display_chr)
-        subcat_grob <- gridtext::richtext_grob(
-            text = subcat_labels,
-            x = grid::unit(1, "npc"),
-            y = grid::unit(subcat_y_npc, "npc"),
-            hjust = 1, vjust = 0.5,
-            gp = grid::gpar(fontsize = 8, lineheight = 1.1),
-            default.units = "npc",
-            padding = grid::unit(c(1, 8, 1, 1), "pt"),
-            margin = grid::unit(c(1, 3, 1, 1), "pt"),
-            box_gp = grid::gpar(col = NA, fill = NA)
-        )
-    } else {
-        # Plain text fallback avoids HTML rendering issues in some SVG viewers.
-        subcat_labels <- gsub(" \\(", "\n(", sorted_mapping$feature_display_chr)
-        subcat_grob <- grid::textGrob(
-            label = subcat_labels,
-            x = grid::unit(1, "npc"),
-            y = grid::unit(subcat_y_npc, "npc"),
-            hjust = 1, vjust = 0.5,
-            gp = grid::gpar(fontsize = 8, lineheight = 1.1)
-        )
-    }
+    # Wrap combined labels ("A + B") onto two lines.
+    subcat_labels <- gsub(" \\+ ", "<br>+ ", sorted_mapping$feature_display_chr)
+    subcat_grob <- gridtext::richtext_grob(
+        text = subcat_labels,
+        x = grid::unit(1, "npc"),
+        y = grid::unit(subcat_y_npc, "npc"),
+        hjust = 1, vjust = 0.5,
+        gp = grid::gpar(fontsize = 8, lineheight = 1.1),
+        default.units = "npc",
+        padding = grid::unit(c(1, 8, 1, 1), "pt"),
+        margin = grid::unit(c(1, 3, 1, 1), "pt"),
+        box_gp = grid::gpar(col = NA, fill = NA)
+    )
 
     # --- Insert label columns into Panel B grob ---
     p2_panel_idx <- which(p2_grob$layout$name == "panel")

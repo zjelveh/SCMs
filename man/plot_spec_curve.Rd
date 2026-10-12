@@ -30,7 +30,6 @@ plot_spec_curve(
   filter_specs = NULL,
   show_shap = TRUE,
   shap_label_type = "absolute",
-  richtext_feature_labels = TRUE,
   show_predictions = FALSE,
   predictions = NULL,
   xgboost_params = NULL,
@@ -163,10 +162,6 @@ Default is TRUE.
 Default is "absolute".
 }}
 
-\item{richtext_feature_labels}{Logical. Whether to render Panel B feature labels
-using rich HTML text (colored SHAP values). Set to FALSE for plain text labels,
-which can be more robust in some SVG renderers (e.g., GitHub). Default is TRUE.}
-
 \item{show_predictions}{Logical. Whether to display predicted treatment effects from XGBoost models
 alongside actual treatment effects in Panel A. Uses leave-one-out cross-validation predictions
 for robust evaluation. Default is FALSE.}
@@ -221,6 +216,9 @@ SHAP analysis and flexible filtering capabilities. Key features:
 }
 \details{
 Plot Specification Curve Using Direct Long Format Data
+
+Panel B labels are rich text. To save \code{final_plot} as SVG, use the Cairo
+device (\code{grDevices::svg}); svglite misaligns the labels.
 }
 \examples{
 \donttest{
