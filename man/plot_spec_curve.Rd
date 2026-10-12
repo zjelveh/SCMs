@@ -79,6 +79,8 @@ when both are available. Default is FALSE (prefer Abadie).}
 \item{curve_stat}{Character vector. Curve-level statistics to compute for placebo-in-space
 inference. Options:
 \itemize{
+\item \code{"median_tau"}: \eqn{\mathrm{median}_s(\tau_s)} (signed; the only option
+that supports \code{two_sided = FALSE})
 \item \code{"abs_median_tau"}: \eqn{|\mathrm{median}_s(\tau_s)|}
 \item \code{"median_abs_tau"}: \eqn{\mathrm{median}_s(|\tau_s|)}
 \item \code{"consistency_ratio"}: \eqn{|\sum_s \tau_s| / \sum_s |\tau_s|}
@@ -93,7 +95,9 @@ Weighting is applied generically to each requested curve statistic.}
 \item{two_sided}{Logical. If \code{TRUE} (default), curve-level p-values use absolute-tail
 placebo comparison: \code{(1 + sum(abs(placebo) >= abs(observed))) / (J + 1)}.
 If \code{FALSE}, one-sided comparison is used with \code{expected_direction} from
-\code{long_data} (\code{"negative"} or \code{"positive"} required).}
+\code{long_data} (\code{"negative"} or \code{"positive"} required); this requires
+\code{curve_stat = "median_tau"}. For \code{"negative"},
+\code{p = (1 + sum(placebo <= observed)) / (J + 1)}.}
 
 \item{grid_policy}{Character. How to handle incomplete placebo specification grids when
 computing curve-level p-values. Options:

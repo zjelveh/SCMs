@@ -406,3 +406,45 @@ test_that("min_placebos and min_specs are enforced after grid policy", {
     "only 3 shared specifications remain"
   )
 })
+
+test_that("one-sided median_tau p-values count placebos in the expected direction", {
+  # Treated median tau = -0.5; placebo medians are 0 and 0.5.
+  data_ok <- make_curve_test_data(sign_flip = 1)
+  neg <- SCMs:::calculate_spec_curve_pvalues_filtered(
+    filtered_results = data_ok,
+    curve_stat = "median_tau",
+    weighting = "none",
+    two_sided = FALSE,
+    expected_direction = "negative"
+  )$treated_summary
+  expect_equal(neg$estimate, -0.5)
+  expect_equal(neg$n_extreme, 0L)
+  expect_equal(neg$p_value, 1 / 3)
+
+  # Flipping signs moves the treated unit to the top: least extreme for "negative",
+  # most extreme for "positive".
+  data_flip <- make_curve_test_data(sign_flip = -1)
+  flip_neg <- SCMs:::calculate_spec_curve_pvalues_filtered(
+    filtered_results = data_flip, curve_stat = "median_tau", weighting = "none",
+    two_sided = FALSE, expected_direction = "negative"
+  )$treated_summary
+  flip_pos <- SCMs:::calculate_spec_curve_pvalues_filtered(
+    filtered_results = data_flip, curve_stat = "median_tau", weighting = "none",
+    two_sided = FALSE, expected_direction = "positive"
+  )$treated_summary
+  expect_equal(flip_neg$p_value, 1)
+  expect_equal(flip_pos$p_value, 1 / 3)
+})
+
+test_that("one-sided curve p-values fail hard for non-negative curve statistics", {
+  data_ok <- make_curve_test_data()
+  for (stat_i in c("abs_median_tau", "median_abs_tau", "consistency_ratio")) {
+    expect_error(
+      SCMs:::calculate_spec_curve_pvalues_filtered(
+        filtered_results = data_ok, curve_stat = stat_i, weighting = "none",
+        two_sided = FALSE, expected_direction = "negative"
+      ),
+      "require a signed curve statistic"
+    )
+  }
+})

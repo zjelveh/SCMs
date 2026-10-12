@@ -34,6 +34,8 @@
 #' @param curve_stat Character vector. Curve-level statistics to compute for placebo-in-space
 #'   inference. Options:
 #'   \itemize{
+#'     \item \code{"median_tau"}: \eqn{\mathrm{median}_s(\tau_s)} (signed; the only option
+#'       that supports \code{two_sided = FALSE})
 #'     \item \code{"abs_median_tau"}: \eqn{|\mathrm{median}_s(\tau_s)|}
 #'     \item \code{"median_abs_tau"}: \eqn{\mathrm{median}_s(|\tau_s|)}
 #'     \item \code{"consistency_ratio"}: \eqn{|\sum_s \tau_s| / \sum_s |\tau_s|}
@@ -46,7 +48,9 @@
 #' @param two_sided Logical. If \code{TRUE} (default), curve-level p-values use absolute-tail
 #'   placebo comparison: \code{(1 + sum(abs(placebo) >= abs(observed))) / (J + 1)}.
 #'   If \code{FALSE}, one-sided comparison is used with \code{expected_direction} from
-#'   \code{long_data} (\code{"negative"} or \code{"positive"} required).
+#'   \code{long_data} (\code{"negative"} or \code{"positive"} required); this requires
+#'   \code{curve_stat = "median_tau"}. For \code{"negative"},
+#'   \code{p = (1 + sum(placebo <= observed)) / (J + 1)}.
 #' @param grid_policy Character. How to handle incomplete placebo specification grids when
 #'   computing curve-level p-values. Options:
 #'   \itemize{
@@ -321,15 +325,14 @@ plot_spec_curve <- function(
     }
 
     # Validate curve-level inference settings
-    valid_curve_stats <- c("abs_median_tau", "median_abs_tau", "consistency_ratio")
     if (!is.character(curve_stat) || length(curve_stat) < 1) {
         stop("curve_stat must be a non-empty character vector.")
     }
     curve_stat <- unique(curve_stat)
-    invalid_curve_stats <- setdiff(curve_stat, valid_curve_stats)
+    invalid_curve_stats <- setdiff(curve_stat, CURVE_STATISTICS)
     if (length(invalid_curve_stats) > 0) {
         stop("curve_stat contains invalid values: ", paste(invalid_curve_stats, collapse = ", "),
-             ". Valid options are: ", paste(valid_curve_stats, collapse = ", "))
+             ". Valid options are: ", paste(CURVE_STATISTICS, collapse = ", "))
     }
 
     valid_weighting <- c("none", "pre_rmspe_percentile")
@@ -1130,8 +1133,7 @@ plot_spec_curve <- function(
             }
 
             treated_curve <- data.table::copy(treated_curve)
-            stat_levels <- c("abs_median_tau", "median_abs_tau", "consistency_ratio")
-            treated_curve[, stat_rank := match(curve_statistic, stat_levels)]
+            treated_curve[, stat_rank := match(curve_statistic, CURVE_STATISTICS)]
             if (any(is.na(treated_curve$stat_rank))) {
                 bad_stats <- unique(treated_curve[is.na(stat_rank), curve_statistic])
                 stop("Unknown curve_statistic value(s) in treated_summary: ", paste(bad_stats, collapse = ", "))
@@ -1152,26 +1154,37 @@ plot_spec_curve <- function(
 
             annotation_lines <- c()
 
-            median_rows <- treated_curve[curve_statistic == "abs_median_tau"]
-            if (nrow(median_rows) > 0) {
-                row_none <- median_rows[weighting == "none"]
-                row_wt <- median_rows[weighting == "pre_rmspe_percentile"]
+            stat_labels <- c(
+                median_tau = "median(tau)",
+                abs_median_tau = "|median(tau)|",
+                median_abs_tau = "median(|tau|)",
+                consistency_ratio = "consistency ratio"
+            )
+            side_tag <- if (two_sided) "" else paste0(", one-sided (", expected_direction, ")")
+
+            for (stat_i in unique(treated_curve$curve_statistic)) {
+                stat_rows <- treated_curve[curve_statistic == stat_i]
+                stat_label <- paste0(stat_labels[[stat_i]], side_tag)
+                row_none <- stat_rows[weighting == "none"]
+                row_wt <- stat_rows[weighting == "pre_rmspe_percentile"]
                 if (nrow(row_none) > 0 && nrow(row_wt) > 0) {
                     annotation_lines <- c(
                         annotation_lines,
                         sprintf(
-                            "|median(tau)|: %s (wt: %s)",
+                            "%s: %s (wt: %s)",
+                            stat_label,
                             format_rank_value(row_none[1]),
                             format_rank_value(row_wt[1])
                         )
                     )
                 } else {
-                    row_one <- median_rows[1]
+                    row_one <- stat_rows[1]
                     weight_tag <- if (row_one$weighting == "pre_rmspe_percentile") " (wt)" else ""
                     annotation_lines <- c(
                         annotation_lines,
                         sprintf(
-                            "|median(tau)|%s: %s",
+                            "%s%s: %s",
+                            stat_label,
                             weight_tag,
                             format_rank_value(row_one)
                         )
@@ -1604,6 +1617,11 @@ compute_pre_rmspe_percentile_weights <- function(pre_rmspe) {
     w
 }
 
+# Supported curve-level statistics. Only signed statistics support one-sided tests: the others
+# are non-negative, so a one-sided p-value would ask whether the curve is unusually close to zero.
+CURVE_STATISTICS <- c("median_tau", "abs_median_tau", "median_abs_tau", "consistency_ratio")
+SIGNED_CURVE_STATISTICS <- c("median_tau")
+
 curve_stat_median <- function(tau, weights = NULL) {
     validate_curve_numeric_vector(tau, "tau", min_length = 2L)
     if (is.null(weights)) {
@@ -1629,6 +1647,14 @@ curve_stat_median <- function(tau, weights = NULL) {
     }
     # If the CDF lands exactly on 0.5, average adjacent points (median-compatible tie handling).
     mean(c(tau_sorted[idx], tau_sorted[idx + 1L]))
+}
+
+curve_stat_median_tau <- function(tau, weights = NULL) {
+    out <- curve_stat_median(tau, weights = weights)
+    if (!is.finite(out)) {
+        stop("curve_stat_median_tau produced a non-finite value.")
+    }
+    out
 }
 
 curve_stat_abs_median_tau <- function(tau, weights = NULL) {
@@ -1683,6 +1709,9 @@ apply_curve_statistic <- function(curve_statistic, tau, weights = NULL) {
     if (!is.character(curve_statistic) || length(curve_statistic) != 1) {
         stop("curve_statistic must be a single character value.")
     }
+    if (curve_statistic == "median_tau") {
+        return(curve_stat_median_tau(tau, weights = weights))
+    }
     if (curve_statistic == "abs_median_tau") {
         return(curve_stat_abs_median_tau(tau, weights = weights))
     }
@@ -1729,7 +1758,7 @@ compute_placebo_curve_pvalue <- function(observed_stat, placebo_stats, two_sided
 #'
 #' @param filtered_results Data.table. Filtered results data (post-filtering by outcomes, RMSE, etc.).
 #' @param curve_stat Character vector. Curve-level statistics to compute:
-#'   \code{"abs_median_tau"}, \code{"median_abs_tau"}, \code{"consistency_ratio"}.
+#'   \code{"median_tau"}, \code{"abs_median_tau"}, \code{"median_abs_tau"}, \code{"consistency_ratio"}.
 #' @param weighting Character vector. Weighting mode(s) applied to each requested
 #'   curve-level statistic: \code{"none"} or \code{"pre_rmspe_percentile"}.
 #' @param two_sided Logical. Whether to compute two-sided p-values using absolute-value tails.
@@ -1754,8 +1783,12 @@ compute_placebo_curve_pvalue <- function(observed_stat, placebo_stats, two_sided
 #' \code{tau_s}. Two-sided p-values always compare absolute tails against placebo-unit
 #' curve statistics:
 #' \deqn{p = (1 + \#\{|T_j| \ge |T_{treated}|\})/(J+1).}
+#' One-sided p-values (\code{two_sided = FALSE}) require a signed statistic and count placebos
+#' at least as extreme in \code{expected_direction}, e.g. for \code{"negative"}
+#' \deqn{p = (1 + \#\{T_j \le T_{treated}\})/(J+1).}
 #' The supported curve statistics are:
 #' \itemize{
+#'   \item \code{median_tau}: \eqn{\mathrm{median}_s(\tau_s)} (signed)
 #'   \item \code{abs_median_tau}: \eqn{|\mathrm{median}_s(\tau_s)|}
 #'   \item \code{median_abs_tau}: \eqn{\mathrm{median}_s(|\tau_s|)}
 #'   \item \code{consistency_ratio}: \eqn{|\sum_s \tau_s| / \sum_s |\tau_s|}
@@ -1780,9 +1813,8 @@ calculate_spec_curve_pvalues_filtered <- function(
         stop("filtered_results is empty. Cannot compute curve-level inference.")
     }
 
-    valid_curve_stats <- c("abs_median_tau", "median_abs_tau", "consistency_ratio")
     curve_stat <- unique(curve_stat)
-    invalid_curve_stats <- setdiff(curve_stat, valid_curve_stats)
+    invalid_curve_stats <- setdiff(curve_stat, CURVE_STATISTICS)
     if (length(invalid_curve_stats) > 0) {
         stop("Invalid curve_stat values: ", paste(invalid_curve_stats, collapse = ", "))
     }
@@ -1800,6 +1832,13 @@ calculate_spec_curve_pvalues_filtered <- function(
     }
     if (!two_sided && !expected_direction %in% c("negative", "positive")) {
         stop("For one-sided curve p-values, expected_direction must be 'negative' or 'positive'.")
+    }
+    unsigned_curve_stats <- setdiff(curve_stat, SIGNED_CURVE_STATISTICS)
+    if (!two_sided && length(unsigned_curve_stats) > 0) {
+        stop("One-sided curve p-values require a signed curve statistic (",
+             paste(SIGNED_CURVE_STATISTICS, collapse = ", "), "). ",
+             paste(unsigned_curve_stats, collapse = ", "), " is non-negative, so a one-sided test ",
+             "would ask whether the curve is unusually close to zero.")
     }
     valid_grid_policy <- c("strict", "drop_incomplete_units", "intersect_specs")
     if (!is.character(grid_policy) || length(grid_policy) != 1 || !grid_policy %in% valid_grid_policy) {
@@ -2011,9 +2050,8 @@ calculate_spec_curve_pvalues_filtered <- function(
     }
     stats_by_unit <- data.table::rbindlist(stats_list)
 
-    stat_levels <- c("abs_median_tau", "median_abs_tau", "consistency_ratio")
     stat_combos <- unique(stats_by_unit[, .(curve_statistic, weighting)])
-    stat_combos[, stat_rank := match(curve_statistic, stat_levels)]
+    stat_combos[, stat_rank := match(curve_statistic, CURVE_STATISTICS)]
     if (any(is.na(stat_combos$stat_rank))) {
         bad_stats <- unique(stat_combos[is.na(stat_rank), curve_statistic])
         stop("Unknown curve_statistic value(s): ", paste(bad_stats, collapse = ", "))
@@ -2053,7 +2091,7 @@ calculate_spec_curve_pvalues_filtered <- function(
         )
     }
     treated_summary <- data.table::rbindlist(treated_summary_list)
-    treated_summary[, stat_rank := match(curve_statistic, stat_levels)]
+    treated_summary[, stat_rank := match(curve_statistic, CURVE_STATISTICS)]
     if (any(is.na(treated_summary$stat_rank))) {
         bad_stats <- unique(treated_summary[is.na(stat_rank), curve_statistic])
         stop("Unknown curve_statistic value(s) in treated summary: ", paste(bad_stats, collapse = ", "))

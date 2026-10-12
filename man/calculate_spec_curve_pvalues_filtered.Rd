@@ -19,7 +19,7 @@ calculate_spec_curve_pvalues_filtered(
 \item{filtered_results}{Data.table. Filtered results data (post-filtering by outcomes, RMSE, etc.).}
 
 \item{curve_stat}{Character vector. Curve-level statistics to compute:
-\code{"abs_median_tau"}, \code{"median_abs_tau"}, \code{"consistency_ratio"}.}
+\code{"median_tau"}, \code{"abs_median_tau"}, \code{"median_abs_tau"}, \code{"consistency_ratio"}.}
 
 \item{weighting}{Character vector. Weighting mode(s) applied to each requested
 curve-level statistic: \code{"none"} or \code{"pre_rmspe_percentile"}.}
@@ -57,8 +57,12 @@ For each unit and specification, this function uses the signed per-spec effect s
 \code{tau_s}. Two-sided p-values always compare absolute tails against placebo-unit
 curve statistics:
 \deqn{p = (1 + \#\{|T_j| \ge |T_{treated}|\})/(J+1).}
+One-sided p-values (\code{two_sided = FALSE}) require a signed statistic and count placebos
+at least as extreme in \code{expected_direction}, e.g. for \code{"negative"}
+\deqn{p = (1 + \#\{T_j \le T_{treated}\})/(J+1).}
 The supported curve statistics are:
 \itemize{
+\item \code{median_tau}: \eqn{\mathrm{median}_s(\tau_s)} (signed)
 \item \code{abs_median_tau}: \eqn{|\mathrm{median}_s(\tau_s)|}
 \item \code{median_abs_tau}: \eqn{\mathrm{median}_s(|\tau_s|)}
 \item \code{consistency_ratio}: \eqn{|\sum_s \tau_s| / \sum_s |\tau_s|}
