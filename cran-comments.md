@@ -20,14 +20,12 @@ NEWS.md.
 ## Test environments
 
 * Local: Ubuntu 22.04.4 LTS, R 4.4.1, with all dependencies at their current CRAN versions
-* win-builder: R-devel and R-release (PENDING)
-* macOS builder: R-release (PENDING)
+* win-builder: R-devel (2026-10-10 r90659) and R-release (4.6.1)
 
 ## R CMD check results
 
 0 errors | 0 warnings | 1 note
 
 * New submission.
-
-Locally, two further NOTEs come from the build machine only ("unable to verify current time",
-and a libxml version message).
+* Possibly misspelled words in DESCRIPTION: "Abadie", "Guestrin" and "et al." are author names and
+  the citation abbreviation in the method references.
