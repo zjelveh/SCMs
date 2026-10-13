@@ -53,12 +53,9 @@ w.constr.OBJ <- function(w.constr, A, Z, V, J, KM, M) {
         Vf <- V[feature.id == feat, feature.id == feat, drop = FALSE]
         if (nrow(Af) >= 2) {
           #5) {
-          QQ <- tryCatch({
-            aux <- shrinkage.EST("ridge", Af, as.matrix(Zf), Vf, J, KM)
-            Q <- aux$Q
-          }, warning = function(warn) { },
-          error = function(err) { }, finally = { })
-          Qfeat <- c(Qfeat, QQ)
+          # Errors propagate: a swallowed failure silently dropped this feature's Q.
+          aux <- shrinkage.EST("ridge", Af, as.matrix(Zf), Vf, J, KM)
+          Qfeat <- c(Qfeat, aux$Q)
         }
       }
       
@@ -66,18 +63,17 @@ w.constr.OBJ <- function(w.constr, A, Z, V, J, KM, M) {
         aux <- shrinkage.EST("ridge", A, as.matrix(Z), V, J, KM)
         Qfeat <- aux$Q
       }
-      # Filter out infinite values and use a reasonable default if needed
+      # Use the smallest finite per-feature Q (floored at 0.5); fail hard rather than
+      # substitute a default when the penalty could not be estimated.
       Qfeat_finite <- Qfeat[is.finite(Qfeat)]
-      if (length(Qfeat_finite) > 0) {
-        w.constr[["Q"]] <- max(min(Qfeat_finite), .5)
-      } else {
-        w.constr[["Q"]] <- 1.0  # Default Q value
+      if (length(Qfeat_finite) == 0) {
+        stop("Ridge penalty estimation produced no finite Q for any feature.")
       }
-      if (exists("aux") && is.finite(aux$lambda)) {
-        w.constr[["lambda"]] <- aux$lambda
-      } else {
-        w.constr[["lambda"]] <- 0.1  # Default lambda value
+      w.constr[["Q"]] <- max(min(Qfeat_finite), .5)
+      if (!is.finite(aux$lambda)) {
+        stop("Ridge penalty estimation produced a non-finite lambda.")
       }
+      w.constr[["lambda"]] <- aux$lambda
       
     }
     
@@ -100,12 +96,9 @@ w.constr.OBJ <- function(w.constr, A, Z, V, J, KM, M) {
         Vf <- V[feature.id == feat, feature.id == feat, drop = FALSE]
         
         if (nrow(Af) >= 5) {
-          QQ <- tryCatch({
-            aux <- shrinkage.EST("ridge", Af, as.matrix(Zf), Vf, J, KM)
-            Q2 <- aux$Q
-          }, warning = function(warn) { },
-          error = function(err) { }, finally = { })
-          Qfeat <- c(Qfeat, QQ)
+          # Errors propagate: a swallowed failure silently dropped this feature's Q.
+          aux <- shrinkage.EST("ridge", Af, as.matrix(Zf), Vf, J, KM)
+          Qfeat <- c(Qfeat, aux$Q)
         }
       }
       
@@ -113,18 +106,17 @@ w.constr.OBJ <- function(w.constr, A, Z, V, J, KM, M) {
         aux <- shrinkage.EST("ridge", A, as.matrix(Z), V, J, KM)
         Qfeat <- aux$Q
       }
-      # Filter out infinite values and use a reasonable default if needed
+      # Use the smallest finite per-feature Q (floored at 0.5); fail hard rather than
+      # substitute a default when the penalty could not be estimated.
       Qfeat_finite <- Qfeat[is.finite(Qfeat)]
-      if (length(Qfeat_finite) > 0) {
-        w.constr[["Q2"]] <- max(min(Qfeat_finite), .5)
-      } else {
-        w.constr[["Q2"]] <- 1.0  # Default Q2 value
+      if (length(Qfeat_finite) == 0) {
+        stop("Ridge penalty estimation produced no finite Q2 for any feature.")
       }
-      if (exists("aux") && is.finite(aux$lambda)) {
-        w.constr[["lambda"]] <- aux$lambda
-      } else {
-        w.constr[["lambda"]] <- 0.1  # Default lambda value
+      w.constr[["Q2"]] <- max(min(Qfeat_finite), .5)
+      if (!is.finite(aux$lambda)) {
+        stop("Ridge penalty estimation produced a non-finite lambda.")
       }
+      w.constr[["lambda"]] <- aux$lambda
     }
     
     w.constr <- list(lb = 0,
