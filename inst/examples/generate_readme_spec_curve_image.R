@@ -1,4 +1,5 @@
 # Generate README spec-curve figures from the Basque paper specification grid.
+# Recomputes the full grid (320 specifications with placebo inference) on all but one core.
 # Run from package root:
 #   Rscript inst/examples/generate_readme_spec_curve_image.R
 #
@@ -15,6 +16,10 @@ if (file.exists("DESCRIPTION") && requireNamespace("devtools", quietly = TRUE)) 
 library(ggplot2)
 library(data.table)
 
+# Print warnings as they occur rather than a deferred "There were 50 or more warnings".
+options(warn = 1)
+n_cores <- max(1L, parallel::detectCores(logical = FALSE) - 1L)
+
 treated_unit <- "Basque_Country_Pais_Vasco"
 outcome <- "gdpcap"
 spec_width <- 10
@@ -22,9 +27,6 @@ spec_height <- 9
 png_out <- "inst/examples/readme_spec_curve.png"
 svg_out <- "inst/examples/readme_spec_curve.svg"
 pdf_out <- "inst/examples/readme_spec_curve.pdf"
-
-paper_results_path <- normalizePath("../../data/basque_results/basque_full_results.rdata", mustWork = FALSE)
-paper_shap_path <- normalizePath("../../data/basque_results/basque_shap_result.rdata", mustWork = FALSE)
 
 build_basque_covagg <- function() {
   all_vars <- c(
@@ -71,85 +73,49 @@ build_basque_covagg <- function() {
   )
 }
 
-load_paper_cache <- function() {
-  if (!file.exists(paper_results_path) || !file.exists(paper_shap_path)) {
-    return(NULL)
-  }
+basque <- fread("inst/extdata/basque.csv")
+basque[, regionname := gsub("\\(|\\)", "", regionname)]
+basque[, regionname := gsub(" ", "_", regionname)]
+basque <- basque[regionno > 1]
 
-  load_env <- new.env(parent = emptyenv())
-  load(paper_results_path, envir = load_env)
-  load(paper_shap_path, envir = load_env)
+params <- list(
+  outcomes = outcome,
+  col_name_unit_name = "regionname",
+  name_treated_unit = treated_unit,
+  treated_period = 1970,
+  min_period = 1955,
+  end_period = 1997,
+  col_name_period = "year",
+  inference_type = "placebo",
+  feature_weights = c("uniform", "optimize"),
+  donor_sample = c("all"),
+  constant = c(FALSE, TRUE),
+  outcome_models = c("none", "augsynth", "lasso", "ridge", "ols"),
+  constraints = list(
+    list(name = "pensynth"),
+    list(name = "simplex"),
+    list(name = "lasso"),
+    list(name = "ridge")
+  ),
+  covagg = build_basque_covagg(),
+  inference_config = list(bootstrap_n_replications = 100, verbose = FALSE)
+)
 
-  if (!exists("results", envir = load_env) || !exists("shap_result", envir = load_env)) {
-    stop("Paper cache files found but expected objects ('results', 'shap_result') were not present.")
-  }
+results <- run_spec_curve_analysis(
+  dataset = basque,
+  params = params,
+  cores = n_cores,
+  output_dir = NULL
+)
 
-  results_obj <- get("results", envir = load_env)
-  shap_obj <- get("shap_result", envir = load_env)
-
-  if (!inherits(results_obj, "spec_curve")) {
-    stop("Cached 'results' is not a spec_curve object.")
-  }
-  if (!is.list(shap_obj) || is.null(shap_obj$shapley) || is.null(shap_obj$predictions)) {
-    stop("Cached 'shap_result' is missing shapley and/or predictions.")
-  }
-
-  list(results = results_obj, shap = shap_obj)
-}
-
-cache <- load_paper_cache()
-
-if (is.null(cache)) {
-  message("Paper cache not found; recomputing Basque full grid (paper spec space).")
-  basque <- fread("inst/extdata/basque.csv")
-  basque[, regionname := gsub("\\(|\\)", "", regionname)]
-  basque[, regionname := gsub(" ", "_", regionname)]
-  basque <- basque[regionno > 1]
-
-  params <- list(
-    outcomes = outcome,
-    col_name_unit_name = "regionname",
-    name_treated_unit = treated_unit,
-    treated_period = 1970,
-    min_period = 1955,
-    end_period = 1997,
-    col_name_period = "year",
-    expected_direction = "negative",
-    inference_type = "placebo",
-    feature_weights = c("uniform", "optimize"),
-    donor_sample = c("all"),
-    constant = c(FALSE, TRUE),
-    outcome_models = c("none", "augsynth", "lasso", "ridge", "ols"),
-    constraints = list(
-      list(name = "pensynth"),
-      list(name = "simplex"),
-      list(name = "lasso"),
-      list(name = "ridge")
-    ),
-    covagg = build_basque_covagg(),
-    inference_config = list(bootstrap_n_replications = 100, verbose = FALSE)
-  )
-
-  results <- run_spec_curve_analysis(
-    dataset = basque,
-    params = params,
-    cores = max(1L, min(4L, parallel::detectCores(logical = FALSE))),
-    output_dir = NULL
-  )
-
-  xgb_config <- create_xgboost_config(
-    dataset_name = "basque_readme",
-    treated_unit_name = treated_unit,
-    outcome_filter = outcome,
-    spec_features = c("feat", "outcome_model", "const", "fw", "constant"),
-    treated_unit_only = TRUE
-  )
-  shap_result <- run_xgboost_shap_analysis(results$results, xgb_config, compute_loo = TRUE)
-} else {
-  message("Using cached paper Basque results/shap objects.")
-  results <- cache$results
-  shap_result <- cache$shap
-}
+xgb_config <- create_xgboost_config(
+  dataset_name = "basque_readme",
+  treated_unit_name = treated_unit,
+  outcome_filter = outcome,
+  spec_features = c("feat", "outcome_model", "const", "fw", "constant"),
+  treated_unit_only = TRUE
+)
+shap_result <- run_xgboost_shap_analysis(results$results, xgb_config, compute_loo = TRUE)
 
 plot_obj <- plot_spec_curve(
   long_data = results,
@@ -161,9 +127,6 @@ plot_obj <- plot_spec_curve(
   show_predictions = TRUE,
   predictions = shap_result$predictions,
   show_pvalues = TRUE,
-  # One-sided in the results' expected_direction ("negative": terrorism lowers GDP per capita).
-  curve_stat = "median_tau",
-  two_sided = FALSE,
   null_distribution = "placebo",
   test_statistic = "treatment_effect"
 )
