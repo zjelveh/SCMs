@@ -3,6 +3,9 @@
 This is a resubmission of SCMs 0.1.0. Thank you for the review of 2026-02-12. Each request is
 quoted below with our response.
 
+This upload also fixes the arXiv reference flagged by the incoming pre-tests on 2026-10-13: it now
+uses the arXiv DOI <doi:10.48550/arXiv.1705.07874>.
+
 > Please always write package names, software names and API (application programming interface)
 > names in single quotes in title and description. [...] Please note that package names are case
 > sensitive.
@@ -12,8 +15,8 @@ Software names in the Description are now in single quotes with their exact case
 > If there are references describing the methods in your package, please add these in the
 > description field of your DESCRIPTION file in the form authors (year) <doi:...>
 
-Added references with DOIs (and one arXiv identifier) for the synthetic control, augmented
-synthetic control, specification-curve, 'xgboost' and SHAP methods.
+Added references with DOIs for the synthetic control, augmented synthetic control,
+specification-curve, 'xgboost' and SHAP methods.
 
 > Some of your vignettes don't execute any code.
 
