@@ -210,3 +210,39 @@ test_that("calculate_abadie_significance rejects an unknown expected_direction",
     "expected_direction must be one of"
   )
 })
+
+test_that("placebo inference keeps units whose names contain spaces, hyphens, or periods", {
+  skip_if_not_installed("CVXR")
+
+  mock_data <- create_inference_mock_data()
+  raw_names <- c(treated = "treated unit", c1 = "c-1", c2 = "c 2", c3 = "c.3")
+  mock_data$unit <- unname(raw_names[mock_data$unit])
+
+  sc_result <- estimate_sc(
+    dataset = mock_data,
+    outcome = "outcome",
+    covagg = list(list(var = "outcome_var", partition_periods = list(type = "by_period"))),
+    col_name_unit_name = "unit",
+    name_treated_unit = "treated unit",
+    col_name_period = "year",
+    treated_period = 2007,
+    min_period = 2001,
+    end_period = 2010,
+    outcome_models = "none",
+    feature_weights = "uniform",
+    w.constr = list(name = "simplex")
+  )
+  placebo <- inference_placebo(sc.pred = sc_result, dataset = mock_data, cores = 1, verbose = FALSE)
+
+  expect_setequal(unique(placebo$taus[unit_type == "control", unit_name]), c("c-1", "c 2", "c.3"))
+  expect_equal(unique(placebo$taus[unit_type == "treated", unit_name]), "treated unit")
+})
+
+test_that("normalize_unit_ids maps names consistently and fails hard on collisions", {
+  expect_equal(
+    normalize_unit_ids(c("Castilla-La Mancha", "St. Louis", "Castilla-La Mancha"), "test"),
+    c("Castilla_La_Mancha", "St_Louis", "Castilla_La_Mancha")
+  )
+  expect_error(normalize_unit_ids(c("St. Louis", "St Louis"), "test"), "collide after normalization")
+})
+

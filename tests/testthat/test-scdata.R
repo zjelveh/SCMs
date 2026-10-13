@@ -370,3 +370,31 @@ test_that("scdata handles edge cases", {
     "Please provide at least two control units"
   )
 })
+
+test_that("mean covariates use the observed pre-treatment years when some are missing", {
+  test_data <- create_test_data()
+  # Covariate observed only in 1995-2000 for every unit (as in the Basque data).
+  test_data$investment[test_data$year < 1995] <- NA
+
+  result <- scdata(
+    df = test_data,
+    id.var = "state",
+    time.var = "year",
+    outcome.var = "gdp",
+    period.pre = 1990:2000,
+    period.post = 2001:2005,
+    unit.tr = "CA",
+    unit.co = c("TX", "NY", "FL", "WA"),
+    covagg = list(
+      list(var = "population", compute = "mean"),
+      list(var = "investment", compute = "mean")
+    ),
+    verbose = FALSE
+  )
+
+  # Both mean features survive, not just the fully observed one.
+  expect_equal(nrow(result$A), 2)
+  expect_equal(nrow(result$B), 2)
+  expected_tr <- mean(test_data$investment[test_data$state == "CA" & test_data$year %in% 1995:2000])
+  expect_true(any(abs(result$A[, 1] - expected_tr) < 1e-10))
+})

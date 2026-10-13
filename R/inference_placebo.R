@@ -237,9 +237,6 @@ inference_placebo <- function(
   if (is.null(sc.pred$data$specs)) stop("sc.pred$data$specs is NULL")
   if (is.null(sc.pred$data$specs$donors.units)) stop("donors.units is NULL")
 
-  # Get control units and remove treated unit from dataset
-  control_units = sc.pred$data$specs$donors.units
-  
   # Use the correct column name and treated unit from sc.pred
   col_name_unit <- sc.pred$col_name_unit_name
   name_treated_unit <- sc.pred$name_treated_unit
@@ -251,6 +248,17 @@ inference_placebo <- function(
   
   if (!col_name_unit %in% names(dataset)) {
     stop(paste("Column", col_name_unit, "not found in dataset"))
+  }
+
+  # donors.units holds normalized names; map them back to the dataset's own identifiers so
+  # each placebo run looks up a unit that exists in `dataset` (e.g. "Castilla-La Mancha").
+  raw_unit_ids <- unique(as.character(dataset[[col_name_unit]]))
+  normalized_unit_ids <- normalize_unit_ids(raw_unit_ids, col_name_unit)
+  control_units <- raw_unit_ids[match(sc.pred$data$specs$donors.units, normalized_unit_ids)]
+  if (anyNA(control_units)) {
+    missing_donors <- sc.pred$data$specs$donors.units[is.na(control_units)]
+    stop("Donor units not found in dataset column ", col_name_unit, ": ",
+         paste(missing_donors, collapse = ", "))
   }
 
   
@@ -338,16 +346,10 @@ inference_placebo <- function(
                   outcome_models = sc.pred$outcome_models,
                   w.constr = sc.pred$w.constr)
     }, error = function(e) {
-      if (verbose) {
-        warning(paste("Failed to estimate SC for control unit", cu, ":", e$message))
-      }
-      return(NULL)
+      # A missing placebo silently shrinks the null distribution, so fail hard.
+      stop("Placebo estimation failed for control unit '", cu, "': ", conditionMessage(e),
+           call. = FALSE)
     })
-
-    # Skip this control unit if estimation failed
-    if (is.null(est_sc)) {
-      next
-    }
 
     # Calculate treatment effects for each outcome model
     for(oc in names(est_sc$est.results$outcome_model)){

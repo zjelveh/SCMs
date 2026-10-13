@@ -194,30 +194,16 @@ scdata <- function(df,
     return(aggfun)
   }
   
-  # Apply aggregation function with optional na.rm
+  # Aggregate over the observed years only. Dropping NAs here, rather than passing na.rm, works
+  # for every function: formals(mean) is (x, ...), so an na.rm check never fired for mean and a
+  # covariate missing in some pre-treatment years became NA and was dropped as a feature.
+  # A unit with no observed years still yields NA (e.g. a by_period feature for a missing year).
   apply_aggfun <- function(aggfun, values) {
-    aggfun_formals <- formals(aggfun)
-    if (!is.null(aggfun_formals) && "na.rm" %in% names(aggfun_formals)) {
-      return(aggfun(values, na.rm = TRUE))
+    values <- values[!is.na(values)]
+    if (length(values) == 0) {
+      return(NA_real_)
     }
-    return(aggfun(values))
-  }
-
-  canonicalize_unit_ids <- function(ids, context) {
-    canon <- gsub("[^A-Za-z0-9_]", "_", ids)
-    canon <- gsub("_{2,}", "_", canon)
-    canon <- gsub("_+$", "", canon)
-
-    if (anyDuplicated(canon)) {
-      dup_vals <- unique(canon[duplicated(canon)])
-      stop(
-        "Unit ID normalization produced duplicate donor names in ", context, ": ",
-        paste(dup_vals, collapse = ", "),
-        ". Use unit identifiers that remain unique after normalization."
-      )
-    }
-
-    canon
+    aggfun(values)
   }
 
   if (length(covagg) == 0) {
@@ -277,12 +263,12 @@ scdata <- function(df,
 
   period.pre  <- sort(period.pre, decreasing = FALSE)
   period.post <- sort(period.post, decreasing = FALSE)
-  # replace space and period with underscore to avoid issues below
-  unit.tr = gsub(' +|\\.+|-+', '_', unit.tr)
-  unit.co = gsub(' +|\\.+|-+', '_', unit.co)
+  # Normalize unit names (see normalize_unit_ids) so they are safe as matrix dimnames below
+  unit.tr = normalize_unit_ids(unit.tr, "unit.tr")
+  unit.co = normalize_unit_ids(unit.co, "unit.co")
 
   if(is.character(data[[id.var]])){
-    data[[id.var]] = gsub(' +|\\.+|-+', '_', data[[id.var]] )
+    data[[id.var]] = normalize_unit_ids(data[[id.var]], "id.var column")
   }
   # Create ID and time variables
   if (is.numeric(data[[id.var]])) {
@@ -492,9 +478,9 @@ scdata <- function(df,
 
         # Convert to matrix format
         B <- data.frame(t(agg_data$x))
-        colnames(B) <- canonicalize_unit_ids(as.character(agg_data$ID), "B matrix")
+        colnames(B) <- normalize_unit_ids(as.character(agg_data$ID), "B matrix")
 
-        clean_unit_tr <- canonicalize_unit_ids(as.character(unit.tr), "treated-unit naming")
+        clean_unit_tr <- normalize_unit_ids(as.character(unit.tr), "treated-unit naming")
         rownames(B) <- paste(clean_unit_tr, cov_name, sep='.')
 
         idx2 = length(B_list) + 1
@@ -528,7 +514,7 @@ scdata <- function(df,
   colnames(aux)     <- stringr::str_remove(colnames(aux),"\\.")
   
   Y.donors <- as.matrix(aux[, colnames(aux) != "Time", drop=FALSE])
-  colnames(Y.donors) <- canonicalize_unit_ids(colnames(Y.donors), "Y.donors")
+  colnames(Y.donors) <- normalize_unit_ids(colnames(Y.donors), "Y.donors")
   
   Y.pre <- as.matrix(data.bal[rows.tr.pre, outcome.var])
   rownames(Y.pre) <- paste(unit.tr,as.character(data.bal[rows.tr.pre, "Time"]), sep=".")
@@ -563,7 +549,7 @@ scdata <- function(df,
   # if "Time" is not in numeric format the matrix becomes a matrix of characters,
   # this is why we do everything in one step
   Y.donors.post <- as.matrix(aux.post[, colnames(aux.post) != "Time", drop=FALSE])
-  colnames(Y.donors.post) <- canonicalize_unit_ids(colnames(Y.donors.post), "Y.donors.post")
+  colnames(Y.donors.post) <- normalize_unit_ids(colnames(Y.donors.post), "Y.donors.post")
   
   # Y.donors.post columns should match B matrix columns (no unit.tr prefix)
   # colnames(Y.donors.post) <- clean_y_names_post
@@ -595,7 +581,7 @@ scdata <- function(df,
 
 
   P <- as.matrix(aux[, names(aux) != "Time"])
-  colnames(P) <- canonicalize_unit_ids(colnames(P), "P matrix")
+  colnames(P) <- normalize_unit_ids(colnames(P), "P matrix")
   
   rownames(P) <- paste(unit.tr, as.character(aux[,'Time']), sep = ".")
   
@@ -819,4 +805,34 @@ scdata <- function(df,
   class(df.sc) <- 'scdata'
   
   return(df.sc = df.sc)
+}
+
+#' Normalize unit identifiers
+#'
+#' Replaces every non-alphanumeric character with `_`, collapses repeated underscores, and
+#' drops trailing underscores. All unit-name handling in the package uses this one rule, so
+#' normalized names can always be mapped back to the dataset's own identifiers.
+#'
+#' @param ids Vector of unit identifiers (repeats allowed, e.g. a panel's unit column).
+#' @param context Character. Where the IDs come from, for the error message.
+#' @return Character vector of normalized identifiers, same length as `ids`.
+#' @noRd
+normalize_unit_ids <- function(ids, context) {
+  ids <- as.character(ids)
+  raw <- unique(ids)
+  canon <- gsub("[^A-Za-z0-9_]", "_", raw)
+  canon <- gsub("_{2,}", "_", canon)
+  canon <- gsub("_+$", "", canon)
+
+  if (anyDuplicated(canon)) {
+    dup_vals <- unique(canon[duplicated(canon)])
+    clashes <- vapply(dup_vals, function(d) paste(raw[canon == d], collapse = " / "), character(1))
+    stop(
+      "Unit IDs collide after normalization in ", context, ": ",
+      paste(clashes, collapse = "; "),
+      ". Use unit identifiers that remain distinct after normalization."
+    )
+  }
+
+  canon[match(ids, raw)]
 }

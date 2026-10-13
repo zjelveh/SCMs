@@ -61,11 +61,11 @@ create_scm_dataset <- function(dataset,
   
   # Apply consistent name transformation (same as scdata function)
   # This ensures all operations work with consistent naming
-  name_treated_unit <- gsub(' +|\\.+|-+', '_', name_treated_unit)
+  name_treated_unit <- normalize_unit_ids(name_treated_unit, "name_treated_unit")
   
   # Transform unit names in the dataset using proper data.table syntax
   if(is.character(dataset[[col_name_unit_name]])){
-    dataset[, (col_name_unit_name) := gsub(' +|\\.+|-+', '_', get(col_name_unit_name))]
+    dataset[, (col_name_unit_name) := normalize_unit_ids(get(col_name_unit_name), col_name_unit_name)]
   }
 
   # Create unit name and number columns (now with transformed names)

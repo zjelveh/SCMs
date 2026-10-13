@@ -37,13 +37,11 @@
 #'
 #' @examples
 #' \donttest{
-#' toy <- data.frame(
-#'   unit = rep(c("treated", "donor1", "donor2"), each = 6),
-#'   year = rep(1:6, 3),
-#'   y = c(10, 11, 12, 14, 15, 16,
-#'         9, 10, 11, 12, 13, 14,
-#'         11, 12, 13, 13, 14, 15)
-#' )
+#' set.seed(1)
+#' toy <- expand.grid(unit = c("treated", "donor1", "donor2", "donor3"), year = 1:10,
+#'                    stringsAsFactors = FALSE)
+#' toy$y <- 50 + 0.8 * toy$year + ifelse(toy$unit == "treated" & toy$year >= 7, 3, 0) +
+#'   rnorm(nrow(toy), 0, 0.5)
 #' params <- list(
 #'   outcomes = "y",
 #'   col_name_unit_name = "unit",
@@ -54,9 +52,9 @@
 #'       operations = list(list(var = "outcome_var", partition_periods = list(type = "by_period")))
 #'     )
 #'   ),
-#'   treated_period = 5,
+#'   treated_period = 7,
 #'   min_period = 1,
-#'   end_period = 6,
+#'   end_period = 10,
 #'   col_name_period = "year",
 #'   feature_weights = "uniform",
 #'   donor_sample = "all",
