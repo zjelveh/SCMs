@@ -19,7 +19,7 @@ NEWS.md.
 
 ## Test environments
 
-* Local: Ubuntu 22.04.4 LTS, R 4.4.1
+* Local: Ubuntu 22.04.4 LTS, R 4.4.1, with all dependencies at their current CRAN versions
 * win-builder: R-devel and R-release (PENDING)
 * macOS builder: R-release (PENDING)
 

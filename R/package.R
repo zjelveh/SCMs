@@ -4,7 +4,8 @@
 #' @importFrom dplyr %>%
 #' @importFrom ggplot2 aes aes_string annotate element_blank element_line element_rect element_text expansion facet_grid facet_wrap geom_abline geom_col geom_errorbar geom_histogram geom_hline geom_line geom_point geom_ribbon geom_segment geom_text geom_vline ggplot ggsave ggtitle guide_colorbar guide_legend guides labs scale_alpha_continuous scale_alpha_manual scale_color_discrete scale_color_gradient scale_color_gradient2 scale_color_manual scale_fill_discrete scale_fill_gradient2 scale_fill_manual scale_shape_manual scale_x_continuous scale_y_continuous scale_y_discrete theme theme_bw theme_minimal xlab ylab ylim
 #' @importFrom grDevices colorRamp rgb
-#' @importFrom CVXR Variable Minimize Problem solve
+#' @importFrom CVXR Variable Minimize Problem psolve
+#' @importFrom ECOSolveR ECOS_csolve
 #' @importFrom kernlab alpha
 #' @importFrom foreach %dopar%
 #' @import methods

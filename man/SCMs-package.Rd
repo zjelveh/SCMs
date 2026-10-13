@@ -122,6 +122,11 @@ Useful links:
 \author{
 \strong{Maintainer}: Zubin Jelveh \email{zjelveh@umd.edu}
 
+Authors:
+\itemize{
+  \item Zubin Jelveh \email{zjelveh@umd.edu}
+}
+
 
 Zubin Jelveh \email{zjelveh@umd.edu}
 }

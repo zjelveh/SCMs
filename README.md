@@ -187,8 +187,8 @@ plot_obj$final_plot
 
 ### Example Specification Curve Plot (Basque Data)
 
-[![Example specification curve plot (PDF)](inst/examples/readme_spec_curve.svg)](inst/examples/readme_spec_curve.pdf)
-Open vector PDF: [`inst/examples/readme_spec_curve.pdf`](inst/examples/readme_spec_curve.pdf)
+[![Example specification curve plot (PDF)](inst/examples/readme_spec_curve.svg)](https://github.com/zjelveh/SCMs/blob/main/inst/examples/readme_spec_curve.pdf)
+Open vector PDF: [`inst/examples/readme_spec_curve.pdf`](https://github.com/zjelveh/SCMs/blob/main/inst/examples/readme_spec_curve.pdf)
 
 The curve-level p-value (top right) is two-sided. It is the share of the 17 regions (the Basque Country and 16 placebo regions) whose median effect across specifications is at least as large in absolute value as the Basque Country's.
 

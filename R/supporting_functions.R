@@ -284,14 +284,13 @@ fit_pensynth_single_lambda <- function(A, Z, V, lambda, A_weighted = NULL, sqrt_
   constraints <- list(CVXR::sum_entries(x) == 1, x >= 0)
   # Solve optimization problem
   prob <- CVXR::Problem(objective, constraints)
-  sol <- CVXR::solve(prob, solver = "ECOS", num_iter = 100000L, verbose = FALSE)
+  CVXR::psolve(prob, solver = "ECOS", num_iter = 100000L, verbose = FALSE)
 
-  if (is.null(sol$getValue) || !(sol$status %in% c("optimal", "optimal_inaccurate"))) {
-    stop("Pensynth optimization failed")
+  if (!(CVXR::status(prob) %in% c("optimal", "optimal_inaccurate"))) {
+    stop("Pensynth optimization failed. Status: ", CVXR::status(prob))
   }
-  
-  weights <- sol$getValue(x)
-  return(as.numeric(weights))
+
+  return(as.numeric(CVXR::value(x)))
 }
 
 # Fast clarabel implementation for single lambda pensynth
@@ -515,19 +514,15 @@ b.est.cvxr.fallback <- function(A, Z, C = NULL, J, KM, w.constr, V, CVXR.solver)
   
   # num_iter required in large lasso/L1-L2/ridge problems is often >10k, which is the default in OSQP/ECOS
   prob <- CVXR::Problem(objective, constraints)
-  sol <- CVXR::solve(prob, solver = CVXR.solver, num_iter = 100000L, verbose = FALSE)
-  
-  
-  if (is.null(sol$getValue)) {
-    stop("Solver failed - getValue method not available")
-  }
-  
-  b <- sol$getValue(x)
-  alert <- !(sol$status %in% c("optimal", "optimal_inaccurate"))
+  CVXR::psolve(prob, solver = CVXR.solver, num_iter = 100000L, verbose = FALSE)
+  solver_status <- CVXR::status(prob)
+
+  b <- as.numeric(CVXR::value(x))
+  alert <- !(solver_status %in% c("optimal", "optimal_inaccurate"))
   
   if (alert == TRUE) {
     stop(paste0("Estimation algorithm not converged! The algorithm returned the value:",
-                sol$status, ". To check to what errors it corresponds go to
+                solver_status, ". To check to what errors it corresponds go to
                'https://cvxr.rbind.io/cvxr_examples/cvxr_gentle-intro/'. Typically, this occurs
                 because the problem is badly-scaled. If so, scaling the data fixes the issue. Another
                 fix could be changing the algorithm via the option 'solver'. Check your available options
@@ -535,8 +530,7 @@ b.est.cvxr.fallback <- function(A, Z, C = NULL, J, KM, w.constr, V, CVXR.solver)
                 'https://cvxr.rbind.io/cvxr_examples/cvxr_using-other-solvers/'"),
          call. = FALSE)
   }
-  
-  b <- b[, 1, drop = TRUE]
+
   
   if (!is.null(C)) {
     # When C is present, return both donor weights and constant coefficients
@@ -587,18 +581,13 @@ b.est.cvxr.pensynth <- function(A, Z, C = NULL, J, KM, w.constr, V, CVXR.solver)
   
   # Solve optimization problem
   prob <- CVXR::Problem(objective, constraints)
-  sol <- CVXR::solve(prob, solver = CVXR.solver, num_iter = 100000L, verbose = FALSE)
-  
-  if (is.null(sol$getValue)) {
-    stop("Solver failed - getValue method not available")
+  CVXR::psolve(prob, solver = CVXR.solver, num_iter = 100000L, verbose = FALSE)
+
+  if (!(CVXR::status(prob) %in% c("optimal", "optimal_inaccurate"))) {
+    stop(paste0("Pensynth estimation not converged! Status: ", CVXR::status(prob)))
   }
-  
-  if (!(sol$status %in% c("optimal", "optimal_inaccurate"))) {
-    stop(paste0("Pensynth estimation not converged! Status: ", sol$status))
-  }
-  
-  b <- sol$getValue(x)
-  b <- b[, 1, drop = TRUE]
+
+  b <- as.numeric(CVXR::value(x))
   names(b) <- colnames(Z)
   
   return(b)

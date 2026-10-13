@@ -37,3 +37,5 @@ Resubmission of 0.1.0, which CRAN returned for changes in February 2026.
 * SHAP attribution encodes every level of each categorical specification choice.
 * `plot_spec_curve()` always draws Panel B labels as rich text (`richtext_feature_labels` is
   removed) and no longer prints SHAP merge diagnostics.
+* Requires 'CVXR' 1.9.0 or later, which replaced `solve()` with `psolve()`. 'ECOSolveR' is now
+  imported directly, because 'CVXR' no longer provides the default ECOS solver.
