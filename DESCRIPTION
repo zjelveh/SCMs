@@ -1,6 +1,6 @@
 Package: SCMs
 Title: Synthetic Control Methods
-Version: 0.1.0
+Version: 0.1.1
 Authors@R: 
   c(person(given = "Zubin",
            family = "Jelveh",
