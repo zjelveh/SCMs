@@ -564,30 +564,14 @@ spec_curve <- function(
       message("Setting up parallel processing with ", max_cores, " cores")
     }
 
-    # Setup parallel backend with error handling
-    parallel_setup_ok <- tryCatch({
-      # Ensure required packages are loaded
-      if (!requireNamespace("doParallel", quietly = TRUE)) {
-        stop("doParallel package not available")
-      }
-      if (!requireNamespace("foreach", quietly = TRUE)) {
-        stop("foreach package not available")
-      }
+    # Workers must run this session's SCMs code (see make_scms_cluster); fail hard otherwise.
+    cl <- make_scms_cluster(max_cores)
+    on.exit(parallel::stopCluster(cl), add = TRUE)
+    doParallel::registerDoParallel(cl)
 
-      cl <- parallel::makeCluster(max_cores)
-      doParallel::registerDoParallel(cl)
-      on.exit(parallel::stopCluster(cl))
-
-      if (verbose) {
-        message("Parallel backend registered successfully")
-      }
-      TRUE
-    }, error = function(e) {
-      warning("Failed to setup parallel processing: ", e$message, ". Falling back to sequential processing.")
-      FALSE
-    })
-    use_parallel <- isTRUE(parallel_setup_ok)
-
+    if (verbose) {
+      message("Parallel backend registered successfully")
+    }
   }
 
   # Execute specifications

@@ -104,8 +104,16 @@ run_spec_curve_analysis <- function(dataset, params, cores = 1, output_dir = NUL
     all_params$inference_config <- utils::modifyList(default_inference_config, user_config)
   }
   
+  # The cores argument also drives spec_curve's parallel loop over specifications; without this,
+  # spec_curve ran single-threaded unless params happened to contain its own cores entry.
+  if (!is.null(all_params$cores) && all_params$cores != cores) {
+    stop("params$cores (", all_params$cores, ") conflicts with the cores argument (", cores,
+         "). Set one of them.")
+  }
+  all_params$cores <- cores
+
   actual_outcomes <- all_params$outcomes
-  
+
   # Call spec_curve with all parameters
   results <- do.call(spec_curve, all_params)
   

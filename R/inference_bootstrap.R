@@ -249,8 +249,8 @@ perform_bootstrap_inference <- function(dataset_null, sc.pred, actual_effects,
   
   # Run bootstrap replications
   if (cores > 1) {
-    cl <- parallel::makeCluster(cores)
-    on.exit(parallel::stopCluster(cl))
+    cl <- make_scms_cluster(cores)
+    on.exit(parallel::stopCluster(cl), add = TRUE)
     
     # Export necessary objects to cluster
     parallel::clusterExport(cl, c("dataset_null", "sc.pred", "col_name_unit",

@@ -475,3 +475,68 @@ test_that("spec_curve handles edge cases", {
     }))
   })
 })
+
+test_that("run_spec_curve_analysis fails hard when params$cores conflicts with the cores argument", {
+  expect_error(
+    run_spec_curve_analysis(
+      dataset = data.frame(),
+      params = list(outcomes = "gdp", cores = 8),
+      cores = 1
+    ),
+    "conflicts with the cores argument"
+  )
+})
+
+test_that("parallel spec_curve workers run this session's code and keep every placebo unit", {
+  skip_if_not_installed("CVXR")
+  skip_on_os("windows")
+
+  set.seed(7)
+  d <- expand.grid(
+    unit = c("treated unit", "c-1", "c 2", "c.3", "c4"),
+    year = 2001:2010,
+    KEEP.OUT.ATTRS = FALSE,
+    stringsAsFactors = FALSE
+  )
+  d$outcome <- 100 + 0.5 * (d$year - 2001) +
+    ifelse(d$unit == "treated unit" & d$year >= 2007, 2, 0) +
+    rnorm(nrow(d), 0, 0.3)
+
+  res <- spec_curve(
+    dataset = d,
+    outcomes = "outcome",
+    col_name_unit_name = "unit",
+    name_treated_unit = "treated unit",
+    covagg = list(
+      "Outcome Per Period" = list(
+        label = "Outcome Per Period",
+        operations = list(list(var = "outcome_var", partition_periods = list(type = "by_period")))
+      )
+    ),
+    treated_period = 2007,
+    min_period = 2001,
+    end_period = 2010,
+    col_name_period = "year",
+    feature_weights = c("uniform", "optimize"),
+    outcome_models = "none",
+    donor_sample = "all",
+    constraints = list(list(name = "simplex")),
+    constants = FALSE,
+    cores = 2,
+    verbose = FALSE,
+    inference_type = "placebo"
+  )
+
+  expect_setequal(
+    unique(res$results[unit_type == "control", unit_name]),
+    c("c-1", "c 2", "c.3", "c4")
+  )
+})
+
+test_that("make_scms_cluster fork workers share the session's SCMs namespace", {
+  skip_on_os("windows")
+  cl <- make_scms_cluster(2)
+  on.exit(parallel::stopCluster(cl))
+  worker_paths <- unlist(parallel::clusterEvalQ(cl, getNamespaceInfo(asNamespace("SCMs"), "path")))
+  expect_true(all(worker_paths == getNamespaceInfo(asNamespace("SCMs"), "path")))
+})
