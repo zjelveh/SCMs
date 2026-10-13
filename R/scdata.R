@@ -600,31 +600,14 @@ scdata <- function(df,
   
   ############################################################################
   ############################################################################
-  # Proceed cleaning missing data in the pre-treatment period
-  # Check if there are annoying donors with ALL missing values in the pre-treatment period
-  
-  if(!is.null(dim(B))){
-    empty.cols <- colSums(is.na(B)) == nrow(B)
-  } else{
-    empty.cols = 0
+  # A donor with no observed value for any matching variable in the pre-treatment period cannot
+  # be matched on; fail hard and name it rather than silently shrinking the donor pool.
+  empty.donors <- colnames(B)[colSums(is.na(B)) == nrow(B)]
+  if (length(empty.donors) > 0) {
+    stop("These donors have no observed pre-treatment values for any matching variable: ",
+         paste(empty.donors, collapse = ", "), ". Remove them from the donor pool.")
   }
-  
-  if (sum(empty.cols) > 0) {
-    names <- strsplit(colnames(B[,empty.cols]), "\\.")
-    removed.cols <- unlist(lapply(names, "[[", 2))
-    warn.text <- paste(c("The following donors have no observations in the pre-treatment period, hence they have been removed!",
-                         removed.cols), collapse = " ")
-    if (verbose == TRUE) {
-      warning(warn.text)
-    }
-    dropped.co <- unit.co %in% removed.cols
-    unit.co.eff <- unit.co[!dropped.co]
-    
-    B <- B[ , !dropped.co, drop = TRUE]
-    
-  } else {
-    unit.co.eff <- unit.co
-  }
+  unit.co.eff <- unit.co
   
   A_outcome = A[grepl(outcome.var, rownames(A)), , drop=F]
   A_nonoutcome = A[!(grepl(outcome.var, rownames(A))), ,drop=F]

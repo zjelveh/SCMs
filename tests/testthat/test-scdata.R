@@ -398,3 +398,24 @@ test_that("mean covariates use the observed pre-treatment years when some are mi
   expected_tr <- mean(test_data$investment[test_data$state == "CA" & test_data$year %in% 1995:2000])
   expect_true(any(abs(result$A[, 1] - expected_tr) < 1e-10))
 })
+
+test_that("scdata fails hard, naming the donors, when donors have no pre-treatment data", {
+  test_data <- create_test_data()
+  test_data$gdp[test_data$state %in% c("FL", "WA") & test_data$year <= 2000] <- NA
+
+  expect_error(
+    scdata(
+      df = test_data,
+      id.var = "state",
+      time.var = "year",
+      outcome.var = "gdp",
+      period.pre = 1990:2000,
+      period.post = 2001:2005,
+      unit.tr = "CA",
+      unit.co = c("TX", "NY", "FL", "WA"),
+      covagg = list(list(var = "outcome_var", partition_periods = list(type = "by_period"))),
+      verbose = FALSE
+    ),
+    "no observed pre-treatment values.*FL, WA"
+  )
+})
