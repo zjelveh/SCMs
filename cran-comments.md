@@ -1,18 +1,45 @@
 ## Resubmission
 
-This is a resubmission of SCMs 0.1.0, reviewed on 2026-02-12. Thank you for the review. In
-response:
+This is a resubmission of SCMs 0.1.0. Thank you for the review of 2026-02-12. Each request is
+quoted below with our response.
 
-1. `Title` and `Description` put software, package and API names in single quotes, with
-   correct case.
-2. `Description` cites the methods in the form authors (year) <doi:...>.
-3. The vignettes execute their code.
-4. `\dontrun{}` is no longer used. Examples that take more than a few seconds are wrapped in
-   `\donttest{}`; fast examples are unwrapped.
-5. The commented-out example code (`inference_sc`) is replaced by an executable example.
-6. Functions other than print and summary methods no longer write to the console with
-   `cat()` or `print()`; progress output uses `message()`, which users can suppress.
-7. The package no longer assigns to the global environment (`<<-` removed).
+> Please always write package names, software names and API (application programming interface)
+> names in single quotes in title and description. [...] Please note that package names are case
+> sensitive.
+
+Software names in the Description are now in single quotes with their exact case ('xgboost').
+
+> If there are references describing the methods in your package, please add these in the
+> description field of your DESCRIPTION file in the form authors (year) <doi:...>
+
+Added references with DOIs (and one arXiv identifier) for the synthetic control, augmented
+synthetic control, specification-curve, 'xgboost' and SHAP methods.
+
+> Some of your vignettes don't execute any code.
+
+All three vignettes now execute code; a few long-running chunks are shown but not run.
+
+> Please replace \dontrun with \donttest. Please unwrap the examples if they are executable in
+> < 5 sec, or replace dontrun{} with \donttest{}.
+
+\dontrun{} is no longer used. Examples that run in under 5 seconds are unwrapped; longer ones use
+\donttest{}.
+
+> Some code lines in examples are commented out. Please never do that. [...] Examples in comments
+> in: inference_sc.Rd
+
+inference_sc.Rd now has an executable toy example, wrapped in \donttest{}.
+
+> You write information messages to the console that cannot be easily suppressed. [...]
+> -> R/memory_management.R; R/scplot.R; etc...
+
+Outside print and summary methods, functions no longer call cat() or print(); progress output
+uses message(), which users can suppress. This includes R/memory_management.R and R/scplot.R.
+
+> Please do not modify the global environment (e.g. by using <<-) in your functions. [...]
+> -> R/memory_management.R
+
+Removed: no function assigns with <<-.
 
 The version is now 0.1.1. It also includes bug fixes made since the first submission, listed in
 NEWS.md.
@@ -27,5 +54,5 @@ NEWS.md.
 0 errors | 0 warnings | 1 note
 
 * New submission.
-* Possibly misspelled words in DESCRIPTION: "Abadie", "Guestrin" and "et al." are author names and
-  the citation abbreviation in the method references.
+* Possibly misspelled words in DESCRIPTION: these are author names in the method references and
+  the acronym SHAP (SHapley Additive exPlanations).

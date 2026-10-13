@@ -4,9 +4,9 @@
 \name{SCMs-package}
 \alias{SCMs-package}
 \alias{SCMs}
-\title{SCMs: Synthetic Control Methods}
+\title{SCMs: Specification Curve Analysis for Synthetic Control Methods}
 \description{
-Comprehensive toolkit for synthetic control methods with advanced features including specification-curve analysis, 'xgboost' + 'SHAP' machine-learning analysis, and multiple inference procedures. The package provides functions for data preparation, model estimation, statistical inference (including placebo and bootstrap-based methods), and publication-ready visualizations. Supports multiple outcome models (OLS, Ridge, Lasso, Augmented Synthetic Control) and includes parallel processing capabilities for large-scale specification-curve analysis. Methods references include Abadie et al. (2010) \doi{10.1198/jasa.2009.ap08746}, Abadie (2021) \doi{10.1257/jel.20191450}, and Chen and Guestrin (2016) \doi{10.1145/2939672.2939785}.
+Estimates synthetic control models while exposing the implementation choices that define the synthetic counterfactual: how matching variables are constructed, how predictor weights are set, which constraints the donor weights satisfy (simplex, lasso, ridge, penalized), whether an intercept is included, and which outcome model corrects for bias (OLS, ridge, lasso, augmented synthetic control). Runs specification-curve analysis over a grid of these choices (Simonsohn, Simmons and Nelson (2020) \doi{10.1038/s41562-020-0912-z}), with placebo-in-space and bootstrap inference for single specifications and placebo inference for the curve as a whole, and uses 'xgboost' models with SHAP values (Lundberg and Lee (2017) \href{https://arxiv.org/abs/1705.07874}{arXiv:1705.07874}) to show which choices drive the estimates. Methods follow Abadie, Diamond and Hainmueller (2010) \doi{10.1198/jasa.2009.ap08746}, Abadie (2021) \doi{10.1257/jel.20191450}, Ben-Michael, Feller and Rothstein (2021) \doi{10.1080/01621459.2021.1929245} and Chen and Guestrin (2016) \doi{10.1145/2939672.2939785}.
 
 Researchers using synthetic control methods face a "garden of forking paths" with numerous
 specification choices that can dramatically affect results. Existing packages often produce
