@@ -66,7 +66,7 @@
 #'     (default: 1).
 #'   }
 #' @param expected_direction Character scalar used by direction-aware inference
-#'   helpers. Supported values are \code{"negative"} and \code{"positive"}.
+#'   helpers: \code{"negative"}, \code{"positive"}, or \code{"two_sided"} (default).
 #'
 #' @details
 #' The function creates a Cartesian product of all specification choices and estimates synthetic controls
@@ -169,7 +169,7 @@ spec_curve <- function(
     verbose = TRUE,
     inference_type = "placebo",
     inference_config = list(),
-    expected_direction = "negative"
+    expected_direction = "two_sided"
 ) {
   # Input validation
   if (!any(c("data.frame", "data.table") %in% class(dataset))) {

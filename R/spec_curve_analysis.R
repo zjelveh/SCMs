@@ -21,7 +21,7 @@
 #'     \item \code{constraints} - Weight constraint specifications
 #'     \item \code{inference_type} - "placebo", "bootstrap", or "all" (default: "placebo")
 #'     \item \code{inference_config} - List with bootstrap_n_replications, verbose, etc.
-#'     \item \code{expected_direction} - "negative", "positive", or "two_sided" (default: "negative")
+#'     \item \code{expected_direction} - "negative", "positive", or "two_sided" (default: "two_sided")
 #'   }
 #' @param cores Integer. Number of cores for parallel processing (applies to both bootstrap and placebo inference unless overridden in params$inference_config).
 #' @param output_dir Character. Directory to save results. If NULL, results are not saved.
@@ -83,7 +83,7 @@ run_spec_curve_analysis <- function(dataset, params, cores = 1, output_dir = NUL
   
   # Handle expected direction - use params setting or default
   if (is.null(all_params$expected_direction)) {
-    all_params$expected_direction <- "negative"
+    all_params$expected_direction <- "two_sided"
   }
   
   # Set up inference configuration with defaults, applying cores parameter

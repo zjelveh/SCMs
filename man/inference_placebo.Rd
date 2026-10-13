@@ -9,7 +9,7 @@ inference_placebo(
   dataset,
   cores,
   verbose,
-  expected_direction = "negative"
+  expected_direction = "two_sided"
 )
 }
 \arguments{
@@ -21,7 +21,7 @@ inference_placebo(
 
 \item{verbose}{Logical. Whether to print progress information}
 
-\item{expected_direction}{Character. Expected direction of treatment effect: "negative", "positive", or "two_sided" (default: "negative")}
+\item{expected_direction}{Character. Expected direction of treatment effect: "negative", "positive", or "two_sided" (default: "two_sided")}
 }
 \value{
 List containing:

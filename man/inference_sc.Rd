@@ -9,7 +9,7 @@ inference_sc(
   dataset,
   cores = 1,
   verbose = TRUE,
-  expected_direction = "negative"
+  expected_direction = "two_sided"
 )
 }
 \arguments{
@@ -25,7 +25,7 @@ TRUE.}
 
 \item{expected_direction}{Character. Expected direction of treatment effect:
 \code{"negative"}, \code{"positive"}, or \code{"two_sided"}. Default is
-\code{"negative"}.}
+\code{"two_sided"}.}
 }
 \value{
 A list with \code{data}, \code{est.results}, \code{inference.results},

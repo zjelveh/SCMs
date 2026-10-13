@@ -246,3 +246,28 @@ test_that("normalize_unit_ids maps names consistently and fails hard on collisio
   expect_error(normalize_unit_ids(c("St. Louis", "St Louis"), "test"), "collide after normalization")
 })
 
+test_that("placebo p-values are two-sided by default", {
+  skip_if_not_installed("CVXR")
+
+  mock_data <- create_inference_mock_data()
+  sc_result <- estimate_sc(
+    dataset = mock_data,
+    outcome = "outcome",
+    covagg = list(list(var = "outcome_var", partition_periods = list(type = "by_period"))),
+    col_name_unit_name = "unit",
+    name_treated_unit = "treated",
+    col_name_period = "year",
+    treated_period = 2007,
+    min_period = 2001,
+    end_period = 2010,
+    outcome_models = "none",
+    feature_weights = "uniform",
+    w.constr = list(name = "simplex")
+  )
+  placebo <- inference_sc(sc_result, dataset = mock_data, verbose = FALSE)
+  p <- placebo$abadie_significance$treatment_effect$p_values
+
+  # The treated unit has the only large (positive) effect, so it ranks first by |effect|.
+  expect_equal(p[unit_name == "treated", p_value], 0.25)
+  expect_true(all(is.na(p$p_value_one_sided)))
+})

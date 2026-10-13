@@ -9,10 +9,10 @@
 #' @param taus_result Data.table containing treatment effects for all units
 #' @param rmse_result Data.table containing RMSE values for all units
 #' @param rmspe_threshold Numeric. Threshold for filtering poor pre-treatment fits (default: 0)
-#' @param expected_direction Character. Expected direction of treatment effect: "negative", "positive", or "two_sided" (default: "negative")
+#' @param expected_direction Character. Expected direction of treatment effect: "negative", "positive", or "two_sided" (default: "two_sided")
 #'
 #' @return List containing Abadie significance measures for all test statistics
-calculate_abadie_significance <- function(taus_result, rmse_result, rmspe_threshold = 0, expected_direction = "negative") {
+calculate_abadie_significance <- function(taus_result, rmse_result, rmspe_threshold = 0, expected_direction = "two_sided") {
 
   valid_directions <- c("negative", "positive", "two_sided")
   if (!is.character(expected_direction) || length(expected_direction) != 1 ||
@@ -206,7 +206,7 @@ calculate_abadie_significance <- function(taus_result, rmse_result, rmspe_thresh
 #' @param dataset Data.frame. Original dataset used for estimation
 #' @param cores Numeric. Number of cores for parallel processing
 #' @param verbose Logical. Whether to print progress information
-#' @param expected_direction Character. Expected direction of treatment effect: "negative", "positive", or "two_sided" (default: "negative")
+#' @param expected_direction Character. Expected direction of treatment effect: "negative", "positive", or "two_sided" (default: "two_sided")
 #'
 #' @return List containing:
 #' \itemize{
@@ -226,7 +226,7 @@ inference_placebo <- function(
     dataset,
     cores,
     verbose,
-    expected_direction = "negative"
+    expected_direction = "two_sided"
 ){
   dataset <- data.table::as.data.table(dataset)
   dataset <- data.table::copy(dataset)
@@ -240,12 +240,12 @@ inference_placebo <- function(
   # Use the correct column name and treated unit from sc.pred
   col_name_unit <- sc.pred$col_name_unit_name
   name_treated_unit <- sc.pred$name_treated_unit
-  
+
   # Validate inputs
   if (is.null(col_name_unit) || is.null(name_treated_unit)) {
     stop("Missing col_name_unit_name or name_treated_unit in sc.pred")
   }
-  
+
   if (!col_name_unit %in% names(dataset)) {
     stop(paste("Column", col_name_unit, "not found in dataset"))
   }

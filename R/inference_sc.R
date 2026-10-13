@@ -10,7 +10,7 @@
 #'   TRUE.
 #' @param expected_direction Character. Expected direction of treatment effect:
 #'   \code{"negative"}, \code{"positive"}, or \code{"two_sided"}. Default is
-#'   \code{"negative"}.
+#'   \code{"two_sided"}.
 #'
 #' @return A list with \code{data}, \code{est.results}, \code{inference.results},
 #' \code{rmse}, and \code{abadie_significance}.
@@ -46,7 +46,7 @@ inference_sc <- function(
     dataset,
     cores        = 1,
     verbose      = TRUE,
-    expected_direction = "negative"
+    expected_direction = "two_sided"
 ){
   if (is.null(sc.pred) || is.null(sc.pred$data) || is.null(sc.pred$est.results)) {
     stop("sc.pred must contain 'data' and 'est.results'")

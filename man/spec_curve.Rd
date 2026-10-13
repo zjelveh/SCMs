@@ -25,7 +25,7 @@ spec_curve(
   verbose = TRUE,
   inference_type = "placebo",
   inference_config = list(),
-  expected_direction = "negative"
+  expected_direction = "two_sided"
 )
 }
 \arguments{
@@ -108,7 +108,7 @@ in synthetic control estimation for each specification.}
 }}
 
 \item{expected_direction}{Character scalar used by direction-aware inference
-helpers. Supported values are \code{"negative"} and \code{"positive"}.}
+helpers: \code{"negative"}, \code{"positive"}, or \code{"two_sided"} (default).}
 }
 \value{
 A list structure containing:

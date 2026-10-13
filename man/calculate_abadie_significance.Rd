@@ -8,7 +8,7 @@ calculate_abadie_significance(
   taus_result,
   rmse_result,
   rmspe_threshold = 0,
-  expected_direction = "negative"
+  expected_direction = "two_sided"
 )
 }
 \arguments{
@@ -18,7 +18,7 @@ calculate_abadie_significance(
 
 \item{rmspe_threshold}{Numeric. Threshold for filtering poor pre-treatment fits (default: 0)}
 
-\item{expected_direction}{Character. Expected direction of treatment effect: "negative", "positive", or "two_sided" (default: "negative")}
+\item{expected_direction}{Character. Expected direction of treatment effect: "negative", "positive", or "two_sided" (default: "two_sided")}
 }
 \value{
 List containing Abadie significance measures for all test statistics
