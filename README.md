@@ -240,12 +240,6 @@ Then run a specification curve before writing conclusions.
 - `inst/examples/basque_terrorism_example.R`
 - `inst/examples/german_reunification_example.R`
 
-## Citation
-
-If you use `SCMs`, please cite:
-
-Jelveh, Z., & Chalfin, A. J. (2026). *Perils and pitfalls in the use of synthetic control methods to study public safety interventions.* Working paper.
-
 ## License
 
 GPL-3
